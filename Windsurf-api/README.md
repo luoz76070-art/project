@@ -1,6 +1,6 @@
-# WinderU-api
+# Windsurf-api
 
-`WinderU-api` 是基于 `WindsurfAPI` 整理出的一个可独立部署版本，目标是把 `Windsurf / Codeium` 的模型能力暴露成 OpenAI 兼容接口，并补齐更适合实际运维的账号池、代理、后台和 API Key 管理能力。
+`Windsurf-api` 是基于 `WindsurfAPI` 整理出的一个可独立部署版本，目标是把 `Windsurf / Codeium` 的模型能力暴露成 OpenAI 兼容接口，并补齐更适合实际运维的账号池、代理、后台和 API Key 管理能力。
 
 ## 来源信息
 
@@ -55,7 +55,7 @@
 客户端 / OpenAI SDK
         |
         v
-WinderU-api HTTP 服务
+Windsurf-api HTTP 服务
   - 校验客户端 API Key
   - 做模型访问控制
   - 从账号池里选择可用 Windsurf 账号
@@ -215,7 +215,7 @@ curl http://127.0.0.1:3003/v1/chat/completions \
 ## 目录说明
 
 ```text
-WinderU-api/
+Windsurf-api/
 ├── .env.example
 ├── docs/
 ├── src/
