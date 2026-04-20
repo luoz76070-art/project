@@ -1,0 +1,15 @@
+# Local machine noise
+/.worktrees/
+**/.DS_Store
+**/node_modules/
+**/output/
+**/logs/
+**/state/
+**/.browser-profile/
+**/*.local.json
+
+# Keep documentation logs tracked
+!docs/superpowers/logs/
+!docs/superpowers/logs/**
+
+vendor/tencent-docs-extractor-baseline/config/sync-config.json

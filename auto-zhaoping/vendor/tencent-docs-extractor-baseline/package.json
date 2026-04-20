@@ -1,0 +1,20 @@
+{
+  "name": "tencent-docs-extractor",
+  "version": "1.0.0",
+  "description": "Local Tencent Docs extractor",
+  "main": "extract.js",
+  "scripts": {
+    "extract": "node extract.js",
+    "sync": "node scripts/sync-once.js",
+    "schedule:main": "node scripts/run-scheduled.js --run-type main",
+    "schedule:retry": "node scripts/run-scheduled.js --run-type retry",
+    "healthcheck": "node scripts/login-healthcheck.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "playwright": "^1.58.2",
+    "xlsx": "^0.18.5"
+  }
+}

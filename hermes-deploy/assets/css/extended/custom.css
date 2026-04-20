@@ -1,0 +1,12 @@
+::selection {
+  background: #ffd54f;
+  color: #1f2328;
+}
+
+.logo a {
+  letter-spacing: 0.02em;
+}
+
+.post-content blockquote {
+  border-left: 4px solid #d97706;
+}

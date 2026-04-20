@@ -1,0 +1,78 @@
+baseURL: "https://zyzlz.xin/"
+languageCode: "zh-cn"
+title: "Rorance Blog"
+theme: ["PaperMod"]
+
+enableInlineShortcodes: true
+enableRobotsTXT: true
+enableEmoji: true
+pygmentsUseClasses: true
+
+pagination:
+  pagerSize: 8
+
+outputs:
+  home:
+    - HTML
+    - RSS
+    - JSON
+
+menu:
+  main:
+    - identifier: archives
+      name: 归档
+      url: /archives/
+      weight: 10
+    - identifier: search
+      name: 搜索
+      url: /search/
+      weight: 20
+    - identifier: tags
+      name: 标签
+      url: /tags/
+      weight: 30
+    - identifier: about
+      name: 关于
+      url: /about/
+      weight: 40
+
+params:
+  env: production
+  description: "一个用 Hugo + PaperMod 搭建的个人博客。"
+  author: "Rorance"
+  keywords: ["博客", "Hugo", "PaperMod", "阿里云"]
+  defaultTheme: auto
+  ShowReadingTime: true
+  ShowShareButtons: true
+  ShowPostNavLinks: true
+  ShowBreadCrumbs: true
+  ShowCodeCopyButtons: true
+  ShowAllPagesInArchive: true
+  ShowPageNums: true
+  ShowToc: true
+  mainSections: ["posts"]
+
+  homeInfoParams:
+    Title: "你好，我是 Rorance"
+    Content: >
+      这是一个按 `macOS + Hugo + 阿里云` 路线搭起来的个人博客脚手架。
+      你可以直接在 `content/posts/` 里写文章，然后构建 `public/` 上传到阿里云服务器。
+
+  socialIcons:
+    - name: github
+      url: "https://github.com/luoz76070-art"
+
+  assets:
+    disableHLJS: true
+
+markup:
+  goldmark:
+    renderer:
+      unsafe: true
+  highlight:
+    noClasses: false
+
+taxonomies:
+  category: categories
+  tag: tags
+  series: series

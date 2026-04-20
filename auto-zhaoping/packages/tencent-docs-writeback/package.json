@@ -1,0 +1,13 @@
+{
+  "name": "@zhaoping/tencent-docs-writeback",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "writeback": "node scripts/writeback.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "playwright": "^1.58.2"
+  }
+}
