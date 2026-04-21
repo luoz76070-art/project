@@ -1,6 +1,6 @@
 baseURL: "https://zyzlz.xin/"
 languageCode: "zh-cn"
-title: "Rorance Blog"
+title: "Rorance"
 theme: ["PaperMod"]
 
 enableInlineShortcodes: true
@@ -17,30 +17,11 @@ outputs:
     - RSS
     - JSON
 
-menu:
-  main:
-    - identifier: archives
-      name: 归档
-      url: /archives/
-      weight: 10
-    - identifier: search
-      name: 搜索
-      url: /search/
-      weight: 20
-    - identifier: tags
-      name: 标签
-      url: /tags/
-      weight: 30
-    - identifier: about
-      name: 关于
-      url: /about/
-      weight: 40
-
 params:
   env: production
-  description: "一个用 Hugo + PaperMod 搭建的个人博客。"
+  description: "Rorance 的个人博客，记录技术、产品与生活。"
   author: "Rorance"
-  keywords: ["博客", "Hugo", "PaperMod", "阿里云"]
+  keywords: ["Rorance", "博客", "技术", "生活", "Hugo"]
   defaultTheme: auto
   ShowReadingTime: true
   ShowShareButtons: true
@@ -51,6 +32,28 @@ params:
   ShowPageNums: true
   ShowToc: true
   mainSections: ["posts"]
+  disableSpecial1stPost: true
+
+  label:
+    text: "Home"
+    icon: ""
+    iconHeight:
+
+  profileMode:
+    enabled: true
+    # 把你的头像图片放到 assets/images/ 目录，再把下面文件名改成对应图片名即可。
+    # 例如：assets/images/avatar.jpg -> imageUrl: "images/avatar.jpg"
+    title: ""
+    subtitle: ""
+    imageUrl: "images/personal.png"
+    imageTitle: "Avatar placeholder"
+    imageWidth: 250
+    imageHeight: 250
+    buttons:
+      - name: 动态
+        url: "/posts/"
+      - name: 分类
+        url: "/tags/"
 
   homeInfoParams:
     Title: "你好，我是 Rorance"
@@ -61,6 +64,10 @@ params:
   socialIcons:
     - name: github
       url: "https://github.com/luoz76070-art"
+    - name: wechat
+      url: "/index.xml"
+    - name: email
+      url: "/index.xml"
 
   assets:
     disableHLJS: true

@@ -1,9 +1,17 @@
-name: Deploy Hugo Blog
+# Copy this file to the monorepo root as:
+#   .github/workflows/deploy-hugo-to-nginx.yml
+# It assumes this project lives in the monorepo subdirectory:
+#   hermes-deploy/
+
+name: Deploy Hugo-to-Nginx
 
 on:
   push:
     branches:
       - main
+    paths:
+      - "hermes-deploy/**"
+      - ".github/workflows/deploy-hugo-to-nginx.yml"
   workflow_dispatch:
 
 permissions:
@@ -12,6 +20,9 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hermes-deploy
     env:
       HUGO_VERSION: "0.160.1"
       DEPLOY_HOST: ${{ vars.BLOG_DEPLOY_HOST }}
