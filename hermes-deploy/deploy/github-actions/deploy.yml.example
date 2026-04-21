@@ -44,19 +44,43 @@ jobs:
       - name: Build site
         run: ./scripts/build.sh
 
+      - name: Install SSH auth helpers
+        env:
+          BLOG_DEPLOY_PASSWORD: ${{ secrets.BLOG_DEPLOY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${BLOG_DEPLOY_PASSWORD}" ]; then
+            sudo apt-get update
+            sudo apt-get install -y sshpass
+          fi
+
       - name: Configure SSH
         env:
           BLOG_DEPLOY_SSH_KEY: ${{ secrets.BLOG_DEPLOY_SSH_KEY }}
+          BLOG_DEPLOY_PASSWORD: ${{ secrets.BLOG_DEPLOY_PASSWORD }}
         run: |
           set -euo pipefail
           DEPLOY_PORT="${DEPLOY_PORT:-22}"
+          if [ -z "${DEPLOY_HOST}" ] || [ -z "${DEPLOY_PATH}" ]; then
+            echo "BLOG_DEPLOY_HOST 和 BLOG_DEPLOY_PATH 必须配置。"
+            exit 1
+          fi
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "${BLOG_DEPLOY_SSH_KEY}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "${DEPLOY_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          if [ -n "${BLOG_DEPLOY_SSH_KEY}" ]; then
+            printf '%s\n' "${BLOG_DEPLOY_SSH_KEY}" > ~/.ssh/id_ed25519
+            chmod 600 ~/.ssh/id_ed25519
+          elif [ -n "${BLOG_DEPLOY_PASSWORD}" ]; then
+            echo "Using BLOG_DEPLOY_PASSWORD for deployment authentication."
+          else
+            echo "必须配置 BLOG_DEPLOY_SSH_KEY 或 BLOG_DEPLOY_PASSWORD。"
+            exit 1
+          fi
 
       - name: Deploy release
+        env:
+          BLOG_DEPLOY_PASSWORD: ${{ secrets.BLOG_DEPLOY_PASSWORD }}
         run: |
           set -euo pipefail
           DEPLOY_USER="${DEPLOY_USER:-root}"

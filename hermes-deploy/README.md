@@ -153,12 +153,14 @@ Nginx 的 `root` 应指向 `/var/www/blog/current`。
 
 你需要在 GitHub 仓库里配置：
 
-- `Secret`: `BLOG_DEPLOY_SSH_KEY`
+- `Secret`: `BLOG_DEPLOY_SSH_KEY` 或 `BLOG_DEPLOY_PASSWORD`
 - `Variable`: `BLOG_DEPLOY_HOST`
 - `Variable`: `BLOG_DEPLOY_PATH`
 - `Variable`: `BLOG_DEPLOY_USER`
 - `Variable`: `BLOG_DEPLOY_PORT`
 - `Variable`: `BLOG_RELEASES_TO_KEEP`
+
+推荐优先使用 `BLOG_DEPLOY_SSH_KEY`。如果当前服务器还是密码登录，也可以先配置 `BLOG_DEPLOY_PASSWORD`，工作流会自动安装 `sshpass` 并走密码认证。
 
 如果你不想用脚本，也可以手工把它复制到 monorepo 根目录的 `.github/workflows/deploy-hugo-to-nginx.yml`。
 

@@ -10,6 +10,7 @@ usage() {
   - 站点会发布到 <site_root>/releases/<release_id>
   - 当前线上版本由 <site_root>/current 符号链接指向
   - Nginx 的 root 应指向 <site_root>/current
+  - 如果设置了 BLOG_DEPLOY_PASSWORD / DEPLOY_PASSWORD / SSHPASS，会改用 sshpass 做密码登录
 
 示例:
   scripts/deploy_to_aliyun.sh 8.153.100.129 /var/www/blog root
@@ -84,6 +85,13 @@ done
 require_cmd ssh
 require_cmd rsync
 
+PASSWORD_AUTH=0
+if [ -n "${BLOG_DEPLOY_PASSWORD:-${DEPLOY_PASSWORD:-${SSHPASS:-}}}" ]; then
+  PASSWORD_AUTH=1
+  require_cmd sshpass
+  export SSHPASS="${BLOG_DEPLOY_PASSWORD:-${DEPLOY_PASSWORD:-${SSHPASS:-}}}"
+fi
+
 if [ "${SKIP_BUILD}" -eq 0 ]; then
   "${SCRIPT_DIR}/build.sh"
 fi
@@ -96,9 +104,16 @@ fi
 RELEASE_ID="$(date -u +%Y%m%d%H%M%S)"
 SSH_TARGET="${SERVER_USER}@${SERVER_HOST}"
 REMOTE_RELEASE_DIR="${SITE_ROOT}/releases/${RELEASE_ID}"
+SSH_BASE_CMD=(ssh -p "${SSH_PORT}")
+RSYNC_RSH="ssh -p ${SSH_PORT}"
+
+if [ "${PASSWORD_AUTH}" -eq 1 ]; then
+  SSH_BASE_CMD=(sshpass -e ssh -p "${SSH_PORT}")
+  RSYNC_RSH="sshpass -e ssh -p ${SSH_PORT}"
+fi
 
 echo "准备创建远程发布目录: ${REMOTE_RELEASE_DIR}"
-ssh -p "${SSH_PORT}" "${SSH_TARGET}" "bash -s" -- "${SITE_ROOT}" "${RELEASE_ID}" <<'REMOTE_PREPARE'
+"${SSH_BASE_CMD[@]}" "${SSH_TARGET}" "bash -s" -- "${SITE_ROOT}" "${RELEASE_ID}" <<'REMOTE_PREPARE'
 set -euo pipefail
 site_root="$1"
 release_id="$2"
@@ -106,10 +121,10 @@ mkdir -p "${site_root}/releases/${release_id}"
 REMOTE_PREPARE
 
 echo "开始同步 public/ 到远程发布目录"
-rsync -az --delete -e "ssh -p ${SSH_PORT}" "${PROJECT_ROOT}/public/" "${SSH_TARGET}:${REMOTE_RELEASE_DIR}/"
+rsync -az --delete -e "${RSYNC_RSH}" "${PROJECT_ROOT}/public/" "${SSH_TARGET}:${REMOTE_RELEASE_DIR}/"
 
 echo "切换 current 链接并清理旧版本"
-ssh -p "${SSH_PORT}" "${SSH_TARGET}" "bash -s" -- "${SITE_ROOT}" "${RELEASE_ID}" "${RELEASES_TO_KEEP}" <<'REMOTE_ACTIVATE'
+"${SSH_BASE_CMD[@]}" "${SSH_TARGET}" "bash -s" -- "${SITE_ROOT}" "${RELEASE_ID}" "${RELEASES_TO_KEEP}" <<'REMOTE_ACTIVATE'
 set -euo pipefail
 
 site_root="$1"
