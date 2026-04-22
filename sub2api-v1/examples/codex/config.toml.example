@@ -1,0 +1,11 @@
+disable_response_storage = true
+model = "gpt-5.4"
+model_provider = "sub2api_v1"
+model_reasoning_effort = "medium"
+service_tier = "fast"
+
+[model_providers.sub2api_v1]
+name = "sub2api-v1"
+base_url = "https://www.example.com/v1"
+wire_api = "responses"
+requires_openai_auth = true

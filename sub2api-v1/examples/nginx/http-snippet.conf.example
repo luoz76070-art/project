@@ -1,0 +1,4 @@
+# Put this inside the `http { ... }` block of nginx.conf.
+# Codex / Responses clients send headers like `session_id`.
+# Nginx drops headers with underscores by default unless this is enabled.
+underscores_in_headers on;
