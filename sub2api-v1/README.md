@@ -24,7 +24,6 @@
 ## 项目来源
 
 - 上游项目：[`Wei-Shaw/sub2api`](https://github.com/Wei-Shaw/sub2api)
-- 上游原始说明保留在：[UPSTREAM_README.md](./UPSTREAM_README.md)
 
 这个目录在保留上游源码的同时，额外整理了当前服务器真正使用过的部署覆盖层：
 
@@ -70,8 +69,7 @@ sub2api-v1/
 │   └── nginx/
 │       ├── http-snippet.conf.example
 │       └── sub2api-www.conf.example
-├── patches/                      # 线上用过的前端热修
-└── UPSTREAM_README.md            # 上游原 README
+└── patches/                      # 线上用过的前端热修
 ```
 
 ## 先看这 5 个关键结论
@@ -600,6 +598,6 @@ curl https://www.example.com/v1/chat/completions \
 
 ## 如果你只想看上游原文档
 
-直接看：
+请直接查看上游仓库：
 
-- [UPSTREAM_README.md](./UPSTREAM_README.md)
+- https://github.com/Wei-Shaw/sub2api
