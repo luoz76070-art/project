@@ -1,3 +1,7 @@
+# Replace `https://www.example.com/v1` with your actual gateway domain.
+# Do not append `/responses` manually.
+# This example assumes you already ran `codex login`.
+
 disable_response_storage = true
 model = "gpt-5.4"
 model_provider = "sub2api_v1"
