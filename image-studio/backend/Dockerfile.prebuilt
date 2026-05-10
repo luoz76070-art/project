@@ -1,0 +1,14 @@
+FROM gcr.io/distroless/static-debian12:nonroot
+
+WORKDIR /app
+
+COPY .build/linux-amd64/api    /app/api
+COPY .build/linux-amd64/openai /app/openai
+COPY configs                   /app/configs
+
+ENV TZ=Asia/Shanghai
+USER 65532:65532
+
+EXPOSE 17180 17200
+
+ENTRYPOINT ["/app/api"]

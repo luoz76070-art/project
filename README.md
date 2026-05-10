@@ -14,3 +14,6 @@
 - [sub2api-v1](./sub2api-v1/README.md)
   - 基于 `Wei-Shaw/sub2api` 整理的号池与 API 网关部署目录
   - 已补充 compose、Nginx、Codex 接入示例和当前服务器使用过的热修脚本
+- [image-studio](./image-studio/README.md)
+  - 从当前 `gpt2api` 生图能力整理出的用户侧生图 WebUI 与后端部署模板
+  - 保留 `gpt-image-2` 生图、参考图、历史记录、图片缓存和子路径部署适配
