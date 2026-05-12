@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -11,7 +12,9 @@ const ROOT_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), "
 const STATE_DIR = path.join(os.homedir(), ".codex-to-phone");
 const PID_FILE = path.join(STATE_DIR, "service.json");
 const LOG_FILE = path.join(STATE_DIR, "service.log");
-const URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com\/\?token=[A-Za-z0-9_-]+/u;
+const URL_FILE = path.join(STATE_DIR, "phone-url.txt");
+const PHONE_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com\/\?token=[A-Za-z0-9_-]+/u;
+const CLOUDFLARE_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/u;
 const DEFAULT_WAIT_MS = 60_000;
 
 function ensureStateDir() {
@@ -44,8 +47,21 @@ function readLog() {
   }
 }
 
-function extractPhoneUrl(logText = readLog()) {
-  return logText.match(URL_RE)?.[0] ?? "";
+function readUrlFile(file = URL_FILE) {
+  try {
+    return fs.readFileSync(file, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function extractPhoneUrl(logText = readLog(), token = "", urlFile = URL_FILE) {
+  const fileUrl = readUrlFile(urlFile);
+  if (PHONE_URL_RE.test(fileUrl)) return fileUrl;
+  const directUrl = logText.match(PHONE_URL_RE)?.[0] ?? "";
+  if (directUrl) return directUrl;
+  const publicUrl = logText.match(CLOUDFLARE_URL_RE)?.[0] ?? "";
+  return publicUrl && token ? `${publicUrl}/?token=${encodeURIComponent(token)}` : "";
 }
 
 function extractToken(url) {
@@ -63,6 +79,11 @@ function printQrCode(url) {
   } catch {
     console.log("QR code dependency is not installed. Run npm install to enable QR output.");
   }
+}
+
+function printPairingQr(url) {
+  console.log("Scan this QR code with the phone:");
+  printQrCode(url);
 }
 
 function parseArgs(argv) {
@@ -107,10 +128,10 @@ function getJson(url) {
   });
 }
 
-async function waitForPhoneUrl(waitMs) {
+async function waitForPhoneUrl(waitMs, token = "") {
   const started = Date.now();
   while (Date.now() - started < waitMs) {
-    const url = extractPhoneUrl();
+    const url = extractPhoneUrl(readLog(), token);
     if (url) return url;
     await new Promise((resolve) => setTimeout(resolve, 800));
   }
@@ -121,20 +142,28 @@ async function start(options) {
   ensureStateDir();
   const existing = readState();
   if (existing && isRunning(existing.pid)) {
-    const url = extractPhoneUrl();
+    const url = extractPhoneUrl(readLog(), existing.token ?? "", existing.urlFile ?? URL_FILE);
     console.log(`Codex To Phone is already running. pid=${existing.pid}`);
     if (url) {
-      console.log(url);
-      printQrCode(url);
+      printPairingQr(url);
     }
     return;
   }
 
   fs.writeFileSync(LOG_FILE, `# Codex To Phone service ${new Date().toISOString()}\n`);
+  fs.rmSync(URL_FILE, { force: true });
   const out = fs.openSync(LOG_FILE, "a");
+  const token = randomBytes(18).toString("base64url");
   const child = spawn(
     process.execPath,
-    [path.join(ROOT_DIR, "scripts", "start-cloudflare-tunnel.mjs"), ...options.passthrough],
+    [
+      path.join(ROOT_DIR, "scripts", "start-cloudflare-tunnel.mjs"),
+      ...options.passthrough,
+      "--token",
+      token,
+      "--url-file",
+      URL_FILE,
+    ],
     {
       cwd: ROOT_DIR,
       detached: true,
@@ -145,26 +174,28 @@ async function start(options) {
   child.unref();
   fs.writeFileSync(
     PID_FILE,
-    JSON.stringify({ pid: child.pid, startedAt: new Date().toISOString(), logFile: LOG_FILE }, null, 2),
+    JSON.stringify(
+      { pid: child.pid, token, startedAt: new Date().toISOString(), logFile: LOG_FILE, urlFile: URL_FILE },
+      null,
+      2,
+    ),
   );
 
   console.log(`Starting Codex To Phone in background. pid=${child.pid}`);
-  const url = await waitForPhoneUrl(options.waitMs);
+  const url = await waitForPhoneUrl(options.waitMs, token);
   if (url) {
-    console.log("\nPhone URL:");
-    console.log(url);
-    console.log("\nScan this QR code:");
-    printQrCode(url);
+    console.log("");
+    printPairingQr(url);
   } else {
-    console.log(`Still waiting for the public URL. Check log: ${LOG_FILE}`);
+    console.log(`Still waiting for the public tunnel. Check log: ${LOG_FILE}`);
   }
 }
 
 async function status() {
   const state = readState();
-  const url = extractPhoneUrl();
+  const url = extractPhoneUrl(readLog(), state?.token ?? "", state?.urlFile ?? URL_FILE);
   const running = state ? isRunning(state.pid) : false;
-  console.log(JSON.stringify({ running, pid: state?.pid ?? null, url: url || null, logFile: LOG_FILE }, null, 2));
+  console.log(JSON.stringify({ running, pid: state?.pid ?? null, pairingReady: Boolean(url), logFile: LOG_FILE }, null, 2));
   const healthUrl = url ? healthUrlFromPhoneUrl(url) : "";
   if (running && healthUrl) {
     try {
@@ -199,10 +230,10 @@ async function main() {
   } else if (options.command === "status") {
     await status();
   } else if (options.command === "url") {
-    const url = extractPhoneUrl();
-    if (!url) throw new Error("No phone URL found. Start the service first.");
-    console.log(url);
-    printQrCode(url);
+    const state = readState();
+    const url = extractPhoneUrl(readLog(), state?.token ?? "", state?.urlFile ?? URL_FILE);
+    if (!url) throw new Error("No pairing QR found. Start the service first.");
+    printPairingQr(url);
   } else {
     throw new Error("Usage: node scripts/service.mjs <start|stop|status|url> [start options]");
   }

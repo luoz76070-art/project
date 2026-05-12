@@ -9,6 +9,8 @@ import path from "node:path";
 
 const DEFAULT_PORT = 8765;
 const CLOUDFLARE_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/u;
+const PHONE_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com\/\?token=[A-Za-z0-9_-]+/u;
+const ANY_URL_RE = /https?:\/\/[^\s|]+/gu;
 const require = createRequire(import.meta.url);
 
 function parseArgs(argv) {
@@ -19,6 +21,7 @@ function parseArgs(argv) {
     threadId: "",
     injector: "desktop-ipc",
     desktopIpcSock: "",
+    urlFile: "",
     bridgeScript: path.join(path.dirname(new URL(import.meta.url).pathname), "bridge.mjs"),
   };
 
@@ -35,6 +38,7 @@ function parseArgs(argv) {
     else if (arg === "--thread-id") options.threadId = next();
     else if (arg === "--injector") options.injector = next();
     else if (arg === "--desktop-ipc-sock") options.desktopIpcSock = next();
+    else if (arg === "--url-file") options.urlFile = next();
     else if (arg === "--bridge-script") options.bridgeScript = next();
     else if (arg === "--help" || arg === "-h") {
       printHelp();
@@ -67,6 +71,7 @@ Options:
   --thread-id <id>           Codex session/thread id.
   --injector <mode>          Phone input injector: app-server, desktop-ipc, ui, debug, or none. Default: desktop-ipc.
   --desktop-ipc-sock <path>  Optional Codex Desktop IPC socket for desktop-ipc mode.
+  --url-file <path>          Optional file that receives the generated phone URL for service management.
   --bridge-script <path>     Override bridge.mjs path.
 `);
 }
@@ -153,15 +158,26 @@ function waitForBridge(port, token) {
   });
 }
 
-function pipeOutput(child, prefix, onText) {
+function redactUrls(text) {
+  return text.replace(PHONE_URL_RE, "[phone pairing QR hidden]").replace(ANY_URL_RE, "[URL hidden]");
+}
+
+function pipeOutput(child, prefix, onText, options = {}) {
   const handle = (chunk) => {
     const text = chunk.toString();
-    process.stdout.write(text.split(/\n/u).map((line) => (line ? `[${prefix}] ${line}` : line)).join("\n"));
+    const output = options.redactUrls ? redactUrls(text) : text;
+    process.stdout.write(output.split(/\n/u).map((line) => (line ? `[${prefix}] ${line}` : line)).join("\n"));
     if (!text.endsWith("\n")) process.stdout.write("\n");
     onText?.(text);
   };
   child.stdout.on("data", handle);
   child.stderr.on("data", handle);
+}
+
+function writePhoneUrlFile(file, url) {
+  if (!file) return;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${url}\n`);
 }
 
 function printQrCode(url) {
@@ -206,7 +222,7 @@ async function main() {
     env: process.env,
   });
 
-  pipeOutput(bridge, "bridge");
+  pipeOutput(bridge, "bridge", null, { redactUrls: true });
   bridge.on("exit", (code, signal) => {
     console.error(`[bridge] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
     process.exitCode = 1;
@@ -232,13 +248,12 @@ async function main() {
     if (match && !printedUrl) {
       printedUrl = true;
       const phoneUrl = `${match[0]}/?token=${encodeURIComponent(options.token)}`;
-      console.log("\nCodex Live Session public phone URL:");
-      console.log(phoneUrl);
-      console.log("\nScan this QR code with the phone:");
+      writePhoneUrlFile(options.urlFile, phoneUrl);
+      console.log("\nCodex Live Session phone QR code:");
       printQrCode(phoneUrl);
-      console.log("\nOpen this URL on the phone from Wi-Fi or cellular data.");
+      console.log("\nScan the QR code on the phone from Wi-Fi or cellular data.");
     }
-  });
+  }, { redactUrls: true });
 
   tunnel.on("exit", (code, signal) => {
     console.error(`[cloudflared] exited code=${code ?? "null"} signal=${signal ?? "null"}`);

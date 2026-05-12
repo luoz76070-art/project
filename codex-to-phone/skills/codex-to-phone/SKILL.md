@@ -1,6 +1,6 @@
 ---
 name: codex-to-phone
-description: Start, stop, or check Codex To Phone, a session-scoped bridge that exposes the current Codex Desktop conversation to a phone via QR URL. Use when the user says "启动 Codex To Phone", "启动手机同步", "手机同步当前会话", "查看 Codex To Phone 状态", or "停止 Codex To Phone".
+description: Start, stop, show the QR code for, or check Codex To Phone, a session-scoped bridge that exposes the current Codex Desktop conversation to a phone through QR pairing. Use when the user says "启动 Codex To Phone", "开启 Codex To Phone", "显示 Codex To Phone 二维码", "启动手机同步", "手机同步当前会话", "查看 Codex To Phone 状态", or "停止 Codex To Phone".
 ---
 
 # Codex To Phone
@@ -11,8 +11,12 @@ Use this skill to manage the Codex To Phone bridge from inside Codex.
 
 - Starts a local bridge for the currently active Codex Desktop conversation.
 - Starts a Cloudflare Quick Tunnel.
-- Prints a phone URL and QR code.
+- Prints a QR code for phone pairing.
 - Lets the phone view summarized progress and send text back into the owning Codex Desktop window.
+
+## Output Rule
+
+For start or pairing requests, make the final assistant response the QR code block from the command output. Do not include the raw phone URL in the final response. The URL is an implementation detail and should stay out of the user-facing reply unless the user explicitly asks for it.
 
 ## Commands
 
@@ -36,9 +40,16 @@ npm run plugin:start
 
 Then report:
 
-- the printed phone URL;
-- that the QR code was printed in the command output;
+- the printed QR code as the final output;
 - that the user should keep the target Codex Desktop conversation window open.
+
+If the service was already running and the start command prints a QR code, still return only that QR code block and the short keep-window-open note. If no QR code appears, run:
+
+```bash
+npm run plugin:url
+```
+
+and return the QR code printed by that command.
 
 ### Status
 
@@ -49,7 +60,8 @@ cd "$PLUGIN_ROOT"
 npm run plugin:status
 ```
 
-Report whether the bridge is running, the phone URL if available, and the bound thread id if the health check returns it.
+Report whether the bridge is running, whether pairing is ready, and the bound thread id if the health check returns it.
+Do not include the raw phone URL in the final response. If the user needs pairing access, run `npm run plugin:url` and return the QR code instead.
 
 ### Stop
 
@@ -60,12 +72,12 @@ cd "$PLUGIN_ROOT"
 npm run plugin:stop
 ```
 
-Report that the current pairing URL is invalidated once the bridge is stopped.
+Report that the current pairing is invalidated once the bridge is stopped.
 
 ## Troubleshooting
 
 - If `cloudflared` is missing, tell the user to install it with `brew install cloudflared`.
-- If no phone URL appears after startup, run `npm run plugin:status` and inspect `~/.codex-to-phone/service.log`.
+- If no QR code appears after startup, run `npm run plugin:status`, then `npm run plugin:url`, and inspect `~/.codex-to-phone/service.log` if needed.
 - If phone input fails with `no-client-found`, ask the user to open the matching Codex Desktop conversation window and retry.
 - If the phone page opens but updates are delayed, the UI still polls in the background; wait a few seconds or reload the phone page.
 

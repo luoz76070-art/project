@@ -33,7 +33,6 @@ npm start
 
 The terminal prints:
 
-- a public HTTPS phone URL;
 - a QR code;
 - the bound thread id and rollout file.
 
@@ -68,7 +67,7 @@ npm install
 npm run plugin:start
 ```
 
-It starts the service in the background and prints the phone URL and QR code.
+It starts the service in the background and prints the QR code as the pairing output.
 
 ## 5. Daily Use
 
@@ -134,14 +133,14 @@ If `cloudflared` is missing:
 brew install cloudflared
 ```
 
-If the phone URL does not appear:
+If the QR code does not appear:
 
 ```bash
 npm run plugin:status
+npm run plugin:url
 tail -120 ~/.codex-to-phone/service.log
 ```
 
 If phone input returns `no-client-found`, open the matching Codex Desktop conversation window and retry.
 
 If the phone page opens but does not update immediately, wait a few seconds or reload the page. The UI uses polling as a fallback when SSE is delayed by the tunnel.
-

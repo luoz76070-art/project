@@ -2,7 +2,7 @@
 
 把一个正在打开的 Codex Desktop 会话同步到手机端，并允许手机向当前会话发送输入。
 
-当前版本是可复现 MVP：PC 端启动本地 bridge，Cloudflare Quick Tunnel 暴露临时 HTTPS URL，终端输出二维码，手机扫码后进入轻量 Web UI。
+当前版本是可复现 MVP：PC 端启动本地 bridge，Cloudflare Quick Tunnel 暴露临时 HTTPS 通道，终端输出二维码，手机扫码后进入轻量 Web UI。
 
 这个目录同时也是一个 Codex 本地插件：包含 `.codex-plugin/plugin.json` 和 `skills/codex-to-phone/SKILL.md`。安装插件后，可以在 Codex 里用自然语言启动、停止和查看状态。
 
@@ -36,7 +36,7 @@ npm install
 npm start
 ```
 
-启动后终端会输出公网 URL 和二维码。用手机扫码即可打开当前会话页面。
+启动后终端会输出二维码。用手机扫码即可打开当前会话页面。
 
 如果脚本没有自动识别到正确的 Codex 会话，可以显式传入 rollout 文件和 thread id：
 
@@ -61,7 +61,7 @@ npm run plugin:install
 启动 Codex To Phone
 ```
 
-Codex 会根据插件 Skill 运行后台服务，并返回手机 URL / 二维码。
+Codex 会根据插件 Skill 运行后台服务，并把二维码作为最终输出。
 
 常用自然语言：
 
