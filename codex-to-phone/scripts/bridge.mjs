@@ -1146,16 +1146,18 @@ function renderPhonePage() {
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Codex Live Session</title>
   <style>
     :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f7f8fb; color: #172033; }
-    body { margin: 0; background: #f7f8fb; color: #172033; }
-    header { position: sticky; top: 0; z-index: 2; padding: 14px 16px 12px; background: rgba(255,255,255,.94); border-bottom: 1px solid #dde3ee; backdrop-filter: blur(16px); }
+    * { box-sizing: border-box; }
+    html { height: 100%; }
+    body { margin: 0; min-height: 100%; height: var(--app-height, 100dvh); overflow: hidden; display: flex; flex-direction: column; background: #f7f8fb; color: #172033; }
+    header { flex: 0 0 auto; z-index: 2; padding: 14px 16px 12px; background: rgba(255,255,255,.94); border-bottom: 1px solid #dde3ee; backdrop-filter: blur(16px); }
     h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: 0; }
     #status { display: inline-flex; align-items: center; gap: 7px; margin-top: 7px; font-size: 12px; color: #526071; }
     #status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #14b87a; box-shadow: 0 0 0 3px rgba(20,184,122,.13); }
-    main { padding: 14px 12px 108px; }
+    main { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 12px 12px; }
     .event { border: 1px solid #dde3ee; background: #fff; border-radius: 8px; padding: 11px 12px; margin-bottom: 10px; overflow-wrap: anywhere; box-shadow: 0 1px 2px rgba(20,31,51,.04); }
     .event .meta { color: #68778b; font-size: 11px; line-height: 1.35; margin-bottom: 7px; display: flex; justify-content: space-between; gap: 10px; }
     .event .body { white-space: pre-wrap; line-height: 1.52; font-size: 14px; }
@@ -1164,9 +1166,10 @@ function renderPhonePage() {
     .tool { border-left: 3px solid #8b5cf6; background: #fbfaff; }
     .system { border-left: 3px solid #64748b; background: #fbfcfe; }
     .error { border-left: 3px solid #dc2626; background: #fff8f8; }
-    form { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; padding: 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); border-top: 1px solid #dde3ee; backdrop-filter: blur(16px); }
-    textarea { flex: 1; min-height: 46px; max-height: 120px; resize: vertical; border-radius: 8px; border: 1px solid #c9d3e2; background: #fff; color: #172033; padding: 10px 11px; font-size: 15px; line-height: 1.35; }
-    button { width: 72px; border: 0; border-radius: 8px; background: #2563eb; color: white; font-weight: 700; font-size: 15px; }
+    form { flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 72px; align-items: end; gap: 8px; width: 100%; padding: 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); border-top: 1px solid #dde3ee; backdrop-filter: blur(16px); }
+    textarea { display: block; width: 100%; min-width: 0; height: 48px; min-height: 48px; max-height: 120px; overflow-y: auto; resize: none; appearance: none; -webkit-appearance: none; border-radius: 8px; border: 1px solid #c9d3e2; background: #fff; color: #172033; padding: 11px 12px; font-size: 16px; line-height: 1.35; }
+    textarea:focus { outline: 2px solid rgba(37,99,235,.22); border-color: #2563eb; }
+    button { width: 72px; height: 48px; min-width: 72px; appearance: none; -webkit-appearance: none; border: 0; border-radius: 8px; background: #2563eb; color: white; font-weight: 700; font-size: 15px; }
     button:disabled { opacity: .45; }
   </style>
 </head>
@@ -1177,7 +1180,7 @@ function renderPhonePage() {
   </header>
   <main id="events"></main>
   <form id="form">
-    <textarea id="text" placeholder="发送到当前 Codex 会话"></textarea>
+    <textarea id="text" rows="1" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" placeholder="输入消息"></textarea>
     <button id="send" type="submit">发送</button>
   </form>
   <script>
@@ -1192,6 +1195,19 @@ function renderPhonePage() {
     const shownMessageKeys = new Set();
     const streamTextById = new Map();
     const streamNodeById = new Map();
+
+    function syncAppHeight() {
+      const viewport = window.visualViewport;
+      const height = Math.max(320, Math.floor(viewport?.height || window.innerHeight || 0));
+      document.documentElement.style.setProperty("--app-height", height + "px");
+    }
+
+    syncAppHeight();
+    window.addEventListener("resize", syncAppHeight);
+    window.addEventListener("orientationchange", syncAppHeight);
+    window.visualViewport?.addEventListener("resize", syncAppHeight);
+    window.visualViewport?.addEventListener("scroll", syncAppHeight);
+    textEl.addEventListener("focus", syncAppHeight);
 
     function timeText(value) {
       if (!value) return "";
@@ -1267,7 +1283,7 @@ function renderPhonePage() {
       div.querySelector(".body").textContent = item.body;
       eventsEl.appendChild(div);
       while (eventsEl.children.length > 300) eventsEl.removeChild(eventsEl.firstChild);
-      window.scrollTo(0, document.body.scrollHeight);
+      eventsEl.parentElement.scrollTop = eventsEl.parentElement.scrollHeight;
       return div;
     }
 
