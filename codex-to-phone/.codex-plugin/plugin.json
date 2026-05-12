@@ -1,0 +1,42 @@
+{
+  "name": "codex-to-phone",
+  "version": "0.2.0",
+  "description": "Start a session-scoped phone bridge for a live Codex Desktop conversation.",
+  "author": {
+    "name": "Rorance",
+    "url": "https://github.com/luoz76070-art"
+  },
+  "homepage": "https://github.com/luoz76070-art/project/tree/main/codex-to-phone",
+  "repository": "https://github.com/luoz76070-art/project",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "phone",
+    "remote-control",
+    "desktop-ipc",
+    "cloudflare-tunnel"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex To Phone",
+    "shortDescription": "Sync a live Codex session to your phone",
+    "longDescription": "Codex To Phone starts a local bridge for one open Codex Desktop conversation, exposes it through a temporary Cloudflare Tunnel, prints a QR code, and lets the phone monitor progress or send text back into the owning Desktop window.",
+    "developerName": "Rorance",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/luoz76070-art/project/tree/main/codex-to-phone",
+    "privacyPolicyURL": "https://github.com/luoz76070-art/project/tree/main/codex-to-phone",
+    "termsOfServiceURL": "https://github.com/luoz76070-art/project/tree/main/codex-to-phone",
+    "defaultPrompt": [
+      "启动 Codex To Phone",
+      "查看 Codex To Phone 状态",
+      "停止 Codex To Phone"
+    ],
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}

@@ -4,6 +4,8 @@
 
 当前版本是可复现 MVP：PC 端启动本地 bridge，Cloudflare Quick Tunnel 暴露临时 HTTPS URL，终端输出二维码，手机扫码后进入轻量 Web UI。
 
+这个目录同时也是一个 Codex 本地插件：包含 `.codex-plugin/plugin.json` 和 `skills/codex-to-phone/SKILL.md`。安装插件后，可以在 Codex 里用自然语言启动、停止和查看状态。
+
 ## 能力
 
 - 手机实时查看当前 Codex 会话的用户输入、Codex 回复、工具调用摘要和最终结果。
@@ -25,6 +27,8 @@ brew install cloudflared
 
 ## 快速开始
 
+直接命令启动：
+
 ```bash
 git clone https://github.com/luoz76070-art/project.git
 cd project/codex-to-phone
@@ -40,6 +44,40 @@ npm start
 npm start -- \
   --rollout-file ~/.codex/sessions/<date>/rollout-<session>.jsonl \
   --thread-id <session-id>
+```
+
+## 安装为 Codex 插件
+
+```bash
+git clone https://github.com/luoz76070-art/project.git
+cd project/codex-to-phone
+npm install
+npm run plugin:install
+```
+
+然后重启 Codex Desktop。在 Codex 里说：
+
+```text
+启动 Codex To Phone
+```
+
+Codex 会根据插件 Skill 运行后台服务，并返回手机 URL / 二维码。
+
+常用自然语言：
+
+```text
+启动 Codex To Phone
+查看 Codex To Phone 状态
+停止 Codex To Phone
+```
+
+对应命令：
+
+```bash
+npm run plugin:start
+npm run plugin:status
+npm run plugin:stop
+npm run plugin:url
 ```
 
 ## 当前实现
@@ -63,6 +101,9 @@ PC 到手机：
 
 ```bash
 npm run check
+npm run plugin:start
+npm run plugin:status
+npm run plugin:stop
 node scripts/start-cloudflare-tunnel.mjs --help
 node scripts/bridge.mjs --help
 ```
@@ -82,5 +123,7 @@ node scripts/bridge.mjs --help
 git pull
 cd codex-to-phone
 npm install
+npm run plugin:install
 ```
 
+如果已经安装过本地插件，`plugin:install` 会刷新 marketplace 条目并继续指向当前 checkout。

@@ -6,9 +6,25 @@ Codex To Phone is session-scoped remote control for a live Codex Desktop convers
 
 The bridge starts when the user wants to expose one current session to the phone. It should not create a long-lived archive or show unrelated historical sessions.
 
+## Plugin Shape
+
+`codex-to-phone/` is both a runnable Node package and a Codex local plugin.
+
+- `.codex-plugin/plugin.json` declares the plugin metadata.
+- `skills/codex-to-phone/SKILL.md` gives Codex the natural-language workflow for start, stop, status, and troubleshooting.
+- `scripts/service.mjs` manages the bridge as a background service for the skill entry.
+- `scripts/start-cloudflare-tunnel.mjs` starts the local bridge and public tunnel.
+- `scripts/bridge.mjs` owns the phone UI, rollout tailing, and Desktop IPC injection.
+
 ## Runtime Flow
 
 ```text
+Codex Skill command
+        |
+        v
+service.mjs background manager
+        |
+        v
 Codex Desktop rollout JSONL
         |
         v
@@ -62,4 +78,3 @@ The next step is to manage multiple session bindings:
 - the phone UI shows a session switcher;
 - each session has independent queue, token, status, and last-event cursor;
 - Desktop IPC request routing continues to rely on the owner window for each conversation.
-

@@ -1,6 +1,6 @@
 {
   "name": "codex-to-phone",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Session-scoped phone bridge for a live Codex Desktop conversation.",
@@ -9,7 +9,12 @@
   },
   "scripts": {
     "start": "node scripts/start-cloudflare-tunnel.mjs",
-    "check": "node --check scripts/bridge.mjs && node --check scripts/start-cloudflare-tunnel.mjs"
+    "plugin:install": "node scripts/install-local-plugin.mjs",
+    "plugin:start": "node scripts/service.mjs start",
+    "plugin:stop": "node scripts/service.mjs stop",
+    "plugin:status": "node scripts/service.mjs status",
+    "plugin:url": "node scripts/service.mjs url",
+    "check": "node --check scripts/bridge.mjs && node --check scripts/start-cloudflare-tunnel.mjs && node --check scripts/service.mjs && node --check scripts/install-local-plugin.mjs"
   },
   "dependencies": {
     "qrcode-terminal": "^0.12.0"
