@@ -17,6 +17,7 @@
     "check": "node --check scripts/bridge.mjs && node --check scripts/start-cloudflare-tunnel.mjs && node --check scripts/service.mjs && node --check scripts/install-local-plugin.mjs"
   },
   "dependencies": {
+    "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0"
   }
 }

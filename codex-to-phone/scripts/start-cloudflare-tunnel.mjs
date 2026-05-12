@@ -22,6 +22,7 @@ function parseArgs(argv) {
     injector: "desktop-ipc",
     desktopIpcSock: "",
     urlFile: "",
+    qrImageFile: path.join(os.homedir(), ".codex-to-phone", "pairing-qr.png"),
     bridgeScript: path.join(path.dirname(new URL(import.meta.url).pathname), "bridge.mjs"),
   };
 
@@ -39,6 +40,7 @@ function parseArgs(argv) {
     else if (arg === "--injector") options.injector = next();
     else if (arg === "--desktop-ipc-sock") options.desktopIpcSock = next();
     else if (arg === "--url-file") options.urlFile = next();
+    else if (arg === "--qr-image-file") options.qrImageFile = next();
     else if (arg === "--bridge-script") options.bridgeScript = next();
     else if (arg === "--help" || arg === "-h") {
       printHelp();
@@ -72,6 +74,7 @@ Options:
   --injector <mode>          Phone input injector: app-server, desktop-ipc, ui, debug, or none. Default: desktop-ipc.
   --desktop-ipc-sock <path>  Optional Codex Desktop IPC socket for desktop-ipc mode.
   --url-file <path>          Optional file that receives the generated phone URL for service management.
+  --qr-image-file <path>     File that receives the generated PNG QR image.
   --bridge-script <path>     Override bridge.mjs path.
 `);
 }
@@ -180,12 +183,42 @@ function writePhoneUrlFile(file, url) {
   fs.writeFileSync(file, `${url}\n`);
 }
 
-function printQrCode(url) {
+async function writeQrImage(file, url) {
+  if (!file) return "";
+  const qrcode = require("qrcode");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  await qrcode.toFile(file, url, {
+    type: "png",
+    width: 720,
+    margin: 4,
+    errorCorrectionLevel: "M",
+    color: {
+      dark: "#000000",
+      light: "#ffffff",
+    },
+  });
+  return file;
+}
+
+function printTerminalQrCode(url) {
   try {
     const qrcode = require("qrcode-terminal");
     qrcode.generate(url, { small: true });
   } catch {
     console.log("QR code dependency is not installed. Run npm install to enable terminal QR output.");
+  }
+}
+
+async function printPhoneQr(url, file) {
+  try {
+    const imageFile = await writeQrImage(file, url);
+    console.log("\nCodex Live Session phone QR image:");
+    console.log(imageFile);
+    console.log("\nScan the QR image on the phone from Wi-Fi or cellular data.");
+  } catch {
+    console.log("\nCodex Live Session terminal QR fallback:");
+    printTerminalQrCode(url);
+    console.log("\nScan the QR code on the phone from Wi-Fi or cellular data.");
   }
 }
 
@@ -249,9 +282,7 @@ async function main() {
       printedUrl = true;
       const phoneUrl = `${match[0]}/?token=${encodeURIComponent(options.token)}`;
       writePhoneUrlFile(options.urlFile, phoneUrl);
-      console.log("\nCodex Live Session phone QR code:");
-      printQrCode(phoneUrl);
-      console.log("\nScan the QR code on the phone from Wi-Fi or cellular data.");
+      void printPhoneQr(phoneUrl, options.qrImageFile);
     }
   }, { redactUrls: true });
 

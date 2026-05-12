@@ -13,6 +13,7 @@ const STATE_DIR = path.join(os.homedir(), ".codex-to-phone");
 const PID_FILE = path.join(STATE_DIR, "service.json");
 const LOG_FILE = path.join(STATE_DIR, "service.log");
 const URL_FILE = path.join(STATE_DIR, "phone-url.txt");
+const QR_IMAGE_FILE = path.join(STATE_DIR, "pairing-qr.png");
 const PHONE_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com\/\?token=[A-Za-z0-9_-]+/u;
 const CLOUDFLARE_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/u;
 const DEFAULT_WAIT_MS = 60_000;
@@ -72,7 +73,23 @@ function extractToken(url) {
   }
 }
 
-function printQrCode(url) {
+async function writePairingQrImage(url, file = QR_IMAGE_FILE) {
+  const qrcode = require("qrcode");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  await qrcode.toFile(file, url, {
+    type: "png",
+    width: 720,
+    margin: 4,
+    errorCorrectionLevel: "M",
+    color: {
+      dark: "#000000",
+      light: "#ffffff",
+    },
+  });
+  return file;
+}
+
+function printTerminalQrCode(url) {
   try {
     const qrcode = require("qrcode-terminal");
     qrcode.generate(url, { small: true });
@@ -81,9 +98,15 @@ function printQrCode(url) {
   }
 }
 
-function printPairingQr(url) {
-  console.log("Scan this QR code with the phone:");
-  printQrCode(url);
+async function printPairingQr(url, file = QR_IMAGE_FILE) {
+  try {
+    const imageFile = await writePairingQrImage(url, file);
+    console.log("QR image:");
+    console.log(imageFile);
+  } catch {
+    console.log("QR image generation failed. Terminal QR fallback:");
+    printTerminalQrCode(url);
+  }
 }
 
 function parseArgs(argv) {
@@ -145,13 +168,14 @@ async function start(options) {
     const url = extractPhoneUrl(readLog(), existing.token ?? "", existing.urlFile ?? URL_FILE);
     console.log(`Codex To Phone is already running. pid=${existing.pid}`);
     if (url) {
-      printPairingQr(url);
+      await printPairingQr(url, existing.qrImageFile ?? QR_IMAGE_FILE);
     }
     return;
   }
 
   fs.writeFileSync(LOG_FILE, `# Codex To Phone service ${new Date().toISOString()}\n`);
   fs.rmSync(URL_FILE, { force: true });
+  fs.rmSync(QR_IMAGE_FILE, { force: true });
   const out = fs.openSync(LOG_FILE, "a");
   const token = randomBytes(18).toString("base64url");
   const child = spawn(
@@ -163,6 +187,8 @@ async function start(options) {
       token,
       "--url-file",
       URL_FILE,
+      "--qr-image-file",
+      QR_IMAGE_FILE,
     ],
     {
       cwd: ROOT_DIR,
@@ -175,7 +201,14 @@ async function start(options) {
   fs.writeFileSync(
     PID_FILE,
     JSON.stringify(
-      { pid: child.pid, token, startedAt: new Date().toISOString(), logFile: LOG_FILE, urlFile: URL_FILE },
+      {
+        pid: child.pid,
+        token,
+        startedAt: new Date().toISOString(),
+        logFile: LOG_FILE,
+        urlFile: URL_FILE,
+        qrImageFile: QR_IMAGE_FILE,
+      },
       null,
       2,
     ),
@@ -185,7 +218,7 @@ async function start(options) {
   const url = await waitForPhoneUrl(options.waitMs, token);
   if (url) {
     console.log("");
-    printPairingQr(url);
+    await printPairingQr(url, QR_IMAGE_FILE);
   } else {
     console.log(`Still waiting for the public tunnel. Check log: ${LOG_FILE}`);
   }
@@ -233,7 +266,7 @@ async function main() {
     const state = readState();
     const url = extractPhoneUrl(readLog(), state?.token ?? "", state?.urlFile ?? URL_FILE);
     if (!url) throw new Error("No pairing QR found. Start the service first.");
-    printPairingQr(url);
+    await printPairingQr(url, state?.qrImageFile ?? QR_IMAGE_FILE);
   } else {
     throw new Error("Usage: node scripts/service.mjs <start|stop|status|url> [start options]");
   }

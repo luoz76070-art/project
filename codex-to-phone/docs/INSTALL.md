@@ -33,10 +33,10 @@ npm start
 
 The terminal prints:
 
-- a QR code;
+- a PNG QR image path;
 - the bound thread id and rollout file.
 
-Scan the QR code with the phone. Keep the Codex Desktop conversation window open.
+Scan the QR image with the phone. Keep the Codex Desktop conversation window open.
 
 ## 4. Install As A Codex Local Plugin
 
@@ -67,7 +67,7 @@ npm install
 npm run plugin:start
 ```
 
-It starts the service in the background and prints the QR code as the pairing output.
+It starts the service in the background and prints a local PNG QR image path as the pairing output. The Codex skill renders that image in the final response.
 
 ## 5. Daily Use
 
@@ -133,7 +133,7 @@ If `cloudflared` is missing:
 brew install cloudflared
 ```
 
-If the QR code does not appear:
+If the QR image does not appear:
 
 ```bash
 npm run plugin:status
