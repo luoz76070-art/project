@@ -1,0 +1,17 @@
+{
+  "name": "codex-to-phone",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Session-scoped phone bridge for a live Codex Desktop conversation.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node scripts/start-cloudflare-tunnel.mjs",
+    "check": "node --check scripts/bridge.mjs && node --check scripts/start-cloudflare-tunnel.mjs"
+  },
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0"
+  }
+}
