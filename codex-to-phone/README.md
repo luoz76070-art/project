@@ -20,22 +20,49 @@
 - macOS 上已运行 Codex Desktop。
 - 当前 Codex Desktop 窗口打开了你要同步的会话。
 - Node.js 22 或更高版本。
-- `cloudflared` 已安装：
+- Xcode Command Line Tools，用来编译本地输入 helper：
+
+```bash
+xcode-select --install
+```
+
+- `cloudflared`，用来生成手机可访问的公网临时地址：
 
 ```bash
 brew install cloudflared
 ```
 
-## 快速开始
+## 小白快速开始
 
-直接命令启动：
+1. 下载项目并安装依赖：
 
 ```bash
 git clone https://github.com/luoz76070-art/project.git
 cd project/codex-to-phone
 npm install
+```
+
+2. 运行体检：
+
+```bash
+npm run doctor
+```
+
+3. 打开 Codex Desktop，并切到你要同步到手机的那个会话窗口。
+
+4. 启动：
+
+```bash
 npm start
 ```
+
+5. 首次手机向 PC 发送消息前，macOS 会要求给 `Codex Live Session Input.app` 辅助功能权限。打开：
+
+```text
+系统设置 > 隐私与安全性 > 辅助功能
+```
+
+允许 `Codex Live Session Input.app` 后，重新在手机端发送消息。
 
 启动后会生成可扫描的 PNG 二维码。用手机扫码即可打开当前会话页面。
 
@@ -53,6 +80,7 @@ npm start -- \
 git clone https://github.com/luoz76070-art/project.git
 cd project/codex-to-phone
 npm install
+npm run doctor
 npm run plugin:install
 ```
 
@@ -110,6 +138,7 @@ PC 到手机：
 
 ```bash
 npm run check
+npm run doctor
 npm run plugin:start
 npm run plugin:status
 npm run plugin:stop
@@ -122,6 +151,7 @@ node scripts/bridge.mjs --help
 - 当前只绑定一个会话窗口。后续可以扩展为多个 bridge session，并在手机端做会话列表和切换。
 - Cloudflare Quick Tunnel 是临时测试通道，不适合作为正式产品后端。
 - 手机到 PC 默认依赖 macOS 辅助功能权限来粘贴和提交输入；如果被系统拦截，需要允许 `Codex Live Session Input.app` 控制电脑。启动脚本会复用已构建的 helper，避免每次启动重新签名导致权限失效。
+- 如果本地已有旧插件目录，`npm run plugin:install` 会自动更新旧 symlink；如果存在同名普通目录，按提示备份后运行 `npm run plugin:install -- --force`。
 - 远程审批、文件确认和多端权限控制还没有做成手机端能力。
 
 ## 后续更新

@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "description": "Session-scoped phone bridge for a live Codex Desktop conversation.",
+  "license": "MIT",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "start": "node scripts/build-ui-helper.mjs && node scripts/start-cloudflare-tunnel.mjs",
+    "doctor": "node scripts/doctor.mjs",
     "helper:build": "node scripts/build-ui-helper.mjs",
     "plugin:install": "node scripts/install-local-plugin.mjs",
     "plugin:start": "node scripts/build-ui-helper.mjs && node scripts/service.mjs start",
@@ -16,7 +18,7 @@
     "plugin:status": "node scripts/service.mjs status",
     "plugin:url": "node scripts/service.mjs url",
     "plugin:lan": "node scripts/service.mjs lan",
-    "check": "node --check scripts/bridge.mjs && node --check scripts/start-cloudflare-tunnel.mjs && node --check scripts/service.mjs && node --check scripts/install-local-plugin.mjs && node --check scripts/build-ui-helper.mjs"
+    "check": "node --check scripts/bridge.mjs && node --check scripts/start-cloudflare-tunnel.mjs && node --check scripts/service.mjs && node --check scripts/install-local-plugin.mjs && node --check scripts/build-ui-helper.mjs && node --check scripts/doctor.mjs"
   },
   "dependencies": {
     "qrcode": "^1.5.4",

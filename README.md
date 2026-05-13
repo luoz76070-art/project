@@ -17,3 +17,7 @@
 - [image-studio](./image-studio/README.md)
   - 从当前 `gpt2api` 生图能力整理出的用户侧生图 WebUI 与后端部署模板
   - 保留 `gpt-image-2` 生图、参考图、历史记录、图片缓存和子路径部署适配
+- [codex-to-phone](./codex-to-phone/README.md)
+  - 将当前 Codex Desktop 会话同步到手机端
+  - 支持扫码连接、手机查看执行进展、手机输入注入当前 Codex 窗口
+  - 新手安装手册见 [codex-to-phone/docs/INSTALL.md](./codex-to-phone/docs/INSTALL.md)

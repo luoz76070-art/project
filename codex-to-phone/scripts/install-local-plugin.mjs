@@ -10,6 +10,12 @@ const LOCAL_PLUGIN_DIR = path.join(HOME, "plugins", PLUGIN_NAME);
 const MARKETPLACE_DIR = path.join(HOME, ".agents", "plugins");
 const MARKETPLACE_FILE = path.join(MARKETPLACE_DIR, "marketplace.json");
 
+function parseArgs(argv) {
+  return {
+    force: argv.includes("--force"),
+  };
+}
+
 function readJson(file, fallback) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -18,14 +24,25 @@ function readJson(file, fallback) {
   }
 }
 
-function ensureSymlink() {
+function ensureSymlink(options) {
   fs.mkdirSync(path.dirname(LOCAL_PLUGIN_DIR), { recursive: true });
   try {
     const stat = fs.lstatSync(LOCAL_PLUGIN_DIR);
     if (stat.isSymbolicLink() && path.resolve(fs.readlinkSync(LOCAL_PLUGIN_DIR)) === ROOT_DIR) {
       return;
     }
-    throw new Error(`${LOCAL_PLUGIN_DIR} already exists and is not the expected symlink`);
+    if (stat.isSymbolicLink()) {
+      fs.unlinkSync(LOCAL_PLUGIN_DIR);
+    } else if (options.force) {
+      fs.rmSync(LOCAL_PLUGIN_DIR, { recursive: true, force: true });
+    } else {
+      throw new Error(
+        [
+          `${LOCAL_PLUGIN_DIR} already exists and is not a symlink.`,
+          "Move it away, or rerun with: npm run plugin:install -- --force",
+        ].join("\n"),
+      );
+    }
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
@@ -67,10 +84,11 @@ function ensureMarketplace() {
 }
 
 function main() {
+  const options = parseArgs(process.argv.slice(2));
   if (!fs.existsSync(path.join(ROOT_DIR, ".codex-plugin", "plugin.json"))) {
     throw new Error("Missing .codex-plugin/plugin.json. Run this script from a complete codex-to-phone checkout.");
   }
-  ensureSymlink();
+  ensureSymlink(options);
   ensureMarketplace();
   console.log(`Installed local Codex plugin: ${LOCAL_PLUGIN_DIR}`);
   console.log(`Updated marketplace: ${MARKETPLACE_FILE}`);

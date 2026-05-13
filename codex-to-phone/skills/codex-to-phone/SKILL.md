@@ -101,9 +101,11 @@ The phone web UI also has a `断开` button. If the user taps it, the bridge rec
 ## Troubleshooting
 
 - If `cloudflared` is missing, tell the user to install it with `brew install cloudflared`.
+- If the user is installing for the first time or reports setup confusion, run `npm run doctor` and summarize the missing items.
 - If no QR image appears after startup, run `npm run plugin:status`, then `npm run plugin:url`, and inspect `~/.codex-to-phone/service.log` if needed.
 - If Android browser shows error `-2`, use `npm run plugin:lan` and ask the user to scan the LAN QR while phone and computer are on the same Wi-Fi.
 - If phone input fails with a macOS permission error, ask the user to grant Accessibility permission to `Codex Live Session Input.app`. The helper is reused between starts so permission should not be invalidated unless the helper source changes. Desktop IPC is experimental and should be used only when explicitly requested with `--injector desktop-ipc`.
+- If local plugin installation is stuck on an existing normal directory, tell the user to back it up before running `npm run plugin:install -- --force`.
 - If the phone page opens but updates are delayed, the UI still polls in the background; wait a few seconds or reload the phone page.
 
 ## Scope
