@@ -22,7 +22,6 @@ const DESKTOP_IPC_INITIALIZING_CLIENT_ID = "initializing-client";
 const DESKTOP_IPC_FRAME_LIMIT_BYTES = 256 * 1024 * 1024;
 const DESKTOP_IPC_CONNECT_TIMEOUT_MS = 5_000;
 const DESKTOP_IPC_REQUEST_TIMEOUT_MS = 15_000;
-const DESKTOP_IPC_OWNER_TIMEOUT_MS = 8_000;
 const DESKTOP_IPC_METHOD_VERSIONS = new Map([
   ["thread-follower-start-turn", 1],
   ["thread-follower-steer-turn", 1],
@@ -260,8 +259,6 @@ function desktopIpcFrame(message) {
   return frame;
 }
 
-const desktopIpcThreadOwners = new Map();
-
 class DesktopIpcClient {
   constructor(sock = "") {
     this.sock = sock || defaultDesktopIpcSocketPath();
@@ -271,7 +268,6 @@ class DesktopIpcClient {
     this.buffer = Buffer.alloc(0);
     this.expectedFrameBytes = null;
     this.closed = false;
-    this.ownerWaiters = new Map();
   }
 
   async connect() {
@@ -307,7 +303,7 @@ class DesktopIpcClient {
     return response;
   }
 
-  request(method, params = {}, timeoutMs = DESKTOP_IPC_REQUEST_TIMEOUT_MS, options = {}) {
+  request(method, params = {}, timeoutMs = DESKTOP_IPC_REQUEST_TIMEOUT_MS) {
     const socket = this.socket;
     if (!socket?.writable) {
       return Promise.reject(new Error("Codex Desktop IPC socket is not connected"));
@@ -324,7 +320,6 @@ class DesktopIpcClient {
       version: desktopIpcMethodVersion(method),
       method,
       params,
-      ...(options.targetClientId ? { targetClientId: options.targetClientId } : {}),
     };
 
     return new Promise((resolve, reject) => {
@@ -353,43 +348,10 @@ class DesktopIpcClient {
     });
   }
 
-  getThreadOwner(threadId) {
-    return desktopIpcThreadOwners.get(threadId) ?? "";
-  }
-
-  waitForThreadOwner(threadId, timeoutMs = DESKTOP_IPC_OWNER_TIMEOUT_MS) {
-    const current = this.getThreadOwner(threadId);
-    if (current) return Promise.resolve(current);
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        const waiters = this.ownerWaiters.get(threadId) ?? [];
-        this.ownerWaiters.set(
-          threadId,
-          waiters.filter((waiter) => waiter.resolve !== resolve),
-        );
-        reject(new Error(`Timed out waiting for Codex Desktop owner for ${threadId}`));
-      }, timeoutMs);
-      const waiters = this.ownerWaiters.get(threadId) ?? [];
-      waiters.push({
-        resolve: (ownerClientId) => {
-          clearTimeout(timer);
-          resolve(ownerClientId);
-        },
-        reject: (error) => {
-          clearTimeout(timer);
-          reject(error);
-        },
-      });
-      this.ownerWaiters.set(threadId, waiters);
-    });
-  }
-
   dispose() {
     this.closed = true;
     this.socket?.destroy();
-    const error = new Error("Codex Desktop IPC client disposed");
-    this.#rejectPending(error);
-    this.#rejectOwnerWaiters(error);
+    this.#rejectPending(new Error("Codex Desktop IPC client disposed"));
   }
 
   #send(message) {
@@ -443,11 +405,6 @@ class DesktopIpcClient {
       return;
     }
 
-    if (message.type === "broadcast") {
-      this.#handleBroadcast(message);
-      return;
-    }
-
     if (message.type === "client-discovery-request") {
       this.#send({
         type: "client-discovery-response",
@@ -467,30 +424,11 @@ class DesktopIpcClient {
     }
   }
 
-  #handleBroadcast(message) {
-    if (
-      message.method !== "thread-stream-state-changed" ||
-      typeof message.sourceClientId !== "string" ||
-      typeof message.params?.conversationId !== "string"
-    ) {
-      return;
-    }
-    const threadId = message.params.conversationId;
-    desktopIpcThreadOwners.set(threadId, message.sourceClientId);
-    const waiters = this.ownerWaiters.get(threadId) ?? [];
-    if (waiters.length === 0) return;
-    this.ownerWaiters.delete(threadId);
-    for (const waiter of waiters) {
-      waiter.resolve(message.sourceClientId);
-    }
-  }
-
   #handleClose(error) {
     if (this.closed && !error) return;
     this.closed = true;
     this.socket?.destroy();
     this.#rejectPending(error ?? new Error("Codex Desktop IPC connection closed"));
-    this.#rejectOwnerWaiters(error ?? new Error("Codex Desktop IPC connection closed"));
   }
 
   #rejectPending(error) {
@@ -499,15 +437,6 @@ class DesktopIpcClient {
       pending.reject(error);
     }
     this.pending.clear();
-  }
-
-  #rejectOwnerWaiters(error) {
-    for (const waiters of this.ownerWaiters.values()) {
-      for (const waiter of waiters) {
-        waiter.reject(error);
-      }
-    }
-    this.ownerWaiters.clear();
   }
 }
 
@@ -680,31 +609,14 @@ async function sendViaDesktopIpcInjector(text, threadId, desktopIpcSock) {
   await ipc.connect();
   try {
     await ipc.initialize();
-    const method = "thread-follower-start-turn";
-    const params = {
-      conversationId: threadId,
-      turnStartParams: { input: [textInput(text)] },
-    };
-    const knownOwnerClientId = ipc.getThreadOwner(threadId);
-    if (knownOwnerClientId) {
-      return await ipc.request(method, params, TURN_START_TIMEOUT_MS, {
-        targetClientId: knownOwnerClientId,
-      });
-    }
-    try {
-      return await ipc.request(method, params, TURN_START_TIMEOUT_MS);
-    } catch (error) {
-      if (!/no-client-found/i.test(error instanceof Error ? error.message : String(error))) {
-        throw error;
-      }
-      const ownerClientId =
-        ipc.getThreadOwner(threadId) ||
-        (await ipc.waitForThreadOwner(threadId, 1_000).catch(() => ""));
-      if (!ownerClientId) throw error;
-      return await ipc.request(method, params, TURN_START_TIMEOUT_MS, {
-        targetClientId: ownerClientId,
-      });
-    }
+    return await ipc.request(
+      "thread-follower-start-turn",
+      {
+        conversationId: threadId,
+        turnStartParams: { input: [textInput(text)] },
+      },
+      TURN_START_TIMEOUT_MS,
+    );
   } finally {
     ipc.dispose();
   }
@@ -731,7 +643,8 @@ function explainInjectorError(error, injector) {
     if (/no-client-found/i.test(raw)) {
       return [
         "Codex Desktop 没有找到可接收这个会话的当前窗口。",
-        "请确认 PC 端正打开并停留在同一个 Codex 会话窗口，然后重新发送手机消息。",
+        "这表示当前打开的 Codex Desktop 窗口没有把该 thread 暴露为 owner。",
+        "请确认 PC 端正打开并停留在同一个 Codex 会话窗口；必要时从历史记录重新打开这个会话后再发送。",
         `原始错误：${raw}`,
       ].join("\n");
     }
@@ -755,6 +668,22 @@ function explainInjectorError(error, injector) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function sanitizeJsonText(value) {
+  if (typeof value !== "string") return value;
+  return value
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, "");
+}
+
+function sanitizeJsonPayload(value) {
+  if (typeof value === "string") return sanitizeJsonText(value);
+  if (Array.isArray(value)) return value.map((item) => sanitizeJsonPayload(item));
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, sanitizeJsonPayload(item)]),
+  );
 }
 
 function normalizeEvent(method, params) {
@@ -1560,7 +1489,7 @@ async function main() {
   let sessionEndedEmitted = false;
 
   function emit(event) {
-    const payload = { ...event, bridgeSeq: nextEventSeq, bridgeThreadId: threadId };
+    const payload = sanitizeJsonPayload({ ...event, bridgeSeq: nextEventSeq, bridgeThreadId: threadId });
     nextEventSeq += 1;
     buffer.push(payload);
     while (buffer.length > MAX_BUFFERED_EVENTS) buffer.shift();

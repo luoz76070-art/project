@@ -102,7 +102,7 @@ The phone web UI also has a `断开` button. If the user taps it, the bridge rec
 - If `cloudflared` is missing, tell the user to install it with `brew install cloudflared`.
 - If no QR image appears after startup, run `npm run plugin:status`, then `npm run plugin:url`, and inspect `~/.codex-to-phone/service.log` if needed.
 - If Android browser shows error `-2`, use `npm run plugin:lan` and ask the user to scan the LAN QR while phone and computer are on the same Wi-Fi.
-- If phone input fails with `no-client-found`, ask the user to open the matching Codex Desktop conversation window and retry.
+- If phone input fails with `no-client-found`, ask the user to keep the matching Codex Desktop conversation window open on the bound thread and retry. Do not add bridge-side owner routing; Codex Desktop already discovers the owner window for `thread-follower-start-turn`.
 - If the phone page opens but updates are delayed, the UI still polls in the background; wait a few seconds or reload the phone page.
 
 ## Scope

@@ -120,7 +120,7 @@ node scripts/bridge.mjs --help
 
 - 当前只绑定一个会话窗口。后续可以扩展为多个 bridge session，并在手机端做会话列表和切换。
 - Cloudflare Quick Tunnel 是临时测试通道，不适合作为正式产品后端。
-- 如果 PC 端没有打开对应 Codex Desktop 会话窗口，Desktop IPC 会返回找不到 owner 窗口。
+- 如果 PC 端没有打开对应 Codex Desktop 会话窗口，Desktop IPC 会返回找不到 owner 窗口。保持启动插件的 Codex 会话窗口打开并位于当前会话，再从手机发送消息。
 - 远程审批、文件确认和多端权限控制还没有做成手机端能力。
 
 ## 后续更新
