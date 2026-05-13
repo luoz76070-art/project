@@ -22,6 +22,7 @@ const DESKTOP_IPC_INITIALIZING_CLIENT_ID = "initializing-client";
 const DESKTOP_IPC_FRAME_LIMIT_BYTES = 256 * 1024 * 1024;
 const DESKTOP_IPC_CONNECT_TIMEOUT_MS = 5_000;
 const DESKTOP_IPC_REQUEST_TIMEOUT_MS = 15_000;
+const DESKTOP_IPC_OWNER_TIMEOUT_MS = 8_000;
 const DESKTOP_IPC_METHOD_VERSIONS = new Map([
   ["thread-follower-start-turn", 1],
   ["thread-follower-steer-turn", 1],
@@ -259,6 +260,8 @@ function desktopIpcFrame(message) {
   return frame;
 }
 
+const desktopIpcThreadOwners = new Map();
+
 class DesktopIpcClient {
   constructor(sock = "") {
     this.sock = sock || defaultDesktopIpcSocketPath();
@@ -268,6 +271,7 @@ class DesktopIpcClient {
     this.buffer = Buffer.alloc(0);
     this.expectedFrameBytes = null;
     this.closed = false;
+    this.ownerWaiters = new Map();
   }
 
   async connect() {
@@ -303,7 +307,7 @@ class DesktopIpcClient {
     return response;
   }
 
-  request(method, params = {}, timeoutMs = DESKTOP_IPC_REQUEST_TIMEOUT_MS) {
+  request(method, params = {}, timeoutMs = DESKTOP_IPC_REQUEST_TIMEOUT_MS, options = {}) {
     const socket = this.socket;
     if (!socket?.writable) {
       return Promise.reject(new Error("Codex Desktop IPC socket is not connected"));
@@ -320,6 +324,7 @@ class DesktopIpcClient {
       version: desktopIpcMethodVersion(method),
       method,
       params,
+      ...(options.targetClientId ? { targetClientId: options.targetClientId } : {}),
     };
 
     return new Promise((resolve, reject) => {
@@ -348,10 +353,43 @@ class DesktopIpcClient {
     });
   }
 
+  getThreadOwner(threadId) {
+    return desktopIpcThreadOwners.get(threadId) ?? "";
+  }
+
+  waitForThreadOwner(threadId, timeoutMs = DESKTOP_IPC_OWNER_TIMEOUT_MS) {
+    const current = this.getThreadOwner(threadId);
+    if (current) return Promise.resolve(current);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const waiters = this.ownerWaiters.get(threadId) ?? [];
+        this.ownerWaiters.set(
+          threadId,
+          waiters.filter((waiter) => waiter.resolve !== resolve),
+        );
+        reject(new Error(`Timed out waiting for Codex Desktop owner for ${threadId}`));
+      }, timeoutMs);
+      const waiters = this.ownerWaiters.get(threadId) ?? [];
+      waiters.push({
+        resolve: (ownerClientId) => {
+          clearTimeout(timer);
+          resolve(ownerClientId);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+      this.ownerWaiters.set(threadId, waiters);
+    });
+  }
+
   dispose() {
     this.closed = true;
     this.socket?.destroy();
-    this.#rejectPending(new Error("Codex Desktop IPC client disposed"));
+    const error = new Error("Codex Desktop IPC client disposed");
+    this.#rejectPending(error);
+    this.#rejectOwnerWaiters(error);
   }
 
   #send(message) {
@@ -405,6 +443,11 @@ class DesktopIpcClient {
       return;
     }
 
+    if (message.type === "broadcast") {
+      this.#handleBroadcast(message);
+      return;
+    }
+
     if (message.type === "client-discovery-request") {
       this.#send({
         type: "client-discovery-response",
@@ -424,11 +467,30 @@ class DesktopIpcClient {
     }
   }
 
+  #handleBroadcast(message) {
+    if (
+      message.method !== "thread-stream-state-changed" ||
+      typeof message.sourceClientId !== "string" ||
+      typeof message.params?.conversationId !== "string"
+    ) {
+      return;
+    }
+    const threadId = message.params.conversationId;
+    desktopIpcThreadOwners.set(threadId, message.sourceClientId);
+    const waiters = this.ownerWaiters.get(threadId) ?? [];
+    if (waiters.length === 0) return;
+    this.ownerWaiters.delete(threadId);
+    for (const waiter of waiters) {
+      waiter.resolve(message.sourceClientId);
+    }
+  }
+
   #handleClose(error) {
     if (this.closed && !error) return;
     this.closed = true;
     this.socket?.destroy();
     this.#rejectPending(error ?? new Error("Codex Desktop IPC connection closed"));
+    this.#rejectOwnerWaiters(error ?? new Error("Codex Desktop IPC connection closed"));
   }
 
   #rejectPending(error) {
@@ -437,6 +499,15 @@ class DesktopIpcClient {
       pending.reject(error);
     }
     this.pending.clear();
+  }
+
+  #rejectOwnerWaiters(error) {
+    for (const waiters of this.ownerWaiters.values()) {
+      for (const waiter of waiters) {
+        waiter.reject(error);
+      }
+    }
+    this.ownerWaiters.clear();
   }
 }
 
@@ -609,14 +680,31 @@ async function sendViaDesktopIpcInjector(text, threadId, desktopIpcSock) {
   await ipc.connect();
   try {
     await ipc.initialize();
-    return await ipc.request(
-      "thread-follower-start-turn",
-      {
-        conversationId: threadId,
-        turnStartParams: { input: [textInput(text)] },
-      },
-      TURN_START_TIMEOUT_MS,
-    );
+    const method = "thread-follower-start-turn";
+    const params = {
+      conversationId: threadId,
+      turnStartParams: { input: [textInput(text)] },
+    };
+    const knownOwnerClientId = ipc.getThreadOwner(threadId);
+    if (knownOwnerClientId) {
+      return await ipc.request(method, params, TURN_START_TIMEOUT_MS, {
+        targetClientId: knownOwnerClientId,
+      });
+    }
+    try {
+      return await ipc.request(method, params, TURN_START_TIMEOUT_MS);
+    } catch (error) {
+      if (!/no-client-found/i.test(error instanceof Error ? error.message : String(error))) {
+        throw error;
+      }
+      const ownerClientId =
+        ipc.getThreadOwner(threadId) ||
+        (await ipc.waitForThreadOwner(threadId, 1_000).catch(() => ""));
+      if (!ownerClientId) throw error;
+      return await ipc.request(method, params, TURN_START_TIMEOUT_MS, {
+        targetClientId: ownerClientId,
+      });
+    }
   } finally {
     ipc.dispose();
   }
