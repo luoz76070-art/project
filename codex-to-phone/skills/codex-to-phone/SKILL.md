@@ -20,8 +20,10 @@ Use this skill to manage the Codex To Phone bridge from inside Codex.
 For start or pairing requests, make the final assistant response the generated QR image, not a raw URL and not a terminal character QR block. The command prints a local image path after `QR image:`. Render that path with Markdown image syntax:
 
 ```markdown
-![Codex To Phone QR](/absolute/path/to/pairing-qr.png)
+![Codex To Phone QR](/absolute/path/to/pairing-qr-<hash>.png)
 ```
+
+The generated image filename includes a hash of the current pairing URL. Always use the exact path printed by the command so the Codex client does not show a cached QR from an older tunnel.
 
 The URL is an implementation detail and should stay out of the user-facing reply unless the user explicitly asks for it.
 

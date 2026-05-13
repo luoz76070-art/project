@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import { createRequire } from "node:module";
@@ -186,11 +186,19 @@ function writePhoneUrlFile(file, url) {
   fs.writeFileSync(file, `${url}\n`);
 }
 
+function qrImageFileForUrl(file, url) {
+  if (!file) return "";
+  const parsed = path.parse(file);
+  const hash = createHash("sha256").update(url).digest("hex").slice(0, 12);
+  return path.join(parsed.dir, `${parsed.name}-${hash}${parsed.ext || ".png"}`);
+}
+
 async function writeQrImage(file, url) {
   if (!file) return "";
   const qrcode = require("qrcode");
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  await qrcode.toFile(file, url, {
+  const imageFile = qrImageFileForUrl(file, url);
+  fs.mkdirSync(path.dirname(imageFile), { recursive: true });
+  await qrcode.toFile(imageFile, url, {
     type: "png",
     width: 720,
     margin: 4,
@@ -200,7 +208,7 @@ async function writeQrImage(file, url) {
       light: "#ffffff",
     },
   });
-  return file;
+  return imageFile;
 }
 
 function printTerminalQrCode(url) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -75,10 +75,17 @@ function extractToken(url) {
   }
 }
 
+function qrImageFileForUrl(file, url) {
+  const parsed = path.parse(file || QR_IMAGE_FILE);
+  const hash = createHash("sha256").update(url).digest("hex").slice(0, 12);
+  return path.join(parsed.dir, `${parsed.name}-${hash}${parsed.ext || ".png"}`);
+}
+
 async function writePairingQrImage(url, file = QR_IMAGE_FILE) {
   const qrcode = require("qrcode");
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  await qrcode.toFile(file, url, {
+  const imageFile = qrImageFileForUrl(file, url);
+  fs.mkdirSync(path.dirname(imageFile), { recursive: true });
+  await qrcode.toFile(imageFile, url, {
     type: "png",
     width: 720,
     margin: 4,
@@ -88,7 +95,7 @@ async function writePairingQrImage(url, file = QR_IMAGE_FILE) {
       light: "#ffffff",
     },
   });
-  return file;
+  return imageFile;
 }
 
 function printTerminalQrCode(url) {
