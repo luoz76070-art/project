@@ -99,6 +99,12 @@ PC 到手机：
 4. 拥有该会话的 Codex Desktop 窗口发起新 turn，因此 PC UI 和手机端都能看到过程。
 5. bridge 校验该输入写入绑定的 rollout，避免误发到旁路会话。
 
+断开连接：
+
+1. 公网页面右上角 `断开` 按钮会关闭当前手机配对。
+2. bridge 记录断开标记并关闭托管的 Cloudflare tunnel。
+3. 下次启动 Codex To Phone 时会清理旧配对状态，并生成新的二维码。
+
 ## 常用命令
 
 ```bash

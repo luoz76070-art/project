@@ -13,11 +13,13 @@ const STATE_DIR = path.join(os.homedir(), ".codex-to-phone");
 const PID_FILE = path.join(STATE_DIR, "service.json");
 const LOG_FILE = path.join(STATE_DIR, "service.log");
 const URL_FILE = path.join(STATE_DIR, "phone-url.txt");
+const DISCONNECT_FILE = path.join(STATE_DIR, "disconnected.json");
 const QR_IMAGE_FILE = path.join(STATE_DIR, "pairing-qr.png");
 const LAN_URL_FILE = path.join(STATE_DIR, "lan-url.txt");
 const LAN_QR_IMAGE_FILE = path.join(STATE_DIR, "pairing-qr-lan.png");
-const PHONE_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com\/\?token=[A-Za-z0-9_-]+/u;
-const CLOUDFLARE_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/u;
+const QUICK_TUNNEL_HOST_RE = String.raw`[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+){2,}\.trycloudflare\.com`;
+const PHONE_URL_RE = new RegExp(`https://${QUICK_TUNNEL_HOST_RE}/\\?token=[A-Za-z0-9_-]+`, "u");
+const CLOUDFLARE_URL_RE = new RegExp(`https://${QUICK_TUNNEL_HOST_RE}`, "u");
 const DEFAULT_WAIT_MS = 60_000;
 
 function ensureStateDir() {
@@ -32,6 +34,10 @@ function readState() {
   }
 }
 
+function hasDisconnectMarker() {
+  return fs.existsSync(DISCONNECT_FILE);
+}
+
 function isRunning(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
@@ -39,6 +45,21 @@ function isRunning(pid) {
     return true;
   } catch {
     return false;
+  }
+}
+
+function stopPid(pid) {
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    process.kill(pid, "SIGTERM");
+  }
+}
+
+async function waitUntilStopped(pid, timeoutMs = 5_000) {
+  const started = Date.now();
+  while (isRunning(pid) && Date.now() - started < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
   }
 }
 
@@ -206,7 +227,19 @@ async function waitForPhoneUrl(waitMs, token = "") {
 async function start(options) {
   ensureStateDir();
   const existing = readState();
-  if (existing && isRunning(existing.pid)) {
+  if (hasDisconnectMarker()) {
+    if (existing && isRunning(existing.pid)) {
+      stopPid(existing.pid);
+      await waitUntilStopped(existing.pid);
+      if (isRunning(existing.pid)) {
+        throw new Error(`Timed out stopping disconnected Codex To Phone service. pid=${existing.pid}`);
+      }
+    }
+    fs.rmSync(PID_FILE, { force: true });
+    fs.rmSync(URL_FILE, { force: true });
+    fs.rmSync(LAN_URL_FILE, { force: true });
+    fs.rmSync(DISCONNECT_FILE, { force: true });
+  } else if (existing && isRunning(existing.pid)) {
     const url = extractPhoneUrl(readLog(), existing.token ?? "", existing.urlFile ?? URL_FILE);
     console.log(`Codex To Phone is already running. pid=${existing.pid}`);
     if (url) {
@@ -239,7 +272,7 @@ async function start(options) {
     {
       cwd: ROOT_DIR,
       detached: true,
-      env: process.env,
+      env: { ...process.env, CODEX_TO_PHONE_DISCONNECT_FILE: DISCONNECT_FILE },
       stdio: ["ignore", out, out],
     },
   );

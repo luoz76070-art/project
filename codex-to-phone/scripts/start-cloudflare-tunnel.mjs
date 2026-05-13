@@ -8,8 +8,9 @@ import os from "node:os";
 import path from "node:path";
 
 const DEFAULT_PORT = 8765;
-const CLOUDFLARE_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/u;
-const PHONE_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com\/\?token=[A-Za-z0-9_-]+/u;
+const QUICK_TUNNEL_HOST_RE = String.raw`[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+){2,}\.trycloudflare\.com`;
+const CLOUDFLARE_URL_RE = new RegExp(`https://${QUICK_TUNNEL_HOST_RE}`, "u");
+const PHONE_URL_RE = new RegExp(`https://${QUICK_TUNNEL_HOST_RE}/\\?token=[A-Za-z0-9_-]+`, "u");
 const ANY_URL_RE = /https?:\/\/[^\s|]+/gu;
 const require = createRequire(import.meta.url);
 
@@ -261,21 +262,32 @@ async function main() {
     bridgeArgs.push("--desktop-ipc-sock", options.desktopIpcSock);
   }
 
+  let tunnel = null;
+  let shuttingDown = false;
   const bridge = spawn("node", bridgeArgs, {
     stdio: ["ignore", "pipe", "pipe"],
-    env: process.env,
+    env: { ...process.env, CODEX_TO_PHONE_MANAGED_BRIDGE: "1" },
   });
+
+  const shutdown = (code = 0) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    process.exitCode = code;
+    tunnel?.kill("SIGTERM");
+    bridge.kill("SIGTERM");
+    setTimeout(() => process.exit(code), 1_000).unref();
+  };
 
   pipeOutput(bridge, "bridge", null, { redactUrls: true });
   bridge.on("exit", (code, signal) => {
     console.error(`[bridge] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
-    process.exitCode = 1;
+    if (!shuttingDown) shutdown(code === 0 ? 0 : 1);
   });
 
   await waitForBridge(options.port, options.token);
 
   let printedUrl = false;
-  const tunnel = spawn("cloudflared", [
+  tunnel = spawn("cloudflared", [
     "tunnel",
     "--no-autoupdate",
     "--protocol",
@@ -299,16 +311,11 @@ async function main() {
 
   tunnel.on("exit", (code, signal) => {
     console.error(`[cloudflared] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
-    bridge.kill("SIGTERM");
-    process.exitCode = 1;
+    if (!shuttingDown) shutdown(1);
   });
 
-  const shutdown = () => {
-    tunnel.kill("SIGTERM");
-    bridge.kill("SIGTERM");
-  };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", () => shutdown(0));
+  process.on("SIGTERM", () => shutdown(0));
 
   console.log(`Local bridge is running for thread ${threadId}`);
   console.log(`Rollout file: ${rolloutFile}`);

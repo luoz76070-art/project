@@ -1154,6 +1154,7 @@ function renderPhonePage() {
     html { height: 100%; }
     body { margin: 0; min-height: 100%; height: var(--app-height, 100dvh); overflow: hidden; display: flex; flex-direction: column; background: #f7f8fb; color: #172033; }
     header { flex: 0 0 auto; z-index: 2; padding: 14px 16px 12px; background: rgba(255,255,255,.94); border-bottom: 1px solid #dde3ee; backdrop-filter: blur(16px); }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: 0; }
     #status { display: inline-flex; align-items: center; gap: 7px; margin-top: 7px; font-size: 12px; color: #526071; }
     #status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #14b87a; box-shadow: 0 0 0 3px rgba(20,184,122,.13); }
@@ -1170,12 +1171,16 @@ function renderPhonePage() {
     textarea { display: block; width: 100%; min-width: 0; height: 48px; min-height: 48px; max-height: 120px; overflow-y: auto; resize: none; appearance: none; -webkit-appearance: none; border-radius: 8px; border: 1px solid #c9d3e2; background: #fff; color: #172033; padding: 11px 12px; font-size: 16px; line-height: 1.35; }
     textarea:focus { outline: 2px solid rgba(37,99,235,.22); border-color: #2563eb; }
     button { width: 72px; height: 48px; min-width: 72px; appearance: none; -webkit-appearance: none; border: 0; border-radius: 8px; background: #2563eb; color: white; font-weight: 700; font-size: 15px; }
+    #disconnect { flex: 0 0 auto; width: auto; min-width: 64px; height: 32px; padding: 0 10px; border: 1px solid #c9d3e2; background: #f3f6fb; color: #526071; font-size: 13px; }
     button:disabled { opacity: .45; }
   </style>
 </head>
 <body>
   <header>
-    <h1>Codex To Phone</h1>
+    <div class="topbar">
+      <h1>Codex To Phone</h1>
+      <button id="disconnect" type="button">断开</button>
+    </div>
     <div id="status">正在连接</div>
   </header>
   <main id="events"></main>
@@ -1190,7 +1195,12 @@ function renderPhonePage() {
     const statusEl = document.getElementById("status");
     const textEl = document.getElementById("text");
     const sendEl = document.getElementById("send");
+    const disconnectEl = document.getElementById("disconnect");
     let lastSeq = 0;
+    let disconnected = false;
+    let sessionEndedShown = false;
+    let pollTimer = null;
+    let source = null;
     const seenSeq = new Set();
     const shownMessageKeys = new Set();
     const streamTextById = new Map();
@@ -1230,10 +1240,26 @@ function renderPhonePage() {
       return clip(raw, 72);
     }
 
+    function markDisconnected(status = "已断开") {
+      disconnected = true;
+      disconnectEl.disabled = true;
+      sendEl.disabled = true;
+      textEl.disabled = true;
+      if (source) source.close();
+      if (pollTimer) clearInterval(pollTimer);
+      statusEl.textContent = status;
+    }
+
     function displayEvent(event) {
       if (!event || !event.type) return null;
       if (event.type === "session.started") {
         return { kind: "system", title: "会话已连接", body: "已绑定当前 Codex 会话。", at: event.at };
+      }
+      if (event.type === "session.ended") {
+        markDisconnected("已断开");
+        if (sessionEndedShown) return null;
+        sessionEndedShown = true;
+        return { kind: "system", title: "会话已断开", body: "当前手机配对已断开。", at: event.at };
       }
       if (event.type === "injector.notice") {
         return null;
@@ -1315,6 +1341,7 @@ function renderPhonePage() {
     }
 
     async function pollOnce() {
+      if (disconnected) return;
       try {
         const res = await fetch("/poll?token=" + encodeURIComponent(token) + "&since=" + encodeURIComponent(String(lastSeq)), {
           cache: "no-store"
@@ -1336,7 +1363,7 @@ function renderPhonePage() {
       }
     }
 
-    const source = new EventSource("/events?token=" + encodeURIComponent(token));
+    source = new EventSource("/events?token=" + encodeURIComponent(token));
     source.onopen = () => { statusEl.textContent = "已连接"; };
     source.onerror = () => { statusEl.textContent = "已连接，轮询同步"; };
     source.onmessage = (message) => {
@@ -1371,8 +1398,21 @@ function renderPhonePage() {
         sendEl.disabled = false;
       }
     });
+    disconnectEl.addEventListener("click", async () => {
+      if (disconnected) return;
+      markDisconnected("正在断开");
+      try {
+        await fetch("/disconnect?token=" + encodeURIComponent(token), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}"
+        });
+      } catch {}
+      append({ type: "session.ended", at: new Date().toISOString() });
+      statusEl.textContent = "已断开";
+    });
     pollOnce();
-    setInterval(pollOnce, 1200);
+    pollTimer = setInterval(pollOnce, 1200);
   </script>
 </body>
 </html>`;
@@ -1390,6 +1430,17 @@ async function readJsonBody(req) {
 function unauthorized(res) {
   res.writeHead(401, { "content-type": "application/json" });
   res.end(JSON.stringify({ error: "invalid token" }));
+}
+
+function recordManagedDisconnect(reason) {
+  const file = process.env.CODEX_TO_PHONE_DISCONNECT_FILE;
+  if (!file) return;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ reason, at: nowIso() }, null, 2));
+  } catch (error) {
+    console.error(`Could not record phone disconnect: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 function getLanHints(port, token) {
@@ -1417,6 +1468,8 @@ async function main() {
   const clients = new Set();
   const buffer = [];
   let nextEventSeq = 1;
+  let stopTailer = null;
+  let sessionEndedEmitted = false;
 
   function emit(event) {
     const payload = { ...event, bridgeSeq: nextEventSeq, bridgeThreadId: threadId };
@@ -1427,6 +1480,12 @@ async function main() {
     for (const res of clients) {
       res.write(line);
     }
+  }
+
+  function emitSessionEnded(reason) {
+    if (sessionEndedEmitted) return;
+    sessionEndedEmitted = true;
+    emit({ type: "session.ended", reason, at: nowIso() });
   }
 
   async function sendNow(text) {
@@ -1773,6 +1832,15 @@ async function main() {
         res.end(JSON.stringify({ accepted: true, mode: "start", deliveryInFlight: true }));
         return;
       }
+      if (req.method === "POST" && url.pathname === "/disconnect") {
+        const reason = "phone disconnect";
+        recordManagedDisconnect(reason);
+        emitSessionEnded(reason);
+        res.writeHead(202, { "content-type": "application/json" });
+        res.end(JSON.stringify({ disconnected: true }));
+        setTimeout(() => shutdown(reason), 80);
+        return;
+      }
       res.writeHead(404, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "not found" }));
     } catch (error) {
@@ -1782,7 +1850,7 @@ async function main() {
   });
 
   await new Promise((resolve) => server.listen(options.port, options.host, resolve));
-  const stopTailer = options.rolloutFile
+  stopTailer = options.rolloutFile
     ? createRolloutTailer(
         options.rolloutFile,
         emit,
@@ -1810,13 +1878,18 @@ async function main() {
     }
   }
 
-  const shutdown = () => {
-    emit({ type: "session.ended", reason: "bridge shutdown", at: nowIso() });
+  function shutdown(reason = "bridge shutdown") {
+    emitSessionEnded(reason);
     stopTailer?.();
     server.close();
     client?.dispose();
+    if (reason === "phone disconnect" && process.env.CODEX_TO_PHONE_MANAGED_BRIDGE === "1") {
+      try {
+        process.kill(process.ppid, "SIGTERM");
+      } catch {}
+    }
     process.exit(0);
-  };
+  }
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 }

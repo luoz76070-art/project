@@ -14,6 +14,7 @@ Use this skill to manage the Codex To Phone bridge from inside Codex.
 - Generates a PNG QR code image for phone pairing.
 - Can generate a LAN fallback QR image when Android cannot resolve the Cloudflare quick-tunnel host.
 - Lets the phone view summarized progress and send text back into the owning Codex Desktop window.
+- Lets the phone disconnect the current pairing. After a phone-side disconnect, the next start clears the old pairing state and creates a fresh QR.
 
 ## Output Rule
 
@@ -93,6 +94,8 @@ npm run plugin:stop
 ```
 
 Report that the current pairing is invalidated once the bridge is stopped.
+
+The phone web UI also has a `断开` button. If the user taps it, the bridge records a disconnect marker and shuts down the managed tunnel; the next `npm run plugin:start` should start a fresh pairing instead of returning the old running session.
 
 ## Troubleshooting
 
