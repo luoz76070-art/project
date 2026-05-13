@@ -10,7 +10,7 @@ import path from "node:path";
 const DEFAULT_PORT = 8765;
 const QUICK_TUNNEL_HOST_RE = String.raw`[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+){2,}\.trycloudflare\.com`;
 const CLOUDFLARE_URL_RE = new RegExp(`https://${QUICK_TUNNEL_HOST_RE}`, "u");
-const PHONE_URL_RE = new RegExp(`https://${QUICK_TUNNEL_HOST_RE}/\\?token=[A-Za-z0-9_-]+`, "u");
+const PHONE_URL_RE = new RegExp(`https://${QUICK_TUNNEL_HOST_RE}/\\?[^\\s|]*token=[A-Za-z0-9_-]+[^\\s|]*`, "u");
 const ANY_URL_RE = /https?:\/\/[^\s|]+/gu;
 const require = createRequire(import.meta.url);
 
@@ -21,7 +21,7 @@ function parseArgs(argv) {
     token: randomBytes(18).toString("base64url"),
     rolloutFile: "",
     threadId: "",
-    injector: "desktop-ipc",
+    injector: "ui",
     desktopIpcSock: "",
     urlFile: "",
     qrImageFile: path.join(os.homedir(), ".codex-to-phone", "pairing-qr.png"),
@@ -75,7 +75,7 @@ Options:
   --token <token>            Override generated pairing token.
   --rollout-file <path>      Codex Desktop rollout JSONL file.
   --thread-id <id>           Codex session/thread id.
-  --injector <mode>          Phone input injector: app-server, desktop-ipc, ui, debug, or none. Default: desktop-ipc.
+  --injector <mode>          Phone input injector: app-server, desktop-ipc, ui, debug, or none. Default: ui.
   --desktop-ipc-sock <path>  Optional Codex Desktop IPC socket for desktop-ipc mode.
   --url-file <path>          Optional file that receives the generated phone URL for service management.
   --qr-image-file <path>     File that receives the generated PNG QR image.
@@ -138,8 +138,15 @@ function ensureBinary(name) {
   throw new Error(`Missing ${name}. Install it first, for example: brew install cloudflared`);
 }
 
-function waitForBridge(port, token) {
-  const url = `http://127.0.0.1:${port}/health?token=${encodeURIComponent(token)}`;
+function pairingQuery(token, threadId) {
+  const params = new URLSearchParams();
+  params.set("token", token);
+  params.set("session", threadId);
+  return params.toString();
+}
+
+function waitForBridge(port, token, threadId) {
+  const url = `http://127.0.0.1:${port}/health?${pairingQuery(token, threadId)}`;
   return new Promise((resolve, reject) => {
     const started = Date.now();
     const tick = () => {
@@ -284,7 +291,7 @@ async function main() {
     if (!shuttingDown) shutdown(code === 0 ? 0 : 1);
   });
 
-  await waitForBridge(options.port, options.token);
+  await waitForBridge(options.port, options.token, threadId);
 
   let printedUrl = false;
   tunnel = spawn("cloudflared", [
@@ -303,7 +310,7 @@ async function main() {
     const match = text.match(CLOUDFLARE_URL_RE);
     if (match && !printedUrl) {
       printedUrl = true;
-      const phoneUrl = `${match[0]}/?token=${encodeURIComponent(options.token)}`;
+      const phoneUrl = `${match[0]}/?${pairingQuery(options.token, threadId)}`;
       writePhoneUrlFile(options.urlFile, phoneUrl);
       void printPhoneQr(phoneUrl, options.qrImageFile);
     }

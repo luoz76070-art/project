@@ -148,6 +148,8 @@ If Android browser shows error `-2`, the phone likely cannot resolve the Cloudfl
 npm run plugin:lan
 ```
 
-If phone input returns `no-client-found`, open the matching Codex Desktop conversation window and retry.
+If phone input fails with a macOS permission error, grant Accessibility permission to `Codex Live Session Input.app`. The startup script reuses an existing helper app and rebuilds it only when the Swift source changes, so the macOS permission should remain stable after it is granted. The default phone-to-PC path opens the bound Codex thread and submits through the visible Desktop input box.
+
+The pairing QR is one-to-one for the bridge startup that produced it. It includes both a short token and the bound `session=<threadId>`, and the bridge rejects phone requests that do not carry that exact session binding.
 
 If the phone page opens but does not update immediately, wait a few seconds or reload the page. The UI uses polling as a fallback when SSE is delayed by the tunnel.

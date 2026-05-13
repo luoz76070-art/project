@@ -149,8 +149,8 @@ User motivation:
   protocol validation and phone-web testing. It also supports `codex app-server
   proxy` when a Codex app-server control socket is available.
 - For current Codex Desktop session testing when no app-server control socket is
-  exposed, the bridge can tail the active rollout JSONL file and use Codex
-  Desktop's local IPC router as the phone-to-PC injector.
+  exposed, the bridge tails the active rollout JSONL file and currently defaults
+  to visible UI injection for phone-to-PC input.
 - Local-network-only access is not sufficient for the product goal. It is only a
   development fallback. The production path must use a public relay or tunnel
   established from an outbound PC connection.
@@ -163,9 +163,9 @@ User motivation:
   Cloudflare Tunnel MVP, SSE can connect but fail to deliver buffered events, so
   the web surface uses polling as a fallback and deduplicates events by bridge
   sequence id.
-- For current-session testing, bridge startup backfills the previous completed
-  Codex turn plus any currently active turn. This gives the phone enough context
-  without importing the full historical conversation by default.
+- For current-session testing, bridge startup backfills only the previous
+  completed Codex turn. This gives the phone minimal context without importing
+  the full historical conversation by default.
 - Phone-originated input must show separate states for accepted, queued,
   sending, sent, and failed. A transport-level success is not enough; the bridge
   must verify that the phone message reached the bound Desktop session.
@@ -173,21 +173,22 @@ User motivation:
   Desktop-session injector because it can create a separate Codex session. The
   MVP therefore treats debug injection as experimental and validates the target
   rollout before reporting success.
-- The preferred current-window phone-to-PC path is now Desktop IPC injection:
-  the bridge registers as an IPC client, sends `thread-follower-start-turn` for
-  the bound `conversationId`, and lets the owning Codex Desktop window start the
-  turn. This is the path that should make the PC UI show the phone-triggered
-  reply process.
+- The current-window phone-to-PC default is visible UI injection: the bridge
+  opens the bound `codex://threads/<threadId>` route, waits briefly, then pastes
+  and submits the phone text into Codex Desktop.
+- Desktop IPC remains an experimental injector because repeated
+  `no-client-found` failures show that the current renderer does not always
+  expose the bound thread as an owner.
 - Bridge-owned Codex app-server injection remains useful for protocol
   validation and phone-only tests, but it does not make the current Desktop UI
   stream the generated turn because the UI is not subscribed to that separate
   app-server runtime.
-- The temporary current-window injector can use macOS UI automation to paste
-  into the active Codex Desktop window. This is now only a fallback because
-  macOS Accessibility/TCC can get stuck or identify the wrong helper app.
 - The macOS UI injector requires Accessibility permission. If macOS blocks
   simulated keystrokes, the phone must show an actionable failure message rather
   than a generic `phone.input.failed` state.
+- The native UI helper must not be rebuilt on every plugin start. Rebuilding and
+  re-signing the app can invalidate macOS TCC Accessibility grants, so the
+  helper build step should reuse the current app unless its source changes.
 - Remote approval is not supported in the first version. Existing Codex approval
   and sandbox behavior remain the safety boundary.
 
@@ -202,6 +203,11 @@ User motivation:
 - Closing the plugin disconnects the phone and invalidates the runtime pairing.
 - Reopening the plugin does not show prior session history unless a future
   explicit history feature is added.
+- The pairing QR binds one phone surface to one startup session using both a
+  short token and the current `threadId`; requests without the matching session
+  binding are rejected.
+- Startup history backfill is limited to the previous completed turn. The bridge
+  must not replay the full historical session into the phone UI.
 
 ## Requirement Log
 
@@ -227,7 +233,7 @@ User motivation:
   Tunnel can return a connected SSE stream without delivering session events to
   the phone.
 - 2026-05-12: Expanded startup backfill from recent lines to the previous
-  completed turn plus the active turn, and added explicit phone input states.
+  completed turn, and added explicit phone input states.
 - 2026-05-12: Switched the current test plan away from macOS UI automation when
   Accessibility permissions became unreliable. Bridge-owned app-server
   injection was tested as an intermediate path.
@@ -242,3 +248,14 @@ User motivation:
 - 2026-05-12: Observed macOS error `osascript` is not allowed to send
   keystrokes; added an injector notice and actionable phone-side failure message
   for Accessibility permission failures.
+- 2026-05-13: Added one-to-one QR session binding with `session=<threadId>` and
+  reduced startup history loading to only the previous completed turn.
+- 2026-05-13: Added Desktop owner warmup for `thread-follower-start-turn`, and
+  kept current-window control on Desktop IPC instead of automatically falling
+  back to visible UI injection.
+- 2026-05-13: Routed active-turn steer and interrupt through Desktop IPC
+  (`thread-follower-steer-turn` / `thread-follower-interrupt-turn`) for
+  Desktop-owned sessions.
+- 2026-05-13: Reverted the default phone-to-PC injector to focused visible UI
+  injection after Desktop IPC owner discovery continued to return
+  `no-client-found` for the active Desktop window.

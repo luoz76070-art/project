@@ -9,9 +9,9 @@
 ## 能力
 
 - 手机实时查看当前 Codex 会话的用户输入、Codex 回复、工具调用摘要和最终结果。
-- 手机发送消息后，通过 Codex Desktop 本地 IPC 让当前 PC 窗口发起新回合。
+- 手机发送消息后，默认打开绑定的 Codex 会话并通过可见 UI 注入当前 PC 窗口。
 - 手机 UI 默认隐藏代码补丁、命令完整输出和 bridge 内部 ack，只展示输入、输出和工具名称。
-- 每次启动生成短期 token 和临时公网 URL；bridge 退出后本次配对失效。
+- 每次启动生成短期 token、当前会话 session 绑定和临时公网 URL；bridge 退出后本次配对失效。
 - 如果 Android 对 Cloudflare 临时域名报错 `-2`，可使用同 Wi-Fi 下的 LAN 二维码兜底。
 - 默认不保存手机端历史，不导入旧会话全量历史。
 
@@ -87,17 +87,17 @@ npm run plugin:lan
 PC 到手机：
 
 1. bridge 读取当前 Codex rollout JSONL。
-2. 启动时回填上一轮完成回合和当前活跃回合。
+2. 启动时只回填上一轮完成回合；启动后的新事件再实时同步。
 3. 运行时 tail rollout，把事件转换成手机 UI 需要的轻量事件。
 4. 手机端使用 SSE + polling 双通道接收，Cloudflare SSE 不稳定时仍可轮询同步。
 
 手机到 PC：
 
 1. 手机 `POST /input` 发送文本。
-2. bridge 连接 Codex Desktop 本地 IPC socket。
-3. bridge 注册为 IPC client 后发送 `thread-follower-start-turn`。
-4. 拥有该会话的 Codex Desktop 窗口发起新 turn，因此 PC UI 和手机端都能看到过程。
-5. 如果 Desktop IPC 返回 `no-client-found`，bridge 会退到 app-server `turn/start`，继续向绑定 thread 发起回合。
+2. 手机请求必须携带二维码里的 `token` 和 `session=<threadId>`，bridge 只接受这一个会话绑定。
+3. bridge 打开 `codex://threads/<threadId>`，让 Codex Desktop 聚焦绑定会话。
+4. bridge 通过 macOS UI 注入把手机文本粘贴进当前 Codex 输入框并提交。
+5. PC UI 直接显示这条手机输入触发的新回合，手机端继续从 rollout tail 看进展。
 6. bridge 校验该输入写入绑定的 rollout，避免误发到旁路会话。
 
 断开连接：
@@ -121,7 +121,7 @@ node scripts/bridge.mjs --help
 
 - 当前只绑定一个会话窗口。后续可以扩展为多个 bridge session，并在手机端做会话列表和切换。
 - Cloudflare Quick Tunnel 是临时测试通道，不适合作为正式产品后端。
-- 如果 PC 端没有打开对应 Codex Desktop 会话窗口，Desktop IPC 可能返回找不到 owner 窗口。当前 bridge 会自动用 app-server 兜底；如果兜底也没有写入绑定 rollout，发送会失败并提示，避免污染旁路会话。
+- 手机到 PC 默认依赖 macOS 辅助功能权限来粘贴和提交输入；如果被系统拦截，需要允许 `Codex Live Session Input.app` 控制电脑。启动脚本会复用已构建的 helper，避免每次启动重新签名导致权限失效。
 - 远程审批、文件确认和多端权限控制还没有做成手机端能力。
 
 ## 后续更新

@@ -11,9 +11,10 @@ Use this skill to manage the Codex To Phone bridge from inside Codex.
 
 - Starts a local bridge for the currently active Codex Desktop conversation.
 - Starts a Cloudflare Quick Tunnel.
-- Generates a PNG QR code image for phone pairing.
+- Generates a PNG QR code image for phone pairing. The encoded URL contains both the short token and the bound `session=<threadId>`.
 - Can generate a LAN fallback QR image when Android cannot resolve the Cloudflare quick-tunnel host.
-- Lets the phone view summarized progress and send text back into the owning Codex Desktop window.
+- Lets the phone view summarized progress and send text back into the focused Codex Desktop window through visible UI injection.
+- Backfills only the previous completed turn on startup; current and future turns stream live after pairing.
 - Lets the phone disconnect the current pairing. After a phone-side disconnect, the next start clears the old pairing state and creates a fresh QR.
 
 ## Output Rule
@@ -102,7 +103,7 @@ The phone web UI also has a `断开` button. If the user taps it, the bridge rec
 - If `cloudflared` is missing, tell the user to install it with `brew install cloudflared`.
 - If no QR image appears after startup, run `npm run plugin:status`, then `npm run plugin:url`, and inspect `~/.codex-to-phone/service.log` if needed.
 - If Android browser shows error `-2`, use `npm run plugin:lan` and ask the user to scan the LAN QR while phone and computer are on the same Wi-Fi.
-- If phone input hits `no-client-found`, the bridge should automatically fall back from Desktop IPC to app-server `turn/start` and then verify that the bound rollout recorded the phone message. If it still fails, ask the user to restart Codex To Phone and keep the matching Codex Desktop conversation window open.
+- If phone input fails with a macOS permission error, ask the user to grant Accessibility permission to `Codex Live Session Input.app`. The helper is reused between starts so permission should not be invalidated unless the helper source changes. Desktop IPC is experimental and should be used only when explicitly requested with `--injector desktop-ipc`.
 - If the phone page opens but updates are delayed, the UI still polls in the background; wait a few seconds or reload the phone page.
 
 ## Scope

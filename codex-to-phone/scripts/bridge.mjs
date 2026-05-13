@@ -18,13 +18,18 @@ const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname);
 const UI_HELPER_APP = path.resolve(SCRIPT_DIR, "..", "Codex Live Session Input.app");
 const UI_HELPER_EXEC = path.join(UI_HELPER_APP, "Contents", "MacOS", "CodexLiveSessionInput");
 const UI_HELPER_INPUT_FILE = "/tmp/codex-live-session-input.txt";
+const UI_HELPER_REQUEST_FILE = "/tmp/codex-live-session-input-request.json";
+const UI_HELPER_RESULT_FILE = "/tmp/codex-live-session-input-result.json";
 const DESKTOP_IPC_INITIALIZING_CLIENT_ID = "initializing-client";
 const DESKTOP_IPC_FRAME_LIMIT_BYTES = 256 * 1024 * 1024;
 const DESKTOP_IPC_CONNECT_TIMEOUT_MS = 5_000;
 const DESKTOP_IPC_REQUEST_TIMEOUT_MS = 15_000;
+const CODEX_DEEPLINK_FOCUS_DELAY_MS = 1_500;
+const DESKTOP_IPC_OWNER_TIMEOUT_MS = 4_000;
 const DESKTOP_IPC_METHOD_VERSIONS = new Map([
   ["thread-follower-start-turn", 1],
   ["thread-follower-steer-turn", 1],
+  ["thread-follower-interrupt-turn", 1],
 ]);
 
 function parseArgs(argv) {
@@ -83,7 +88,7 @@ function parseArgs(argv) {
     throw new Error("--mode must be proxy or spawn");
   }
   if (!options.injector) {
-    options.injector = options.rolloutFile ? "desktop-ipc" : "app-server";
+    options.injector = options.rolloutFile ? "ui" : "app-server";
   }
   if (!["app-server", "debug", "desktop-ipc", "ui", "none"].includes(options.injector)) {
     throw new Error("--injector must be app-server, debug, desktop-ipc, ui, or none");
@@ -96,6 +101,19 @@ function parseArgs(argv) {
   }
   options.token ||= randomBytes(24).toString("base64url");
   return options;
+}
+
+function pairingQuery(token, threadId) {
+  const params = new URLSearchParams();
+  params.set("token", token);
+  params.set("session", threadId);
+  return params.toString();
+}
+
+function pairingError(url, token, threadId) {
+  if ((url.searchParams.get("token") ?? "") !== token) return "invalid token";
+  if ((url.searchParams.get("session") ?? "") !== threadId) return "invalid session binding";
+  return "";
 }
 
 function printHelp() {
@@ -115,7 +133,7 @@ Options:
   --sock <path>            Optional app-server control socket for proxy mode.
   --desktop-ipc-sock <path> Optional Codex Desktop IPC socket for desktop-ipc mode.
   --rollout-file <path>    Tail a Codex Desktop rollout JSONL file for current-session testing.
-  --injector <mode>        app-server, debug, desktop-ipc, ui, or none. Defaults to desktop-ipc with --rollout-file.
+  --injector <mode>        app-server, debug, desktop-ipc, ui, or none. Defaults to ui with --rollout-file.
   --backfill-lines <n>     Recent rollout lines to show on connect. Default: ${DEFAULT_ROLLOUT_BACKFILL_LINES}
   --active-policy <mode>   queue, steer, or reject while a turn is active. Default: queue
   --token <token>          Override generated pairing token.
@@ -259,6 +277,8 @@ function desktopIpcFrame(message) {
   return frame;
 }
 
+const desktopIpcThreadOwners = new Map();
+
 class DesktopIpcClient {
   constructor(sock = "") {
     this.sock = sock || defaultDesktopIpcSocketPath();
@@ -268,6 +288,7 @@ class DesktopIpcClient {
     this.buffer = Buffer.alloc(0);
     this.expectedFrameBytes = null;
     this.closed = false;
+    this.ownerWaiters = new Map();
   }
 
   async connect() {
@@ -303,7 +324,7 @@ class DesktopIpcClient {
     return response;
   }
 
-  request(method, params = {}, timeoutMs = DESKTOP_IPC_REQUEST_TIMEOUT_MS) {
+  request(method, params = {}, timeoutMs = DESKTOP_IPC_REQUEST_TIMEOUT_MS, options = {}) {
     const socket = this.socket;
     if (!socket?.writable) {
       return Promise.reject(new Error("Codex Desktop IPC socket is not connected"));
@@ -320,6 +341,7 @@ class DesktopIpcClient {
       version: desktopIpcMethodVersion(method),
       method,
       params,
+      ...(options.targetClientId ? { targetClientId: options.targetClientId } : {}),
     };
 
     return new Promise((resolve, reject) => {
@@ -351,7 +373,40 @@ class DesktopIpcClient {
   dispose() {
     this.closed = true;
     this.socket?.destroy();
-    this.#rejectPending(new Error("Codex Desktop IPC client disposed"));
+    const error = new Error("Codex Desktop IPC client disposed");
+    this.#rejectPending(error);
+    this.#rejectOwnerWaiters(error);
+  }
+
+  getThreadOwner(threadId) {
+    return desktopIpcThreadOwners.get(threadId) ?? "";
+  }
+
+  waitForThreadOwner(threadId, timeoutMs = DESKTOP_IPC_OWNER_TIMEOUT_MS) {
+    const current = this.getThreadOwner(threadId);
+    if (current) return Promise.resolve(current);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const waiters = this.ownerWaiters.get(threadId) ?? [];
+        this.ownerWaiters.set(
+          threadId,
+          waiters.filter((waiter) => waiter.resolve !== resolve),
+        );
+        reject(new Error(`Timed out waiting for Codex Desktop owner for ${threadId}`));
+      }, timeoutMs);
+      const waiters = this.ownerWaiters.get(threadId) ?? [];
+      waiters.push({
+        resolve: (ownerClientId) => {
+          clearTimeout(timer);
+          resolve(ownerClientId);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+      this.ownerWaiters.set(threadId, waiters);
+    });
   }
 
   #send(message) {
@@ -405,6 +460,11 @@ class DesktopIpcClient {
       return;
     }
 
+    if (message.type === "broadcast") {
+      this.#handleBroadcast(message);
+      return;
+    }
+
     if (message.type === "client-discovery-request") {
       this.#send({
         type: "client-discovery-response",
@@ -424,11 +484,31 @@ class DesktopIpcClient {
     }
   }
 
+  #handleBroadcast(message) {
+    if (
+      message.method !== "thread-stream-state-changed" ||
+      typeof message.sourceClientId !== "string" ||
+      typeof message.params?.conversationId !== "string"
+    ) {
+      return;
+    }
+    const threadId = message.params.conversationId;
+    desktopIpcThreadOwners.set(threadId, message.sourceClientId);
+    const waiters = this.ownerWaiters.get(threadId) ?? [];
+    if (waiters.length === 0) return;
+    this.ownerWaiters.delete(threadId);
+    for (const waiter of waiters) {
+      waiter.resolve(message.sourceClientId);
+    }
+  }
+
   #handleClose(error) {
     if (this.closed && !error) return;
     this.closed = true;
     this.socket?.destroy();
-    this.#rejectPending(error ?? new Error("Codex Desktop IPC connection closed"));
+    const closeError = error ?? new Error("Codex Desktop IPC connection closed");
+    this.#rejectPending(closeError);
+    this.#rejectOwnerWaiters(closeError);
   }
 
   #rejectPending(error) {
@@ -437,6 +517,15 @@ class DesktopIpcClient {
       pending.reject(error);
     }
     this.pending.clear();
+  }
+
+  #rejectOwnerWaiters(error) {
+    for (const waiters of this.ownerWaiters.values()) {
+      for (const waiter of waiters) {
+        waiter.reject(error);
+      }
+    }
+    this.ownerWaiters.clear();
   }
 }
 
@@ -516,14 +605,78 @@ function sendViaDebugInjector(text) {
   });
 }
 
-function sendViaUiInjector(text) {
+function focusCodexThread(threadId) {
+  if (process.platform !== "darwin") {
+    return Promise.resolve({ skipped: true, reason: "codex deeplink focus is only implemented on macOS" });
+  }
+  const url = `codex://threads/${encodeURIComponent(threadId)}`;
+  return new Promise((resolve, reject) => {
+    const child = spawn("open", [url], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: process.env,
+    });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error("Timed out focusing Codex thread"));
+    }, 5_000);
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve({ url, stdout: stdout.trim() });
+      } else {
+        reject(new Error((stderr || stdout || `Codex deeplink focus exited ${code}`).trim()));
+      }
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
+
+async function waitForUiHelperResult(requestId, timeoutMs = 10_000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (fs.existsSync(UI_HELPER_RESULT_FILE)) {
+      try {
+        const result = JSON.parse(fs.readFileSync(UI_HELPER_RESULT_FILE, "utf8"));
+        if (result?.id === requestId) {
+          if (result.ok) return result;
+          throw new Error(result.message || "UI helper app failed");
+        }
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          await delay(80);
+          continue;
+        }
+        throw error;
+      }
+    }
+    await delay(80);
+  }
+  throw new Error("Timed out waiting for UI helper app");
+}
+
+async function sendViaUiInjector(text) {
   if (fs.existsSync(UI_HELPER_APP)) {
+    const requestId = randomUUID();
+    fs.rmSync(UI_HELPER_RESULT_FILE, { force: true });
     fs.writeFileSync(UI_HELPER_INPUT_FILE, text, { mode: 0o600 });
-    const command = fs.existsSync(UI_HELPER_EXEC) ? UI_HELPER_EXEC : "open";
-    const args = fs.existsSync(UI_HELPER_EXEC) ? [] : ["-W", UI_HELPER_APP];
-    const method = fs.existsSync(UI_HELPER_EXEC) ? "ui-helper-native" : "ui-helper";
-    return new Promise((resolve, reject) => {
-      const child = spawn(command, args, {
+    fs.writeFileSync(
+      UI_HELPER_REQUEST_FILE,
+      `${JSON.stringify({ id: requestId, inputFile: UI_HELPER_INPUT_FILE })}\n`,
+      { mode: 0o600 },
+    );
+    await new Promise((resolve, reject) => {
+      const child = spawn("open", ["-n", UI_HELPER_APP], {
         stdio: ["ignore", "pipe", "pipe"],
         env: process.env,
       });
@@ -542,9 +695,9 @@ function sendViaUiInjector(text) {
       child.on("exit", (code) => {
         clearTimeout(timer);
         if (code === 0) {
-          resolve({ stdout: stdout.trim(), method, helperApp: UI_HELPER_APP });
+          resolve();
         } else {
-          reject(new Error((stderr || stdout || `UI helper app exited ${code}`).trim()));
+          reject(new Error((stderr || stdout || `open UI helper app exited ${code}`).trim()));
         }
       });
       child.on("error", (error) => {
@@ -552,6 +705,13 @@ function sendViaUiInjector(text) {
         reject(error);
       });
     });
+    const result = await waitForUiHelperResult(requestId);
+    return {
+      stdout: String(result.message || "").trim(),
+      method: fs.existsSync(UI_HELPER_EXEC) ? "ui-helper-app" : "ui-helper",
+      helperApp: UI_HELPER_APP,
+      requestId,
+    };
   }
 
   const script = `
@@ -609,31 +769,135 @@ end run
   });
 }
 
-async function sendViaDesktopIpcInjector(text, threadId, desktopIpcSock) {
+async function sendViaFocusedUiInjector(text, threadId) {
+  const focus = await focusCodexThread(threadId);
+  await delay(CODEX_DEEPLINK_FOCUS_DELAY_MS);
+  const injection = await sendViaUiInjector(text);
+  return { focus, injection };
+}
+
+async function sendDesktopIpcOwnerRequest({
+  method,
+  params,
+  threadId,
+  desktopIpcSock,
+  timeoutMs = DESKTOP_IPC_REQUEST_TIMEOUT_MS,
+}) {
   const ipc = new DesktopIpcClient(desktopIpcSock);
   await ipc.connect();
   try {
     await ipc.initialize();
-    return await ipc.request(
-      "thread-follower-start-turn",
-      {
-        conversationId: threadId,
-        turnStartParams: { input: [textInput(text)] },
-      },
-      TURN_START_TIMEOUT_MS,
-    );
+    const sendToOwner = async (ownerClientId, metadata = {}) => {
+      const response = await ipc.request(method, params, timeoutMs, {
+        targetClientId: ownerClientId,
+      });
+      return { ...response, desktopIpcOwnerClientId: ownerClientId, ...metadata };
+    };
+
+    const knownOwnerClientId = ipc.getThreadOwner(threadId);
+    if (knownOwnerClientId) {
+      return await sendToOwner(knownOwnerClientId, { ownerSource: "cache" });
+    }
+
+    try {
+      return await ipc.request(method, params, timeoutMs);
+    } catch (error) {
+      if (!isNoClientFoundError(error)) {
+        throw error;
+      }
+      const directError = error instanceof Error ? error.message : String(error);
+      const ownerBeforeFocus = await ipc.waitForThreadOwner(threadId, 300).catch(() => "");
+      if (ownerBeforeFocus) {
+        return await sendToOwner(ownerBeforeFocus, {
+          ownerSource: "broadcast-after-direct-error",
+          directError,
+        });
+      }
+
+      const focus = await focusCodexThread(threadId);
+      await delay(CODEX_DEEPLINK_FOCUS_DELAY_MS);
+      const ownerAfterFocus =
+        ipc.getThreadOwner(threadId) ||
+        (await ipc.waitForThreadOwner(threadId, DESKTOP_IPC_OWNER_TIMEOUT_MS).catch(() => ""));
+      if (ownerAfterFocus) {
+        return await sendToOwner(ownerAfterFocus, {
+          ownerSource: "broadcast-after-focus",
+          directError,
+          focus,
+        });
+      }
+      throw error;
+    }
   } finally {
     ipc.dispose();
   }
 }
 
-async function sendViaAppServerInjector(client, text, threadId) {
-  if (!client) throw new Error("app-server injector is unavailable");
-  return await client.request(
-    "turn/start",
-    { threadId, input: [textInput(text)] },
-    TURN_START_TIMEOUT_MS,
-  );
+async function sendViaDesktopIpcInjector(text, threadId, desktopIpcSock) {
+  return await sendDesktopIpcOwnerRequest({
+    method: "thread-follower-start-turn",
+    params: {
+      conversationId: threadId,
+      turnStartParams: { input: [textInput(text)] },
+    },
+    threadId,
+    desktopIpcSock,
+    timeoutMs: TURN_START_TIMEOUT_MS,
+  });
+}
+
+function rolloutSessionMeta(file) {
+  for (const record of parseRolloutRecords(file)) {
+    if (record.type !== "session_meta" || !record.payload || typeof record.payload !== "object") {
+      continue;
+    }
+    return {
+      threadId: typeof record.payload.id === "string" ? record.payload.id : "",
+      cwd: typeof record.payload.cwd === "string" ? record.payload.cwd : "",
+    };
+  }
+  return { threadId: "", cwd: "" };
+}
+
+function desktopIpcRestoreMessage({ rolloutFile }) {
+  const meta = rolloutFile ? rolloutSessionMeta(rolloutFile) : { cwd: "" };
+  const cwd = meta.cwd || process.cwd();
+  return {
+    cwd,
+    context: {
+      workspaceRoots: cwd ? [cwd] : [],
+      collaborationMode: null,
+      fileAttachments: [],
+      addedFiles: [],
+      imageAttachments: [],
+      commentAttachments: [],
+    },
+  };
+}
+
+async function steerViaDesktopIpc(text, threadId, desktopIpcSock, rolloutFile) {
+  return await sendDesktopIpcOwnerRequest({
+    method: "thread-follower-steer-turn",
+    params: {
+      conversationId: threadId,
+      input: [textInput(text)],
+      restoreMessage: desktopIpcRestoreMessage({ rolloutFile }),
+      attachments: [],
+    },
+    threadId,
+    desktopIpcSock,
+    timeoutMs: DESKTOP_IPC_REQUEST_TIMEOUT_MS,
+  });
+}
+
+async function interruptViaDesktopIpc(threadId, desktopIpcSock) {
+  return await sendDesktopIpcOwnerRequest({
+    method: "thread-follower-interrupt-turn",
+    params: { conversationId: threadId },
+    threadId,
+    desktopIpcSock,
+    timeoutMs: DESKTOP_IPC_REQUEST_TIMEOUT_MS,
+  });
 }
 
 function explainInjectorError(error, injector) {
@@ -658,7 +922,7 @@ function explainInjectorError(error, injector) {
       return [
         "Codex Desktop 没有找到可接收这个会话的当前窗口。",
         "这表示当前打开的 Codex Desktop 窗口没有把该 thread 暴露为 owner。",
-        "当前版本会在这种情况下尝试 app-server 兜底；如果仍失败，请重新启动 Codex To Phone 并保持目标会话窗口打开。",
+        "当前版本会先打开目标 thread 唤醒 owner 并重试；如果仍失败，请在 Codex Desktop 里打开二维码绑定的同一会话后再发。",
         `原始错误：${raw}`,
       ].join("\n");
     }
@@ -990,7 +1254,7 @@ function rolloutBoundary(record) {
   return null;
 }
 
-function selectBackfillRecords(records, fallbackLineLimit) {
+function selectBackfillRecords(records, _fallbackLineLimit) {
   const turns = [];
   let current = null;
   for (let index = 0; index < records.length; index += 1) {
@@ -1005,15 +1269,13 @@ function selectBackfillRecords(records, fallbackLineLimit) {
     }
   }
 
-  const activeTurn = turns.findLast((turn) => turn.end === null);
   const completedTurns = turns.filter((turn) => turn.end !== null);
   const previousCompletedTurn = completedTurns.at(-1);
   const ranges = [];
   if (previousCompletedTurn) ranges.push(previousCompletedTurn);
-  if (activeTurn) ranges.push({ ...activeTurn, end: records.length - 1 });
 
   if (ranges.length === 0) {
-    return records.slice(-fallbackLineLimit);
+    return [];
   }
 
   const selected = new Set();
@@ -1222,6 +1484,8 @@ function renderPhonePage() {
   <script>
     const params = new URLSearchParams(location.search);
     const token = params.get("token") || "";
+    const session = params.get("session") || "";
+    const pairingParams = new URLSearchParams({ token, session });
     const eventsEl = document.getElementById("events");
     const statusEl = document.getElementById("status");
     const textEl = document.getElementById("text");
@@ -1236,6 +1500,14 @@ function renderPhonePage() {
     const shownMessageKeys = new Set();
     const streamTextById = new Map();
     const streamNodeById = new Map();
+
+    function apiUrl(path, extra = {}) {
+      const query = new URLSearchParams(pairingParams);
+      for (const [key, value] of Object.entries(extra)) {
+        query.set(key, String(value));
+      }
+      return path + "?" + query.toString();
+    }
 
     function syncAppHeight() {
       const viewport = window.visualViewport;
@@ -1303,6 +1575,9 @@ function renderPhonePage() {
       }
       if (event.type === "turn.started") {
         return { kind: "system", title: "开始执行", body: "Codex 开始处理当前输入。", at: event.at };
+      }
+      if (event.type === "turn.interrupted") {
+        return { kind: "system", title: "已中断", body: "当前回合已请求中断。", at: event.at };
       }
       if (event.type === "turn.completed") {
         if (!event.text) return { kind: "system", title: "执行完成", body: "当前回合已完成。", at: event.at };
@@ -1374,7 +1649,7 @@ function renderPhonePage() {
     async function pollOnce() {
       if (disconnected) return;
       try {
-        const res = await fetch("/poll?token=" + encodeURIComponent(token) + "&since=" + encodeURIComponent(String(lastSeq)), {
+        const res = await fetch(apiUrl("/poll", { since: lastSeq }), {
           cache: "no-store"
         });
         const payload = await res.json();
@@ -1394,7 +1669,7 @@ function renderPhonePage() {
       }
     }
 
-    source = new EventSource("/events?token=" + encodeURIComponent(token));
+    source = new EventSource(apiUrl("/events"));
     source.onopen = () => { statusEl.textContent = "已连接"; };
     source.onerror = () => { statusEl.textContent = "已连接，轮询同步"; };
     source.onmessage = (message) => {
@@ -1413,7 +1688,7 @@ function renderPhonePage() {
       sendEl.disabled = true;
       append({ type: "local.user", text, at: new Date().toISOString() });
       try {
-        const res = await fetch("/input?token=" + encodeURIComponent(token), {
+        const res = await fetch(apiUrl("/input"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ text })
@@ -1433,7 +1708,7 @@ function renderPhonePage() {
       if (disconnected) return;
       markDisconnected("正在断开");
       try {
-        await fetch("/disconnect?token=" + encodeURIComponent(token), {
+        await fetch(apiUrl("/disconnect"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: "{}"
@@ -1460,7 +1735,7 @@ async function readJsonBody(req) {
 
 function unauthorized(res) {
   res.writeHead(401, { "content-type": "application/json" });
-  res.end(JSON.stringify({ error: "invalid token" }));
+  res.end(JSON.stringify({ error: "invalid pairing" }));
 }
 
 function recordManagedDisconnect(reason) {
@@ -1474,12 +1749,12 @@ function recordManagedDisconnect(reason) {
   }
 }
 
-function getLanHints(port, token) {
+function getLanHints(port, token, threadId) {
   const hints = [];
   for (const entries of Object.values(os.networkInterfaces())) {
     for (const entry of entries ?? []) {
       if (entry.family === "IPv4" && !entry.internal) {
-        hints.push(`http://${entry.address}:${port}/?token=${encodeURIComponent(token)}`);
+        hints.push(`http://${entry.address}:${port}/?${pairingQuery(token, threadId)}`);
       }
     }
   }
@@ -1488,8 +1763,7 @@ function getLanHints(port, token) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const useAppServer =
-    !options.rolloutFile || options.injector === "app-server" || options.injector === "desktop-ipc";
+  const useAppServer = !options.rolloutFile || options.injector === "app-server";
   const child = useAppServer ? spawnTransport(options.mode, options.sock) : null;
   const client = child ? new JsonRpcClient(child) : null;
 
@@ -1545,7 +1819,7 @@ async function main() {
         response = { ...response, verification };
       }
     } else if (options.injector === "ui") {
-      response = await sendViaUiInjector(text);
+      response = await sendViaFocusedUiInjector(text, threadId);
       if (options.rolloutFile) {
         const verification = await verifyBoundRolloutInput({
           rolloutFile: options.rolloutFile,
@@ -1559,26 +1833,8 @@ async function main() {
         response = { ...response, verification };
       }
     } else if (options.injector === "desktop-ipc") {
-      try {
-        response = await sendViaDesktopIpcInjector(text, threadId, options.desktopIpcSock);
-        response = { ...response, injector: "desktop-ipc" };
-      } catch (error) {
-        if (!isNoClientFoundError(error) || !client) {
-          throw error;
-        }
-        emit({
-          type: "injector.notice",
-          message: "Desktop IPC owner discovery failed; falling back to app-server turn/start.",
-          rawMessage: error instanceof Error ? error.message : String(error),
-          at: nowIso(),
-        });
-        const fallbackResponse = await sendViaAppServerInjector(client, text, threadId);
-        response = {
-          injector: "app-server-fallback",
-          desktopIpcError: error instanceof Error ? error.message : String(error),
-          fallbackResponse,
-        };
-      }
+      response = await sendViaDesktopIpcInjector(text, threadId, options.desktopIpcSock);
+      response = { ...response, injector: "desktop-ipc" };
       if (options.rolloutFile) {
         const verification = await verifyBoundRolloutInput({
           rolloutFile: options.rolloutFile,
@@ -1598,7 +1854,12 @@ async function main() {
     } else if (options.injector === "none") {
       response = { skipped: true };
     } else {
-      response = await sendViaAppServerInjector(client, text, threadId);
+      if (!client) throw new Error("app-server injector is unavailable");
+      response = await client.request(
+        "turn/start",
+        { threadId, input: [textInput(text)] },
+        TURN_START_TIMEOUT_MS,
+      );
       if (options.rolloutFile) {
         const verification = await verifyBoundRolloutInput({
           rolloutFile: options.rolloutFile,
@@ -1635,7 +1896,7 @@ async function main() {
             options.injector === "ui"
               ? "grant_macos_accessibility_permission_or_use_official_injection_api"
               : options.injector === "desktop-ipc"
-                ? "check_desktop_ipc_owner_or_app_server_fallback"
+                ? "open_bound_thread_in_codex_desktop_and_retry"
                 : "check_injector",
           at: nowIso(),
         });
@@ -1741,6 +2002,7 @@ async function main() {
       message: [
         "当前使用 Codex Desktop IPC 注入器。",
         "手机输入会通过当前打开的 Codex Desktop 会话窗口发起回合，PC 端应能看到完整回复过程。",
+        "如果 Desktop IPC 暂时找不到 owner，bridge 会打开目标 thread 并重试；仍失败时需要在 Codex Desktop 里打开同一会话窗口。",
         `IPC socket: ${options.desktopIpcSock || defaultDesktopIpcSocketPath()}`,
       ].join("\n"),
       at: nowIso(),
@@ -1761,8 +2023,8 @@ async function main() {
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
-      const token = url.searchParams.get("token") ?? "";
-      if (url.pathname !== "/" && token !== options.token) {
+      const pairError = pairingError(url, options.token, threadId);
+      if (pairError) {
         unauthorized(res);
         return;
       }
@@ -1777,8 +2039,10 @@ async function main() {
           JSON.stringify({
             ok: true,
             threadId,
-            injector: options.injector,
-            appServerFallbackReady: Boolean(client && options.injector === "desktop-ipc"),
+            pairing: {
+              session: threadId,
+              oneToOne: true,
+            },
             activeTurnId,
             deliveryInFlight,
             queued: pendingInputs.length,
@@ -1845,6 +2109,24 @@ async function main() {
             return;
           }
           if (options.activePolicy === "steer") {
+            if (options.injector === "desktop-ipc") {
+              const response = await steerViaDesktopIpc(
+                text,
+                threadId,
+                options.desktopIpcSock,
+                options.rolloutFile,
+              );
+              emit({
+                type: "phone.input.steered",
+                text,
+                turnId: activeTurnId,
+                response,
+                at: nowIso(),
+              });
+              res.writeHead(202, { "content-type": "application/json" });
+              res.end(JSON.stringify({ accepted: true, mode: "steer" }));
+              return;
+            }
             if (!client) {
               res.writeHead(409, { "content-type": "application/json" });
               res.end(JSON.stringify({ error: "steer requires app-server mode" }));
@@ -1880,6 +2162,28 @@ async function main() {
         res.end(JSON.stringify({ accepted: true, mode: "start", deliveryInFlight: true }));
         return;
       }
+      if (req.method === "POST" && url.pathname === "/interrupt") {
+        if (!activeTurnId) {
+          res.writeHead(409, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "no active turn" }));
+          return;
+        }
+        let response;
+        if (options.injector === "desktop-ipc") {
+          response = await interruptViaDesktopIpc(threadId, options.desktopIpcSock);
+        } else if (client) {
+          response = await client.request("turn/interrupt", { threadId, turnId: activeTurnId });
+        } else {
+          res.writeHead(409, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "interrupt requires desktop-ipc or app-server mode" }));
+          return;
+        }
+        emit({ type: "turn.interrupted", threadId, turnId: activeTurnId, response, at: nowIso() });
+        activeTurnId = "";
+        res.writeHead(202, { "content-type": "application/json" });
+        res.end(JSON.stringify({ interrupted: true }));
+        return;
+      }
       if (req.method === "POST" && url.pathname === "/disconnect") {
         const reason = "phone disconnect";
         recordManagedDisconnect(reason);
@@ -1911,7 +2215,7 @@ async function main() {
   const baseUrl =
     options.publicUrl ||
     `http://${options.host === "0.0.0.0" ? "127.0.0.1" : options.host}:${options.port}`;
-  const phoneUrl = `${baseUrl.replace(/\/+$/u, "")}/?token=${encodeURIComponent(options.token)}`;
+  const phoneUrl = `${baseUrl.replace(/\/+$/u, "")}/?${pairingQuery(options.token, threadId)}`;
   console.log(`Codex Live Session Bridge running`);
   console.log(`threadId: ${threadId}`);
   console.log(`transport: ${options.rolloutFile ? "rollout" : options.mode}`);
@@ -1919,7 +2223,7 @@ async function main() {
   if (options.rolloutFile) console.log(`rollout: ${options.rolloutFile}`);
   console.log(`phone URL: ${phoneUrl}`);
   if (options.host === "0.0.0.0" && !options.publicUrl) {
-    const hints = getLanHints(options.port, options.token);
+    const hints = getLanHints(options.port, options.token, threadId);
     if (hints.length > 0) {
       console.log("LAN URL candidates:");
       for (const hint of hints) console.log(`  ${hint}`);

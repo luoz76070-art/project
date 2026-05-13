@@ -14,7 +14,7 @@ The bridge starts when the user wants to expose one current session to the phone
 - `skills/codex-to-phone/SKILL.md` gives Codex the natural-language workflow for start, stop, status, and troubleshooting.
 - `scripts/service.mjs` manages the bridge as a background service for the skill entry.
 - `scripts/start-cloudflare-tunnel.mjs` starts the local bridge and public tunnel.
-- `scripts/bridge.mjs` owns the phone UI, rollout tailing, and Desktop IPC injection.
+- `scripts/bridge.mjs` owns the phone UI, rollout tailing, and the current phone-to-PC injector.
 
 ## Runtime Flow
 
@@ -30,7 +30,7 @@ Codex Desktop rollout JSONL
         v
 PC bridge on 127.0.0.1
         |
-        +-- Desktop IPC -> owning Codex Desktop window -> start turn
+        +-- codex://threads/<id> + visible UI injector -> Codex Desktop window
         |
         v
 Cloudflare Quick Tunnel
@@ -50,24 +50,22 @@ Phone web UI
   - tool calls are shown as compact tool cards;
   - patch content and command output are hidden by default;
   - bridge internal states are not displayed unless they are failures.
+- Startup backfill is limited to the previous completed turn. Active and future turns are streamed from the rollout tail after pairing.
 
 ## Phone To PC
 
 - The phone sends text to `POST /input`.
-- The bridge uses the Codex Desktop IPC router socket:
-  - macOS path: `/tmp/codex-ipc/ipc-<uid>.sock`, resolved through `os.tmpdir()`;
-  - framing: 4-byte little-endian length + JSON payload;
-  - first request: `initialize`;
-  - turn request: `thread-follower-start-turn`.
-- Codex Desktop routes the request to the renderer that owns the conversation.
-- The Desktop window calls its normal `thread-follower-start-turn-for-host` path, so the PC UI shows the turn.
+- The pairing URL contains both `token` and `session=<conversationId>`. The bridge rejects every phone API request unless both values match the startup binding.
+- The default injector opens `codex://threads/<conversationId>`, waits for Codex Desktop to focus that conversation, then pastes and submits the phone text through the visible input box.
+- This path avoids Codex Desktop IPC owner discovery, which is unstable when the current renderer does not expose the thread as an owner.
+- Desktop IPC remains available as an explicit experimental mode with `--injector desktop-ipc`.
 - The bridge verifies that the phone message appears in the bound rollout before reporting success.
 
 ## Why Not Use The Bridge-Owned App Server For The Current UI
 
 A bridge-owned `codex app-server` can resume the same thread id and generate a valid reply, but the existing Codex Desktop window is not subscribed to that runtime. The phone can see the reply, and the rollout can be written, but the PC UI will not show the live reply process.
 
-Desktop IPC is therefore the current-window path.
+The current default uses visible UI injection for the current-window path because it makes the Desktop window itself submit the message. Desktop IPC remains a better long-term product path if the owner registration problem can be solved reliably.
 
 ## Future Multi-Session Design
 
@@ -77,4 +75,4 @@ The next step is to manage multiple session bindings:
 - each phone command includes a target `conversationId`;
 - the phone UI shows a session switcher;
 - each session has independent queue, token, status, and last-event cursor;
-- Desktop IPC request routing continues to rely on the owner window for each conversation.
+- Desktop control routing continues to require either a focused visible window or a reliable Desktop owner for each conversation.

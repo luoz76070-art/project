@@ -18,7 +18,7 @@ const QR_IMAGE_FILE = path.join(STATE_DIR, "pairing-qr.png");
 const LAN_URL_FILE = path.join(STATE_DIR, "lan-url.txt");
 const LAN_QR_IMAGE_FILE = path.join(STATE_DIR, "pairing-qr-lan.png");
 const QUICK_TUNNEL_HOST_RE = String.raw`[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+){2,}\.trycloudflare\.com`;
-const PHONE_URL_RE = new RegExp(`https://${QUICK_TUNNEL_HOST_RE}/\\?token=[A-Za-z0-9_-]+`, "u");
+const PHONE_URL_RE = new RegExp(`https://${QUICK_TUNNEL_HOST_RE}/\\?[^\\s|]*token=[A-Za-z0-9_-]+[^\\s|]*`, "u");
 const CLOUDFLARE_URL_RE = new RegExp(`https://${QUICK_TUNNEL_HOST_RE}`, "u");
 const DEFAULT_WAIT_MS = 60_000;
 
@@ -79,18 +79,22 @@ function readUrlFile(file = URL_FILE) {
   }
 }
 
-function extractPhoneUrl(logText = readLog(), token = "", urlFile = URL_FILE) {
+function extractPhoneUrl(logText = readLog(), token = "", urlFile = URL_FILE, session = "") {
   const fileUrl = readUrlFile(urlFile);
-  if (PHONE_URL_RE.test(fileUrl)) return fileUrl;
+  if (PHONE_URL_RE.test(fileUrl) && extractSession(fileUrl)) return fileUrl;
   const directUrl = logText.match(PHONE_URL_RE)?.[0] ?? "";
-  if (directUrl) return directUrl;
+  if (directUrl && extractSession(directUrl)) return directUrl;
   const publicUrl = logText.match(CLOUDFLARE_URL_RE)?.[0] ?? "";
-  return publicUrl && token ? `${publicUrl}/?token=${encodeURIComponent(token)}` : "";
+  if (!publicUrl || !token || !session) return "";
+  const params = new URLSearchParams();
+  params.set("token", token);
+  params.set("session", session);
+  return `${publicUrl}/?${params.toString()}`;
 }
 
-function extractToken(url) {
+function extractSession(url) {
   try {
-    return new URL(url).searchParams.get("token") ?? "";
+    return new URL(url).searchParams.get("session") ?? "";
   } catch {
     return "";
   }
@@ -158,15 +162,22 @@ function getLanAddress() {
   return "";
 }
 
-function lanUrlForToken(token, port = 8765) {
+function lanUrlForToken(token, session, port = 8765) {
   const address = getLanAddress();
-  return address ? `http://${address}:${port}/?token=${encodeURIComponent(token)}` : "";
+  if (!address || !session) return "";
+  const params = new URLSearchParams();
+  params.set("token", token);
+  params.set("session", session);
+  return `http://${address}:${port}/?${params.toString()}`;
 }
 
 async function printLanQr(state) {
   const token = state?.token ?? "";
   if (!token) throw new Error("No pairing token found. Restart Codex To Phone first.");
-  const url = lanUrlForToken(token);
+  const currentUrl = extractPhoneUrl(readLog(), token, state?.urlFile ?? URL_FILE, state?.threadId ?? "");
+  const session = state?.threadId ?? extractSession(currentUrl);
+  if (!session) throw new Error("No bound session found. Restart Codex To Phone first.");
+  const url = lanUrlForToken(token, session);
   if (!url) throw new Error("No LAN address found. Connect the computer to Wi-Fi or Ethernet first.");
   fs.writeFileSync(state?.lanUrlFile ?? LAN_URL_FILE, `${url}\n`);
   await printPairingQr(url, state?.lanQrImageFile ?? LAN_QR_IMAGE_FILE);
@@ -192,8 +203,12 @@ function parseArgs(argv) {
 }
 
 function healthUrlFromPhoneUrl(phoneUrl) {
-  const token = extractToken(phoneUrl);
-  return token ? `http://127.0.0.1:8765/health?token=${encodeURIComponent(token)}` : "";
+  try {
+    const parsed = new URL(phoneUrl);
+    return parsed.search ? `http://127.0.0.1:8765/health${parsed.search}` : "";
+  } catch {
+    return "";
+  }
 }
 
 function getJson(url) {
@@ -240,7 +255,7 @@ async function start(options) {
     fs.rmSync(LAN_URL_FILE, { force: true });
     fs.rmSync(DISCONNECT_FILE, { force: true });
   } else if (existing && isRunning(existing.pid)) {
-    const url = extractPhoneUrl(readLog(), existing.token ?? "", existing.urlFile ?? URL_FILE);
+    const url = extractPhoneUrl(readLog(), existing.token ?? "", existing.urlFile ?? URL_FILE, existing.threadId ?? "");
     console.log(`Codex To Phone is already running. pid=${existing.pid}`);
     if (url) {
       await printPairingQr(url, existing.qrImageFile ?? QR_IMAGE_FILE);
@@ -298,6 +313,11 @@ async function start(options) {
   console.log(`Starting Codex To Phone in background. pid=${child.pid}`);
   const url = await waitForPhoneUrl(options.waitMs, token);
   if (url) {
+    const session = extractSession(url);
+    if (session) {
+      const state = readState();
+      fs.writeFileSync(PID_FILE, JSON.stringify({ ...state, threadId: session }, null, 2));
+    }
     console.log("");
     await printPairingQr(url, QR_IMAGE_FILE);
   } else {
@@ -307,13 +327,14 @@ async function start(options) {
 
 async function status() {
   const state = readState();
-  const url = extractPhoneUrl(readLog(), state?.token ?? "", state?.urlFile ?? URL_FILE);
+  const url = extractPhoneUrl(readLog(), state?.token ?? "", state?.urlFile ?? URL_FILE, state?.threadId ?? "");
   const running = state ? isRunning(state.pid) : false;
+  const session = state?.threadId ?? extractSession(url);
   console.log(JSON.stringify({
     running,
     pid: state?.pid ?? null,
     pairingReady: Boolean(url),
-    lanPairingReady: Boolean(state?.token && getLanAddress()),
+    lanPairingReady: Boolean(state?.token && session && getLanAddress()),
     logFile: LOG_FILE,
   }, null, 2));
   const healthUrl = url ? healthUrlFromPhoneUrl(url) : "";
@@ -351,7 +372,7 @@ async function main() {
     await status();
   } else if (options.command === "url") {
     const state = readState();
-    const url = extractPhoneUrl(readLog(), state?.token ?? "", state?.urlFile ?? URL_FILE);
+    const url = extractPhoneUrl(readLog(), state?.token ?? "", state?.urlFile ?? URL_FILE, state?.threadId ?? "");
     if (!url) throw new Error("No pairing QR found. Start the service first.");
     await printPairingQr(url, state?.qrImageFile ?? QR_IMAGE_FILE);
   } else if (options.command === "lan") {

@@ -51,7 +51,7 @@ Then start the bridge with:
 node plugins/codex-live-session/scripts/bridge.mjs \
   --rollout-file ~/.codex/sessions/<date>/rollout-<session>.jsonl \
   --thread-id <session-id> \
-  --injector desktop-ipc \
+  --injector ui \
   --host 127.0.0.1 \
   --public-url https://<cloudflare-tunnel-host>
 ```
@@ -133,8 +133,8 @@ Acceptance:
 - Phone can send a text command back to Codex.
 - If the streaming channel stalls, the phone still receives updates through
   polling within a few seconds.
-- On bridge startup, the phone receives the previous completed turn and the
-  current active turn, not just an arbitrary fixed number of recent JSONL lines.
+- On bridge startup, the phone receives only the previous completed turn, not an
+  arbitrary fixed number of recent JSONL lines.
 - Phone send state distinguishes accepted, queued, sending, sent, and failed.
 
 ### Phase 2: Relay Protocol
@@ -187,12 +187,15 @@ reliable injector because it can create a standalone session. A bridge-owned
 it still does not make the current Desktop window show the phone-triggered reply
 process because the UI is not subscribed to that separate runtime.
 
-The preferred current test injector is now `desktop-ipc`. The bridge registers
-as a Codex Desktop IPC client, sends `thread-follower-start-turn` for the bound
-conversation, and verifies that each phone message is written to the bound
-rollout file. Because the owning Desktop window starts the turn, the PC UI
-should show the same reply process the phone sees.
+The current default test injector is now `ui`. The bridge opens the bound
+`codex://threads/<threadId>` route, pastes the phone message into the visible
+Codex Desktop input, submits it, and verifies that the phone message is written
+to the bound rollout file.
 
-A temporary macOS UI injector remains as a fallback for current-window testing,
-but it depends on Accessibility permission and can become stuck if macOS keeps a
-stale helper-app identity. It should not be the product path.
+The QR URL carries both a short token and `session=<threadId>`. The bridge
+rejects requests without the exact startup session binding, so a stale QR cannot
+control another conversation.
+
+Desktop IPC remains an explicit experimental mode. If it reports
+`no-client-found`, use the default UI injector until owner registration can be
+made reliable.

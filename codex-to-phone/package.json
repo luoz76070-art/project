@@ -8,14 +8,15 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node scripts/start-cloudflare-tunnel.mjs",
+    "start": "node scripts/build-ui-helper.mjs && node scripts/start-cloudflare-tunnel.mjs",
+    "helper:build": "node scripts/build-ui-helper.mjs",
     "plugin:install": "node scripts/install-local-plugin.mjs",
-    "plugin:start": "node scripts/service.mjs start",
+    "plugin:start": "node scripts/build-ui-helper.mjs && node scripts/service.mjs start",
     "plugin:stop": "node scripts/service.mjs stop",
     "plugin:status": "node scripts/service.mjs status",
     "plugin:url": "node scripts/service.mjs url",
     "plugin:lan": "node scripts/service.mjs lan",
-    "check": "node --check scripts/bridge.mjs && node --check scripts/start-cloudflare-tunnel.mjs && node --check scripts/service.mjs && node --check scripts/install-local-plugin.mjs"
+    "check": "node --check scripts/bridge.mjs && node --check scripts/start-cloudflare-tunnel.mjs && node --check scripts/service.mjs && node --check scripts/install-local-plugin.mjs && node --check scripts/build-ui-helper.mjs"
   },
   "dependencies": {
     "qrcode": "^1.5.4",
