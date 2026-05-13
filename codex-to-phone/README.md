@@ -97,7 +97,8 @@ PC 到手机：
 2. bridge 连接 Codex Desktop 本地 IPC socket。
 3. bridge 注册为 IPC client 后发送 `thread-follower-start-turn`。
 4. 拥有该会话的 Codex Desktop 窗口发起新 turn，因此 PC UI 和手机端都能看到过程。
-5. bridge 校验该输入写入绑定的 rollout，避免误发到旁路会话。
+5. 如果 Desktop IPC 返回 `no-client-found`，bridge 会退到 app-server `turn/start`，继续向绑定 thread 发起回合。
+6. bridge 校验该输入写入绑定的 rollout，避免误发到旁路会话。
 
 断开连接：
 
@@ -120,7 +121,7 @@ node scripts/bridge.mjs --help
 
 - 当前只绑定一个会话窗口。后续可以扩展为多个 bridge session，并在手机端做会话列表和切换。
 - Cloudflare Quick Tunnel 是临时测试通道，不适合作为正式产品后端。
-- 如果 PC 端没有打开对应 Codex Desktop 会话窗口，Desktop IPC 会返回找不到 owner 窗口。保持启动插件的 Codex 会话窗口打开并位于当前会话，再从手机发送消息。
+- 如果 PC 端没有打开对应 Codex Desktop 会话窗口，Desktop IPC 可能返回找不到 owner 窗口。当前 bridge 会自动用 app-server 兜底；如果兜底也没有写入绑定 rollout，发送会失败并提示，避免污染旁路会话。
 - 远程审批、文件确认和多端权限控制还没有做成手机端能力。
 
 ## 后续更新

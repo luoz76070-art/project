@@ -478,6 +478,11 @@ function textInput(text) {
   return { type: "text", text, text_elements: [] };
 }
 
+function isNoClientFoundError(error) {
+  const raw = error instanceof Error ? error.message : String(error);
+  return /no-client-found/i.test(raw);
+}
+
 function sendViaDebugInjector(text) {
   return new Promise((resolve, reject) => {
     const child = spawn("codex", ["debug", "app-server", "send-message-v2", text], {
@@ -622,6 +627,15 @@ async function sendViaDesktopIpcInjector(text, threadId, desktopIpcSock) {
   }
 }
 
+async function sendViaAppServerInjector(client, text, threadId) {
+  if (!client) throw new Error("app-server injector is unavailable");
+  return await client.request(
+    "turn/start",
+    { threadId, input: [textInput(text)] },
+    TURN_START_TIMEOUT_MS,
+  );
+}
+
 function explainInjectorError(error, injector) {
   const raw = error instanceof Error ? error.message : String(error);
   if (
@@ -644,7 +658,7 @@ function explainInjectorError(error, injector) {
       return [
         "Codex Desktop 没有找到可接收这个会话的当前窗口。",
         "这表示当前打开的 Codex Desktop 窗口没有把该 thread 暴露为 owner。",
-        "请确认 PC 端正打开并停留在同一个 Codex 会话窗口；必要时从历史记录重新打开这个会话后再发送。",
+        "当前版本会在这种情况下尝试 app-server 兜底；如果仍失败，请重新启动 Codex To Phone 并保持目标会话窗口打开。",
         `原始错误：${raw}`,
       ].join("\n");
     }
@@ -1474,7 +1488,8 @@ function getLanHints(port, token) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const useAppServer = !options.rolloutFile || options.injector === "app-server";
+  const useAppServer =
+    !options.rolloutFile || options.injector === "app-server" || options.injector === "desktop-ipc";
   const child = useAppServer ? spawnTransport(options.mode, options.sock) : null;
   const client = child ? new JsonRpcClient(child) : null;
 
@@ -1544,7 +1559,26 @@ async function main() {
         response = { ...response, verification };
       }
     } else if (options.injector === "desktop-ipc") {
-      response = await sendViaDesktopIpcInjector(text, threadId, options.desktopIpcSock);
+      try {
+        response = await sendViaDesktopIpcInjector(text, threadId, options.desktopIpcSock);
+        response = { ...response, injector: "desktop-ipc" };
+      } catch (error) {
+        if (!isNoClientFoundError(error) || !client) {
+          throw error;
+        }
+        emit({
+          type: "injector.notice",
+          message: "Desktop IPC owner discovery failed; falling back to app-server turn/start.",
+          rawMessage: error instanceof Error ? error.message : String(error),
+          at: nowIso(),
+        });
+        const fallbackResponse = await sendViaAppServerInjector(client, text, threadId);
+        response = {
+          injector: "app-server-fallback",
+          desktopIpcError: error instanceof Error ? error.message : String(error),
+          fallbackResponse,
+        };
+      }
       if (options.rolloutFile) {
         const verification = await verifyBoundRolloutInput({
           rolloutFile: options.rolloutFile,
@@ -1564,12 +1598,7 @@ async function main() {
     } else if (options.injector === "none") {
       response = { skipped: true };
     } else {
-      if (!client) throw new Error("app-server injector is unavailable");
-      response = await client.request(
-        "turn/start",
-        { threadId, input: [textInput(text)] },
-        TURN_START_TIMEOUT_MS,
-      );
+      response = await sendViaAppServerInjector(client, text, threadId);
       if (options.rolloutFile) {
         const verification = await verifyBoundRolloutInput({
           rolloutFile: options.rolloutFile,
@@ -1606,7 +1635,7 @@ async function main() {
             options.injector === "ui"
               ? "grant_macos_accessibility_permission_or_use_official_injection_api"
               : options.injector === "desktop-ipc"
-                ? "keep_matching_codex_desktop_thread_open_and_retry"
+                ? "check_desktop_ipc_owner_or_app_server_fallback"
                 : "check_injector",
           at: nowIso(),
         });
@@ -1748,6 +1777,8 @@ async function main() {
           JSON.stringify({
             ok: true,
             threadId,
+            injector: options.injector,
+            appServerFallbackReady: Boolean(client && options.injector === "desktop-ipc"),
             activeTurnId,
             deliveryInFlight,
             queued: pendingInputs.length,
