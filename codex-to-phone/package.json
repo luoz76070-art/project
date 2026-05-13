@@ -14,6 +14,7 @@
     "plugin:stop": "node scripts/service.mjs stop",
     "plugin:status": "node scripts/service.mjs status",
     "plugin:url": "node scripts/service.mjs url",
+    "plugin:lan": "node scripts/service.mjs lan",
     "check": "node --check scripts/bridge.mjs && node --check scripts/start-cloudflare-tunnel.mjs && node --check scripts/service.mjs && node --check scripts/install-local-plugin.mjs"
   },
   "dependencies": {

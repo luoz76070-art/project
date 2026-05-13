@@ -14,6 +14,8 @@ const PID_FILE = path.join(STATE_DIR, "service.json");
 const LOG_FILE = path.join(STATE_DIR, "service.log");
 const URL_FILE = path.join(STATE_DIR, "phone-url.txt");
 const QR_IMAGE_FILE = path.join(STATE_DIR, "pairing-qr.png");
+const LAN_URL_FILE = path.join(STATE_DIR, "lan-url.txt");
+const LAN_QR_IMAGE_FILE = path.join(STATE_DIR, "pairing-qr-lan.png");
 const PHONE_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com\/\?token=[A-Za-z0-9_-]+/u;
 const CLOUDFLARE_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/u;
 const DEFAULT_WAIT_MS = 60_000;
@@ -109,6 +111,39 @@ async function printPairingQr(url, file = QR_IMAGE_FILE) {
   }
 }
 
+function isUsableLanAddress(address) {
+  if (!address || address === "127.0.0.1") return false;
+  if (address.startsWith("169.254.")) return false;
+  if (address.startsWith("198.18.") || address.startsWith("198.19.")) return false;
+  return true;
+}
+
+function getLanAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries ?? []) {
+      if (entry.family === "IPv4" && !entry.internal && isUsableLanAddress(entry.address)) {
+        return entry.address;
+      }
+    }
+  }
+  return "";
+}
+
+function lanUrlForToken(token, port = 8765) {
+  const address = getLanAddress();
+  return address ? `http://${address}:${port}/?token=${encodeURIComponent(token)}` : "";
+}
+
+async function printLanQr(state) {
+  const token = state?.token ?? "";
+  if (!token) throw new Error("No pairing token found. Restart Codex To Phone first.");
+  const url = lanUrlForToken(token);
+  if (!url) throw new Error("No LAN address found. Connect the computer to Wi-Fi or Ethernet first.");
+  fs.writeFileSync(state?.lanUrlFile ?? LAN_URL_FILE, `${url}\n`);
+  await printPairingQr(url, state?.lanQrImageFile ?? LAN_QR_IMAGE_FILE);
+}
+
 function parseArgs(argv) {
   const [command = "status", ...rest] = argv;
   const options = {
@@ -176,6 +211,8 @@ async function start(options) {
   fs.writeFileSync(LOG_FILE, `# Codex To Phone service ${new Date().toISOString()}\n`);
   fs.rmSync(URL_FILE, { force: true });
   fs.rmSync(QR_IMAGE_FILE, { force: true });
+  fs.rmSync(LAN_URL_FILE, { force: true });
+  fs.rmSync(LAN_QR_IMAGE_FILE, { force: true });
   const out = fs.openSync(LOG_FILE, "a");
   const token = randomBytes(18).toString("base64url");
   const child = spawn(
@@ -183,6 +220,8 @@ async function start(options) {
     [
       path.join(ROOT_DIR, "scripts", "start-cloudflare-tunnel.mjs"),
       ...options.passthrough,
+      "--host",
+      "0.0.0.0",
       "--token",
       token,
       "--url-file",
@@ -208,6 +247,8 @@ async function start(options) {
         logFile: LOG_FILE,
         urlFile: URL_FILE,
         qrImageFile: QR_IMAGE_FILE,
+        lanUrlFile: LAN_URL_FILE,
+        lanQrImageFile: LAN_QR_IMAGE_FILE,
       },
       null,
       2,
@@ -228,7 +269,13 @@ async function status() {
   const state = readState();
   const url = extractPhoneUrl(readLog(), state?.token ?? "", state?.urlFile ?? URL_FILE);
   const running = state ? isRunning(state.pid) : false;
-  console.log(JSON.stringify({ running, pid: state?.pid ?? null, pairingReady: Boolean(url), logFile: LOG_FILE }, null, 2));
+  console.log(JSON.stringify({
+    running,
+    pid: state?.pid ?? null,
+    pairingReady: Boolean(url),
+    lanPairingReady: Boolean(state?.token && getLanAddress()),
+    logFile: LOG_FILE,
+  }, null, 2));
   const healthUrl = url ? healthUrlFromPhoneUrl(url) : "";
   if (running && healthUrl) {
     try {
@@ -267,8 +314,12 @@ async function main() {
     const url = extractPhoneUrl(readLog(), state?.token ?? "", state?.urlFile ?? URL_FILE);
     if (!url) throw new Error("No pairing QR found. Start the service first.");
     await printPairingQr(url, state?.qrImageFile ?? QR_IMAGE_FILE);
+  } else if (options.command === "lan") {
+    const state = readState();
+    if (!state || !isRunning(state.pid)) throw new Error("Codex To Phone is not running.");
+    await printLanQr(state);
   } else {
-    throw new Error("Usage: node scripts/service.mjs <start|stop|status|url> [start options]");
+    throw new Error("Usage: node scripts/service.mjs <start|stop|status|url|lan> [start options]");
   }
 }
 

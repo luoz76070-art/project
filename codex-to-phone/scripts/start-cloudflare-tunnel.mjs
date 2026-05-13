@@ -16,6 +16,7 @@ const require = createRequire(import.meta.url);
 function parseArgs(argv) {
   const options = {
     port: DEFAULT_PORT,
+    host: "127.0.0.1",
     token: randomBytes(18).toString("base64url"),
     rolloutFile: "",
     threadId: "",
@@ -34,6 +35,7 @@ function parseArgs(argv) {
       return argv[i];
     };
     if (arg === "--port") options.port = Number(next());
+    else if (arg === "--host") options.host = next();
     else if (arg === "--token") options.token = next();
     else if (arg === "--rollout-file") options.rolloutFile = next();
     else if (arg === "--thread-id") options.threadId = next();
@@ -68,6 +70,7 @@ Usage:
 
 Options:
   --port <port>              Local bridge port. Default: ${DEFAULT_PORT}
+  --host <host>              Local bridge bind host. Use 0.0.0.0 to allow LAN fallback. Default: 127.0.0.1
   --token <token>            Override generated pairing token.
   --rollout-file <path>      Codex Desktop rollout JSONL file.
   --thread-id <id>           Codex session/thread id.
@@ -240,7 +243,7 @@ async function main() {
     "--injector",
     options.injector,
     "--host",
-    "127.0.0.1",
+    options.host,
     "--port",
     String(options.port),
     "--token",

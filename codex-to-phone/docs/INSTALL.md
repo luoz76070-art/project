@@ -96,6 +96,7 @@ npm run plugin:start
 npm run plugin:status
 npm run plugin:stop
 npm run plugin:url
+npm run plugin:lan
 ```
 
 ## 6. Expected Phone UI
@@ -139,6 +140,12 @@ If the QR image does not appear:
 npm run plugin:status
 npm run plugin:url
 tail -120 ~/.codex-to-phone/service.log
+```
+
+If Android browser shows error `-2`, the phone likely cannot resolve the Cloudflare quick-tunnel host. Use the LAN fallback while the phone and computer are on the same Wi-Fi:
+
+```bash
+npm run plugin:lan
 ```
 
 If phone input returns `no-client-found`, open the matching Codex Desktop conversation window and retry.

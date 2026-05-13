@@ -12,6 +12,7 @@
 - 手机发送消息后，通过 Codex Desktop 本地 IPC 让当前 PC 窗口发起新回合。
 - 手机 UI 默认隐藏代码补丁、命令完整输出和 bridge 内部 ack，只展示输入、输出和工具名称。
 - 每次启动生成短期 token 和临时公网 URL；bridge 退出后本次配对失效。
+- 如果 Android 对 Cloudflare 临时域名报错 `-2`，可使用同 Wi-Fi 下的 LAN 二维码兜底。
 - 默认不保存手机端历史，不导入旧会话全量历史。
 
 ## 前置条件
@@ -78,6 +79,7 @@ npm run plugin:start
 npm run plugin:status
 npm run plugin:stop
 npm run plugin:url
+npm run plugin:lan
 ```
 
 ## 当前实现
