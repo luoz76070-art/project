@@ -14,6 +14,8 @@ Use this skill to manage the Codex To Phone bridge from inside Codex.
 - Generates a PNG QR code image for phone pairing. The encoded URL contains both the short token and the bound `session=<threadId>`.
 - Can generate a LAN fallback QR image when Android cannot resolve the Cloudflare quick-tunnel host.
 - Lets the phone view summarized progress and send text back into the focused Codex Desktop window through visible UI injection.
+- Observes Codex Desktop IPC stream-state patches for current-window assistant deltas when available, while rollout tailing remains the reliability layer.
+- Smooths assistant deltas in the phone UI and summarizes tool calls into high-level progress actions instead of showing raw commands, diffs, or long logs.
 - Backfills only the previous completed turn on startup; current and future turns stream live after pairing.
 - Lets the phone disconnect the current pairing. After a phone-side disconnect, the next start clears the old pairing state and creates a fresh QR.
 

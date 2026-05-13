@@ -48,6 +48,7 @@ function parseArgs(argv) {
     rolloutFile: "",
     injector: "",
     backfillLines: DEFAULT_ROLLOUT_BACKFILL_LINES,
+    streamSource: "auto",
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -69,6 +70,7 @@ function parseArgs(argv) {
     else if (arg === "--desktop-ipc-sock") options.desktopIpcSock = next();
     else if (arg === "--rollout-file") options.rolloutFile = next();
     else if (arg === "--injector") options.injector = next();
+    else if (arg === "--stream-source") options.streamSource = next();
     else if (arg === "--backfill-lines") options.backfillLines = Number(next());
     else if (arg === "--active-policy") options.activePolicy = next();
     else if (arg === "--auto-bind") options.autoBind = true;
@@ -93,6 +95,9 @@ function parseArgs(argv) {
   if (!["app-server", "debug", "desktop-ipc", "ui", "none"].includes(options.injector)) {
     throw new Error("--injector must be app-server, debug, desktop-ipc, ui, or none");
   }
+  if (!["auto", "desktop-ipc", "app-server", "rollout"].includes(options.streamSource)) {
+    throw new Error("--stream-source must be auto, desktop-ipc, app-server, or rollout");
+  }
   if (!["queue", "steer", "reject"].includes(options.activePolicy)) {
     throw new Error("--active-policy must be queue, steer, or reject");
   }
@@ -116,6 +121,14 @@ function pairingError(url, token, threadId) {
   return "";
 }
 
+function logBridgeDiagnostic(label, details = {}) {
+  try {
+    console.log(`[bridge] ${label} ${JSON.stringify(details)}`);
+  } catch {
+    console.log(`[bridge] ${label}`);
+  }
+}
+
 function printHelp() {
   console.log(`Codex Live Session Bridge
 
@@ -134,6 +147,7 @@ Options:
   --desktop-ipc-sock <path> Optional Codex Desktop IPC socket for desktop-ipc mode.
   --rollout-file <path>    Tail a Codex Desktop rollout JSONL file for current-session testing.
   --injector <mode>        app-server, debug, desktop-ipc, ui, or none. Defaults to ui with --rollout-file.
+  --stream-source <mode>   auto, desktop-ipc, app-server, or rollout. Default: auto
   --backfill-lines <n>     Recent rollout lines to show on connect. Default: ${DEFAULT_ROLLOUT_BACKFILL_LINES}
   --active-policy <mode>   queue, steer, or reject while a turn is active. Default: queue
   --token <token>          Override generated pairing token.
@@ -289,6 +303,7 @@ class DesktopIpcClient {
     this.expectedFrameBytes = null;
     this.closed = false;
     this.ownerWaiters = new Map();
+    this.broadcastHandler = null;
   }
 
   async connect() {
@@ -376,6 +391,10 @@ class DesktopIpcClient {
     const error = new Error("Codex Desktop IPC client disposed");
     this.#rejectPending(error);
     this.#rejectOwnerWaiters(error);
+  }
+
+  onBroadcast(handler) {
+    this.broadcastHandler = handler;
   }
 
   getThreadOwner(threadId) {
@@ -485,6 +504,14 @@ class DesktopIpcClient {
   }
 
   #handleBroadcast(message) {
+    try {
+      this.broadcastHandler?.(message);
+    } catch (error) {
+      logBridgeDiagnostic("desktop_ipc.broadcast_handler.failed", {
+        method: message.method ?? "",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     if (
       message.method !== "thread-stream-state-changed" ||
       typeof message.sourceClientId !== "string" ||
@@ -538,6 +565,18 @@ function spawnTransport(mode, sock) {
     stdio: ["pipe", "pipe", "pipe"],
     env: process.env,
   });
+}
+
+function shouldProbeAppServerStream(options, primaryAppServerEnabled) {
+  if (options.streamSource !== "app-server") return false;
+  if (primaryAppServerEnabled) return false;
+  return true;
+}
+
+function shouldProbeDesktopIpcStream(options, primaryAppServerEnabled) {
+  if (options.streamSource === "rollout" || options.streamSource === "app-server") return false;
+  if (primaryAppServerEnabled) return false;
+  return options.streamSource === "desktop-ipc" || options.streamSource === "auto";
 }
 
 async function ensureThreadLoaded(client, threadId) {
@@ -668,6 +707,11 @@ async function waitForUiHelperResult(requestId, timeoutMs = 10_000) {
 async function sendViaUiInjector(text) {
   if (fs.existsSync(UI_HELPER_APP)) {
     const requestId = randomUUID();
+    logBridgeDiagnostic("ui.helper.launching", {
+      requestId,
+      helperApp: UI_HELPER_APP,
+      inputLength: text.length,
+    });
     fs.rmSync(UI_HELPER_RESULT_FILE, { force: true });
     fs.writeFileSync(UI_HELPER_INPUT_FILE, text, { mode: 0o600 });
     fs.writeFileSync(
@@ -706,6 +750,12 @@ async function sendViaUiInjector(text) {
       });
     });
     const result = await waitForUiHelperResult(requestId);
+    logBridgeDiagnostic("ui.helper.completed", {
+      requestId,
+      ok: Boolean(result.ok),
+      code: result.code ?? null,
+      message: result.message ?? "",
+    });
     return {
       stdout: String(result.message || "").trim(),
       method: fs.existsSync(UI_HELPER_EXEC) ? "ui-helper-app" : "ui-helper",
@@ -771,8 +821,18 @@ end run
 
 async function sendViaFocusedUiInjector(text, threadId) {
   const focus = await focusCodexThread(threadId);
+  logBridgeDiagnostic("ui.focus.completed", {
+    threadId,
+    url: focus.url,
+  });
   await delay(CODEX_DEEPLINK_FOCUS_DELAY_MS);
   const injection = await sendViaUiInjector(text);
+  logBridgeDiagnostic("ui.paste_submitted", {
+    threadId,
+    method: injection.method,
+    requestId: injection.requestId ?? null,
+    stdout: injection.stdout ?? "",
+  });
   return { focus, injection };
 }
 
@@ -1046,6 +1106,168 @@ function normalizeEvent(method, params) {
     };
   }
   return null;
+}
+
+function jsonPathValue(root, pathParts) {
+  let value = root;
+  for (const part of pathParts) {
+    if (value == null) return undefined;
+    value = value[part];
+  }
+  return value;
+}
+
+function applyJsonPatchOperation(root, patch) {
+  if (!root || !patch || typeof patch !== "object" || !Array.isArray(patch.path)) return root;
+  if (patch.path.length === 0) {
+    if (patch.op === "replace" || patch.op === "add") return patch.value;
+    return root;
+  }
+  const parent = jsonPathValue(root, patch.path.slice(0, -1));
+  if (parent == null) return root;
+  const key = patch.path.at(-1);
+  if (Array.isArray(parent)) {
+    const index = key === "-" ? parent.length : Number(key);
+    if (!Number.isInteger(index) || index < 0) return root;
+    if (patch.op === "add") {
+      parent.splice(Math.min(index, parent.length), 0, patch.value);
+    } else if (patch.op === "replace") {
+      parent[index] = patch.value;
+    } else if (patch.op === "remove") {
+      parent.splice(index, 1);
+    }
+    return root;
+  }
+  if (patch.op === "add" || patch.op === "replace") {
+    parent[key] = patch.value;
+  } else if (patch.op === "remove") {
+    delete parent[key];
+  }
+  return root;
+}
+
+function desktopPatchItemAddress(pathParts) {
+  if (!Array.isArray(pathParts)) return null;
+  const turnsIndex = pathParts.findIndex((part) => part === "turns");
+  if (turnsIndex < 0) return null;
+  const turnIndex = pathParts[turnsIndex + 1];
+  if (!Number.isInteger(turnIndex)) return null;
+  const itemsIndex = pathParts.findIndex((part, index) => index > turnsIndex && part === "items");
+  if (itemsIndex < 0) return null;
+  const itemIndex = pathParts[itemsIndex + 1];
+  if (!Number.isInteger(itemIndex)) return null;
+  return { turnIndex, itemIndex };
+}
+
+function desktopPatchTurnIndex(pathParts) {
+  if (!Array.isArray(pathParts)) return null;
+  const turnsIndex = pathParts.findIndex((part) => part === "turns");
+  if (turnsIndex < 0) return null;
+  const turnIndex = pathParts[turnsIndex + 1];
+  return Number.isInteger(turnIndex) ? turnIndex : null;
+}
+
+function desktopStreamItemText(item) {
+  if (!item || typeof item !== "object") return null;
+  if (item.type === "agentMessage") return item.text ?? "";
+  return null;
+}
+
+function createDesktopIpcPatchObserver({ threadId, onEvent, onDeltaObserved }) {
+  const state = {
+    conversation: null,
+    startedTurnIds: new Set(),
+    completedTurnIds: new Set(),
+  };
+
+  function currentTurn(turnIndex) {
+    return state.conversation?.turns?.[turnIndex] ?? null;
+  }
+
+  function currentItem(address) {
+    return state.conversation?.turns?.[address.turnIndex]?.items?.[address.itemIndex] ?? null;
+  }
+
+  function emitTurnStarted(turn) {
+    const turnId = turn?.turnId ?? "";
+    if (!turnId || state.startedTurnIds.has(turnId)) return;
+    if (turn.status && !["inProgress", "running"].includes(String(turn.status))) return;
+    state.startedTurnIds.add(turnId);
+    onEvent({
+      type: "turn.started",
+      threadId,
+      turnId,
+      status: "running",
+      at: nowIso(),
+    });
+  }
+
+  function emitTurnCompleted(turn, beforeStatus) {
+    const turnId = turn?.turnId ?? "";
+    if (!turnId || state.completedTurnIds.has(turnId)) return;
+    if (beforeStatus === turn.status) return;
+    if (!["completed", "failed", "interrupted", "cancelled"].includes(String(turn.status))) return;
+    state.completedTurnIds.add(turnId);
+    onEvent({
+      type: "turn.completed",
+      threadId,
+      turnId,
+      status: turn.status,
+      at: nowIso(),
+    });
+  }
+
+  function emitAssistantDelta({ address, beforeText, afterItem }) {
+    if (!afterItem || afterItem.type !== "agentMessage") return;
+    const afterText = desktopStreamItemText(afterItem);
+    if (afterText == null) return;
+    const previous = beforeText ?? "";
+    const delta = afterText.startsWith(previous) ? afterText.slice(previous.length) : afterText;
+    if (!delta) return;
+    const turn = currentTurn(address.turnIndex);
+    onDeltaObserved(delta.length);
+    onEvent({
+      type: "assistant.delta",
+      threadId,
+      turnId: turn?.turnId ?? "",
+      itemId: afterItem.id ?? `${address.turnIndex}:${address.itemIndex}`,
+      text: delta,
+      at: nowIso(),
+    });
+  }
+
+  function handlePatch(patch) {
+    if (!state.conversation || !patch || typeof patch !== "object") return;
+    const address = desktopPatchItemAddress(patch.path);
+    const turnIndex = desktopPatchTurnIndex(patch.path);
+    const beforeTurn = turnIndex == null ? null : currentTurn(turnIndex);
+    const beforeStatus = beforeTurn?.status ?? null;
+    const beforeText = address && patch.op !== "add" ? desktopStreamItemText(currentItem(address)) : null;
+    state.conversation = applyJsonPatchOperation(state.conversation, patch);
+    const afterTurn = turnIndex == null ? null : currentTurn(turnIndex);
+    if (afterTurn) {
+      emitTurnStarted(afterTurn);
+      emitTurnCompleted(afterTurn, beforeStatus);
+    }
+    if (address) {
+      emitAssistantDelta({ address, beforeText, afterItem: currentItem(address) });
+    }
+  }
+
+  return {
+    handleBroadcast(message) {
+      if (message.method !== "thread-stream-state-changed") return;
+      if (message.params?.conversationId !== threadId) return;
+      const change = message.params?.change;
+      if (!change || typeof change !== "object") return;
+      if (change.type === "snapshot" && change.conversationState) {
+        state.conversation = structuredClone(change.conversationState);
+        return;
+      }
+      if (change.type !== "patches" || !Array.isArray(change.patches)) return;
+      for (const patch of change.patches) handlePatch(patch);
+    },
+  };
 }
 
 function normalizeRolloutRecord(record) {
@@ -1350,11 +1572,20 @@ function recordTimestampMs(record) {
   return Number.isFinite(ms) ? ms : 0;
 }
 
+function normalizeInjectedTextForVerification(text) {
+  return String(text).replace(/\r\n?/gu, "\n").trimEnd();
+}
+
 function rolloutHasUserMessage(file, text, sinceMs) {
+  const expectedText = normalizeInjectedTextForVerification(text);
   for (const record of parseRolloutRecords(file)) {
     if (recordTimestampMs(record) < sinceMs - 5_000) continue;
     const payload = record.payload;
-    if (record.type === "event_msg" && payload?.type === "user_message" && payload.message === text) {
+    if (
+      record.type === "event_msg" &&
+      payload?.type === "user_message" &&
+      normalizeInjectedTextForVerification(payload.message || "") === expectedText
+    ) {
       return true;
     }
   }
@@ -1456,10 +1687,12 @@ function renderPhonePage() {
     .event .meta { color: #68778b; font-size: 11px; line-height: 1.35; margin-bottom: 7px; display: flex; justify-content: space-between; gap: 10px; }
     .event .body { white-space: pre-wrap; line-height: 1.52; font-size: 14px; }
     .assistant { border-left: 3px solid #2f6fed; }
+    .assistant.streaming .body::after { content: ""; display: inline-block; width: 6px; height: 1em; margin-left: 3px; transform: translateY(2px); background: #2f6fed; animation: blink 1s steps(1) infinite; }
     .user { border-left: 3px solid #13996b; }
     .tool { border-left: 3px solid #8b5cf6; background: #fbfaff; }
     .system { border-left: 3px solid #64748b; background: #fbfcfe; }
     .error { border-left: 3px solid #dc2626; background: #fff8f8; }
+    @keyframes blink { 50% { opacity: 0; } }
     form { flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 72px; align-items: end; gap: 8px; width: 100%; padding: 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); border-top: 1px solid #dde3ee; backdrop-filter: blur(16px); }
     textarea { display: block; width: 100%; min-width: 0; height: 48px; min-height: 48px; max-height: 120px; overflow-y: auto; resize: none; appearance: none; -webkit-appearance: none; border-radius: 8px; border: 1px solid #c9d3e2; background: #fff; color: #172033; padding: 11px 12px; font-size: 16px; line-height: 1.35; }
     textarea:focus { outline: 2px solid rgba(37,99,235,.22); border-color: #2563eb; }
@@ -1500,6 +1733,13 @@ function renderPhonePage() {
     const shownMessageKeys = new Set();
     const streamTextById = new Map();
     const streamNodeById = new Map();
+    const streamBufferById = new Map();
+    const streamFinalById = new Map();
+    let currentAssistantStreamId = "";
+    let streamPumpHandle = null;
+    let toolProgressNode = null;
+    const toolProgressLines = [];
+    const shownToolKeys = new Set();
 
     function apiUrl(path, extra = {}) {
       const query = new URLSearchParams(pairingParams);
@@ -1534,13 +1774,42 @@ function renderPhonePage() {
       return normalized.length > max ? normalized.slice(0, max - 1).trimEnd() + "..." : normalized;
     }
 
-    function toolName(label) {
-      const raw = String(label || "tool").trim();
-      if (raw === "apply_patch") return "apply_patch";
-      if (raw === "web_search") return "web_search";
-      if (raw.startsWith("{") || raw.startsWith("[")) return "tool";
-      if (/\\brtk\\b|\\bnode\\b|\\bgit\\b|\\bcurl\\b|\\brg\\b|\\bsed\\b|\\btail\\b/.test(raw)) return "exec_command";
-      return clip(raw, 72);
+    function shellSnippet(label) {
+      const raw = String(label || "").trim();
+      const match = raw.match(/-lc\\s+["']([\\s\\S]*)["']\\s*$/);
+      return (match ? match[1] : raw).replace(/\\\\n/g, " ").replace(/\\\\(["'])/g, "$1");
+    }
+
+    function pathName(text) {
+      const match = String(text || "").match(/(?:^|\\s)(?:["'])?((?:\\.{0,2}\\/|~\\/|\\/)[^\\s"'|;&)]+|[\\w.-]+\\.(?:mjs|js|ts|tsx|json|md|css|html|sh|py|swift|toml|ya?ml))(?:["'])?/);
+      if (!match) return "";
+      return match[1].replace(/\\/+$|["']/g, "").split("/").filter(Boolean).pop() || "";
+    }
+
+    function toolAction(label, source) {
+      const raw = shellSnippet(label || source || "tool");
+      const lower = raw.toLowerCase();
+      const target = pathName(raw);
+      if (lower.includes("apply_patch") || raw === "apply_patch") return "修改文件";
+      if (lower.includes("web_search")) return "搜索网页";
+      if (/\\brg\\b/.test(lower)) return target ? "搜索 " + target : "搜索代码";
+      if (/\\b(sed|cat|nl|head|tail)\\b/.test(lower)) return target ? "读取 " + target : "读取文件";
+      if (/\\b(ls|find)\\b/.test(lower)) return target ? "查看 " + target : "查看文件列表";
+      if (/\\bgit\\s+status\\b/.test(lower)) return "检查 Git 状态";
+      if (/\\bgit\\s+(diff|show|log)\\b/.test(lower)) return "查看 Git 变更";
+      if (/\\bnpm\\s+run\\s+(check|lint|typecheck)\\b|\\bnode\\s+--check\\b/.test(lower)) return "运行项目检查";
+      if (/\\bnpm\\s+run\\s+test\\b/.test(lower)) return "运行测试";
+      if (/\\bnpm\\s+run\\s+build\\b/.test(lower)) return "构建项目";
+      if (/\\bnpm\\s+run\\s+plugin:(start|stop|status|url|lan)\\b/.test(lower)) return "管理 Codex To Phone 服务";
+      if (/\\bcurl\\b/.test(lower)) return "检查本地接口";
+      if (/\\bcloudflared\\b/.test(lower)) return "维护公网连接";
+      if (/\\bopen\\b|\\bosascript\\b/.test(lower)) return "操作 Codex 桌面";
+      if (/\\bnode\\b/.test(lower)) return target ? "运行 " + target : "运行脚本";
+      const rawName = String(label || source || "tool").trim();
+      if (rawName === "apply_patch") return "修改文件";
+      if (rawName === "web_search") return "搜索网页";
+      if (rawName.startsWith("{") || rawName.startsWith("[")) return "调用工具";
+      return clip(rawName, 42);
     }
 
     function markDisconnected(status = "已断开") {
@@ -1574,14 +1843,13 @@ function renderPhonePage() {
         return null;
       }
       if (event.type === "turn.started") {
-        return { kind: "system", title: "开始执行", body: "Codex 开始处理当前输入。", at: event.at };
+        return { kind: "assistant-stream-start", title: "Codex", body: "正在思考...", at: event.at, id: event.turnId || "" };
       }
       if (event.type === "turn.interrupted") {
         return { kind: "system", title: "已中断", body: "当前回合已请求中断。", at: event.at };
       }
       if (event.type === "turn.completed") {
-        if (!event.text) return { kind: "system", title: "执行完成", body: "当前回合已完成。", at: event.at };
-        return { kind: "assistant", title: "最终结果", body: event.text, at: event.at };
+        return null;
       }
       if (event.type === "user.message" || event.type === "local.user") {
         return { kind: "user", title: "你", body: event.text || event.message || "", at: event.at };
@@ -1593,12 +1861,18 @@ function renderPhonePage() {
         return { kind: "assistant-delta", title: "Codex", body: event.text || "", at: event.at, id: event.itemId || event.turnId || "assistant" };
       }
       if (event.type === "tool.started") {
-        return { kind: "tool", title: "工具调用", body: toolName(event.label || event.source), at: event.at };
+        return {
+          kind: "tool-progress",
+          title: "工具进度",
+          body: toolAction(event.label, event.source),
+          at: event.at,
+          key: event.itemId || event.label || event.source || ""
+        };
       }
       if (event.type === "tool.completed") {
         const failed = event.status && !["completed", "success", "0"].includes(String(event.status));
         if (!failed) return null;
-        return { kind: "error", title: "工具失败", body: toolName(event.label || event.source) + " · " + event.status, at: event.at };
+        return { kind: "error", title: "工具失败", body: toolAction(event.label, event.source) + " · " + event.status, at: event.at };
       }
       if (event.type === "context.compacted") {
         return { kind: "system", title: "上下文已整理", body: "Codex 已压缩上下文。", at: event.at };
@@ -1609,14 +1883,161 @@ function renderPhonePage() {
     function createCard(item) {
       const div = document.createElement("div");
       div.className = "event " + item.kind.replace("-delta", "");
+      if (item.streaming) div.classList.add("streaming");
       div.innerHTML = '<div class="meta"><span></span><time></time></div><div class="body"></div>';
       div.querySelector(".meta span").textContent = item.title;
       div.querySelector("time").textContent = timeText(item.at);
       div.querySelector(".body").textContent = item.body;
       eventsEl.appendChild(div);
       while (eventsEl.children.length > 300) eventsEl.removeChild(eventsEl.firstChild);
-      eventsEl.parentElement.scrollTop = eventsEl.parentElement.scrollHeight;
+      scrollToLatest();
       return div;
+    }
+
+    function appendToolProgress(item) {
+      const line = item.body || "调用工具";
+      const key = item.key || line;
+      if (shownToolKeys.has(key)) return;
+      shownToolKeys.add(key);
+      toolProgressLines.push(line);
+      while (toolProgressLines.length > 10) toolProgressLines.shift();
+      const body = toolProgressLines.map((entry) => "- " + entry).join("\\n");
+      if (!toolProgressNode) {
+        toolProgressNode = createCard({ ...item, kind: "tool", body });
+      } else {
+        toolProgressNode.querySelector(".body").textContent = body;
+        toolProgressNode.querySelector("time").textContent = timeText(item.at);
+        scrollToLatest();
+      }
+    }
+
+    function scrollToLatest() {
+      requestAnimationFrame(() => {
+        eventsEl.scrollTop = eventsEl.scrollHeight;
+      });
+    }
+
+    function assistantStreamKey(item) {
+      if (item.id && currentAssistantStreamId && currentAssistantStreamId !== item.id) {
+        const pendingNode = streamNodeById.get(currentAssistantStreamId);
+        if (pendingNode && !streamNodeById.has(item.id)) {
+          streamNodeById.set(item.id, pendingNode);
+          streamNodeById.delete(currentAssistantStreamId);
+          streamTextById.set(item.id, streamTextById.get(currentAssistantStreamId) || "");
+          streamTextById.delete(currentAssistantStreamId);
+          streamBufferById.set(item.id, streamBufferById.get(currentAssistantStreamId) || "");
+          streamBufferById.delete(currentAssistantStreamId);
+          if (streamFinalById.has(currentAssistantStreamId)) {
+            streamFinalById.set(item.id, streamFinalById.get(currentAssistantStreamId) || "");
+            streamFinalById.delete(currentAssistantStreamId);
+          }
+          currentAssistantStreamId = item.id;
+        }
+      }
+      return item.id || currentAssistantStreamId || "assistant";
+    }
+
+    function ensureAssistantStreamNode(item, key, streaming = true) {
+      let node = streamNodeById.get(key);
+      if (!node) {
+        const body = streamTextById.get(key) || item.body || "";
+        node = createCard({ ...item, kind: "assistant", body, streaming });
+        streamNodeById.set(key, node);
+      } else {
+        node.classList.toggle("streaming", streaming);
+      }
+      return node;
+    }
+
+    function scheduleStreamPump() {
+      if (streamPumpHandle != null) return;
+      streamPumpHandle = requestAnimationFrame(pumpAssistantStreams);
+    }
+
+    function smoothChunkSize(text) {
+      const length = String(text || "").length;
+      if (length > 1200) return 80;
+      if (length > 500) return 42;
+      if (length > 180) return 20;
+      if (length > 60) return 8;
+      return 3;
+    }
+
+    function takeSmoothChunk(buffer) {
+      const size = Math.min(buffer.length, smoothChunkSize(buffer));
+      let end = size;
+      while (end < buffer.length && end < size + 6 && /\\s/.test(buffer[end])) end += 1;
+      return buffer.slice(0, end);
+    }
+
+    function pumpAssistantStreams() {
+      streamPumpHandle = null;
+      let hasMore = false;
+      for (const [key, buffer] of streamBufferById) {
+        if (!buffer) continue;
+        const chunk = takeSmoothChunk(buffer);
+        const remaining = buffer.slice(chunk.length);
+        streamBufferById.set(key, remaining);
+        const nextText = (streamTextById.get(key) || "") + chunk;
+        streamTextById.set(key, nextText);
+        const node = streamNodeById.get(key);
+        if (node) {
+          node.querySelector(".body").textContent = nextText;
+          node.classList.add("streaming");
+          scrollToLatest();
+        }
+        if (remaining) hasMore = true;
+      }
+
+      for (const [key, finalText] of streamFinalById) {
+        if (streamBufferById.get(key)) continue;
+        const node = streamNodeById.get(key);
+        if (node) {
+          node.querySelector(".body").textContent = finalText;
+          node.classList.remove("streaming");
+        }
+        streamTextById.set(key, finalText);
+        streamFinalById.delete(key);
+        if (key === currentAssistantStreamId) currentAssistantStreamId = "";
+        scrollToLatest();
+      }
+
+      if (hasMore || streamFinalById.size > 0) scheduleStreamPump();
+    }
+
+    function queueAssistantDelta(item) {
+      const key = assistantStreamKey(item);
+      currentAssistantStreamId = key;
+      if (streamTextById.get(key) === "正在思考...") {
+        streamTextById.set(key, "");
+        const node = streamNodeById.get(key);
+        if (node) node.querySelector(".body").textContent = "";
+      }
+      ensureAssistantStreamNode({ ...item, body: streamTextById.get(key) || "" }, key, true);
+      streamBufferById.set(key, (streamBufferById.get(key) || "") + item.body);
+      scheduleStreamPump();
+    }
+
+    function finalizeAssistantStream(item) {
+      const key = assistantStreamKey(item);
+      const finalText = item.body || "";
+      const displayed = streamTextById.get(key) === "正在思考..." ? "" : streamTextById.get(key) || "";
+      const pending = streamBufferById.get(key) || "";
+      const effectiveText = displayed + pending;
+      ensureAssistantStreamNode({ ...item, body: displayed }, key, true);
+      if (finalText.startsWith(effectiveText)) {
+        streamBufferById.set(key, pending + finalText.slice(effectiveText.length));
+      } else if (finalText.startsWith(displayed)) {
+        streamBufferById.set(key, finalText.slice(displayed.length));
+      } else {
+        streamTextById.set(key, "");
+        const node = streamNodeById.get(key);
+        if (node) node.querySelector(".body").textContent = "";
+        streamBufferById.set(key, finalText);
+      }
+      streamFinalById.set(key, finalText);
+      shownMessageKeys.add("assistant:" + item.title + ":" + finalText.trim());
+      scheduleStreamPump();
     }
 
     function append(event) {
@@ -1627,17 +2048,28 @@ function renderPhonePage() {
       }
       const item = displayEvent(event);
       if (!item) return;
-      if (item.kind === "assistant-delta") {
-        const key = item.id;
-        const text = (streamTextById.get(key) || "") + item.body;
-        streamTextById.set(key, text);
-        let node = streamNodeById.get(key);
-        if (!node) {
-          node = createCard({ ...item, kind: "assistant", body: text });
-          streamNodeById.set(key, node);
-        } else {
-          node.querySelector(".body").textContent = text;
+      if (item.kind === "assistant-stream-start") {
+        const key = item.id || "assistant:" + String(event.bridgeSeq || Date.now());
+        currentAssistantStreamId = key;
+        toolProgressNode = null;
+        toolProgressLines.length = 0;
+        shownToolKeys.clear();
+        if (!streamNodeById.has(key)) {
+          streamTextById.set(key, item.body);
+          streamNodeById.set(key, createCard({ ...item, kind: "assistant", id: key, streaming: true }));
         }
+        return;
+      }
+      if (item.kind === "tool-progress") {
+        appendToolProgress(item);
+        return;
+      }
+      if (item.kind === "assistant-delta") {
+        queueAssistantDelta(item);
+        return;
+      }
+      if (item.kind === "assistant" && currentAssistantStreamId && streamNodeById.has(currentAssistantStreamId)) {
+        finalizeAssistantStream(item);
         return;
       }
       const key = item.kind + ":" + item.title + ":" + item.body.trim();
@@ -1766,6 +2198,8 @@ async function main() {
   const useAppServer = !options.rolloutFile || options.injector === "app-server";
   const child = useAppServer ? spawnTransport(options.mode, options.sock) : null;
   const client = child ? new JsonRpcClient(child) : null;
+  const probeDesktopIpcStream = shouldProbeDesktopIpcStream(options, useAppServer);
+  const probeAppServerStream = shouldProbeAppServerStream(options, useAppServer);
 
   let threadId = options.threadId;
   let activeTurnId = "";
@@ -1776,6 +2210,23 @@ async function main() {
   let nextEventSeq = 1;
   let stopTailer = null;
   let sessionEndedEmitted = false;
+  let shuttingDown = false;
+  let appServerStreamClient = null;
+  let desktopIpcStreamClient = null;
+  let appServerStreamState = {
+    requested: options.streamSource,
+    source: useAppServer ? "app-server" : probeDesktopIpcStream ? "desktop-ipc" : probeAppServerStream ? "app-server" : "rollout",
+    status: useAppServer
+      ? "primary"
+      : probeDesktopIpcStream
+        ? "starting"
+        : probeAppServerStream
+          ? "starting"
+          : "rollout",
+    reason: "",
+    deltaObserved: false,
+    deltaCount: 0,
+  };
 
   function emit(event) {
     const payload = sanitizeJsonPayload({ ...event, bridgeSeq: nextEventSeq, bridgeThreadId: threadId });
@@ -1792,6 +2243,149 @@ async function main() {
     if (sessionEndedEmitted) return;
     sessionEndedEmitted = true;
     emit({ type: "session.ended", reason, at: nowIso() });
+  }
+
+  function setAppServerStreamState(status, details = {}) {
+    appServerStreamState = {
+      ...appServerStreamState,
+      requested: options.streamSource,
+      source: details.source ?? appServerStreamState.source,
+      status,
+      reason: details.reason ?? "",
+      alreadyLoaded: details.alreadyLoaded ?? appServerStreamState.alreadyLoaded,
+      deltaObserved: details.deltaObserved ?? appServerStreamState.deltaObserved,
+      deltaCount: details.deltaCount ?? appServerStreamState.deltaCount,
+    };
+    logBridgeDiagnostic("app_server.stream.status", appServerStreamState);
+    emit({ type: "app_server.stream.status", ...appServerStreamState, at: nowIso() });
+  }
+
+  function recordDesktopIpcDeltaObserved() {
+    const firstDelta = !appServerStreamState.deltaObserved || appServerStreamState.source !== "desktop-ipc";
+    appServerStreamState = {
+      ...appServerStreamState,
+      requested: options.streamSource,
+      source: "desktop-ipc",
+      status: "connected",
+      reason: "desktop IPC delta observed",
+      deltaObserved: true,
+      deltaCount: appServerStreamState.deltaCount + 1,
+    };
+    if (firstDelta) {
+      logBridgeDiagnostic("desktop_ipc.stream.delta_observed", appServerStreamState);
+      emit({ type: "app_server.stream.status", ...appServerStreamState, at: nowIso() });
+    }
+  }
+
+  function attachAppServerEventHandlers(appServerClient, settings = {}) {
+    const affectsActiveTurn = Boolean(settings.affectsActiveTurn);
+    const streamSource = settings.streamSource || "app-server";
+    appServerClient.onNotification((method, params) => {
+      const event = normalizeEvent(method, params);
+      if (!event) return;
+      if (event.threadId && threadId && event.threadId !== threadId) return;
+      if (streamSource === "app-server" && event.type === "assistant.delta") {
+        setAppServerStreamState(appServerStreamState.status, {
+          deltaObserved: true,
+          deltaCount: appServerStreamState.deltaCount + 1,
+        });
+      }
+      if (affectsActiveTurn && event.type === "turn.started") {
+        activeTurnId = event.turnId;
+      }
+      if (affectsActiveTurn && event.type === "turn.completed") {
+        activeTurnId = "";
+        queueMicrotask(() => void flushQueue());
+      }
+      emit({ ...event, streamSource });
+    });
+
+    appServerClient.onRequest((method, params) => {
+      emit({
+        type: "app_server.request.unsupported",
+        method,
+        message: "Remote approvals are not supported in this MVP. Handle approvals on the PC.",
+        params,
+        at: nowIso(),
+      });
+      throw new Error(`Unsupported app-server request in mobile bridge: ${method}`);
+    });
+  }
+
+  async function startOptionalAppServerStream() {
+    if (!probeAppServerStream || !threadId) return;
+    const streamChild = spawnTransport(options.mode, options.sock);
+    const streamClient = new JsonRpcClient(streamChild);
+    appServerStreamClient = streamClient;
+    attachAppServerEventHandlers(streamClient, {
+      affectsActiveTurn: false,
+      streamSource: "app-server",
+    });
+    streamChild.on("exit", (code, signal) => {
+      if (shuttingDown) return;
+      if (appServerStreamState.status === "connected" || appServerStreamState.status === "starting") {
+        setAppServerStreamState("fallback", {
+          reason: `app-server stream exited code=${code ?? "null"} signal=${signal ?? "null"}`,
+        });
+      }
+    });
+    try {
+      if (options.initialize) {
+        await streamClient.request("initialize", appServerInitializeParams(), 15_000);
+        streamClient.notify("initialized", {});
+      }
+      const loadResult = await ensureThreadLoaded(streamClient, threadId);
+      setAppServerStreamState("connected", {
+        alreadyLoaded: Boolean(loadResult.alreadyLoaded),
+        reason: "app-server connected; desktop delta not observed yet",
+      });
+    } catch (error) {
+      setAppServerStreamState("fallback", {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      streamClient.dispose();
+      if (appServerStreamClient === streamClient) {
+        appServerStreamClient = null;
+      }
+    }
+  }
+
+  async function startOptionalDesktopIpcStream() {
+    if (!probeDesktopIpcStream || !threadId) return;
+    const ipc = new DesktopIpcClient(options.desktopIpcSock);
+    const observer = createDesktopIpcPatchObserver({
+      threadId,
+      onEvent: (event) => {
+        if (event.type === "turn.started") {
+          activeTurnId = event.turnId || activeTurnId;
+        }
+        if (event.type === "turn.completed") {
+          activeTurnId = "";
+          queueMicrotask(() => void flushQueue());
+        }
+        emit({ ...event, streamSource: "desktop-ipc" });
+      },
+      onDeltaObserved: () => recordDesktopIpcDeltaObserved(),
+    });
+    ipc.onBroadcast((message) => observer.handleBroadcast(message));
+    try {
+      await ipc.connect();
+      desktopIpcStreamClient = ipc;
+      await ipc.initialize();
+      setAppServerStreamState("connected", {
+        source: "desktop-ipc",
+        reason: "desktop IPC connected; waiting for Desktop deltas",
+      });
+    } catch (error) {
+      setAppServerStreamState("fallback", {
+        source: "desktop-ipc",
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      ipc.dispose();
+      if (desktopIpcStreamClient === ipc) {
+        desktopIpcStreamClient = null;
+      }
+    }
   }
 
   async function sendNow(text) {
@@ -1828,8 +2422,18 @@ async function main() {
           startedAtMs,
         });
         if (!verification.ok) {
+          logBridgeDiagnostic("ui.rollout.verify.failed", {
+            threadId,
+            reason: verification.reason,
+            sideSession: verification.sideSession ?? null,
+            elapsedMs: Date.now() - startedAtMs,
+          });
           throw new Error(`UI injector did not reach the bound Desktop session: ${verification.reason}`);
         }
+        logBridgeDiagnostic("ui.rollout.verify.ok", {
+          threadId,
+          elapsedMs: Date.now() - startedAtMs,
+        });
         response = { ...response, verification };
       }
     } else if (options.injector === "desktop-ipc") {
@@ -1887,6 +2491,10 @@ async function main() {
       try {
         await sendNow(text);
       } catch (error) {
+        logBridgeDiagnostic("phone.input.failed", {
+          injector: options.injector,
+          rawMessage: error instanceof Error ? error.message : String(error),
+        });
         emit({
           type: "phone.input.failed",
           text,
@@ -1915,29 +2523,9 @@ async function main() {
   }
 
   if (client) {
-    client.onNotification((method, params) => {
-      const event = normalizeEvent(method, params);
-      if (!event) return;
-      if (event.threadId && threadId && event.threadId !== threadId) return;
-      if (event.type === "turn.started") {
-        activeTurnId = event.turnId;
-      }
-      if (event.type === "turn.completed") {
-        activeTurnId = "";
-        queueMicrotask(() => void flushQueue());
-      }
-      emit(event);
-    });
-
-    client.onRequest((method, params) => {
-      emit({
-        type: "app_server.request.unsupported",
-        method,
-        message: "Remote approvals are not supported in this MVP. Handle approvals on the PC.",
-        params,
-        at: nowIso(),
-      });
-      throw new Error(`Unsupported app-server request in mobile bridge: ${method}`);
+    attachAppServerEventHandlers(client, {
+      affectsActiveTurn: true,
+      streamSource: "app-server",
     });
   }
 
@@ -1984,6 +2572,13 @@ async function main() {
   }
 
   emit({ type: "session.started", threadId, at: nowIso() });
+  emit({ type: "app_server.stream.status", ...appServerStreamState, at: nowIso() });
+  if (probeDesktopIpcStream) {
+    void startOptionalDesktopIpcStream();
+  }
+  if (probeAppServerStream) {
+    void startOptionalAppServerStream();
+  }
   if (options.injector === "ui") {
     emit({
       type: "injector.notice",
@@ -2023,6 +2618,11 @@ async function main() {
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+      if (req.method === "GET" && url.pathname === "/favicon.ico") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
       const pairError = pairingError(url, options.token, threadId);
       if (pairError) {
         unauthorized(res);
@@ -2048,6 +2648,7 @@ async function main() {
             queued: pendingInputs.length,
             bufferLength: buffer.length,
             nextEventSeq,
+            stream: appServerStreamState,
           }),
         );
         return;
@@ -2070,6 +2671,7 @@ async function main() {
             activeTurnId,
             deliveryInFlight,
             queued: pendingInputs.length,
+            stream: appServerStreamState,
           }),
         );
         return;
@@ -2231,9 +2833,12 @@ async function main() {
   }
 
   function shutdown(reason = "bridge shutdown") {
+    shuttingDown = true;
     emitSessionEnded(reason);
     stopTailer?.();
     server.close();
+    desktopIpcStreamClient?.dispose();
+    appServerStreamClient?.dispose();
     client?.dispose();
     if (reason === "phone disconnect" && process.env.CODEX_TO_PHONE_MANAGED_BRIDGE === "1") {
       try {

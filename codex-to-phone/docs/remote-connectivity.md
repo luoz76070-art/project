@@ -180,6 +180,9 @@ and prints a phone-ready URL with the pairing token.
 The current phone web page uses both SSE and polling. Polling is required for
 the Cloudflare quick tunnel path because local SSE can deliver events while the
 public tunnel reports connected but does not flush event data to the phone.
+Assistant output now prefers Codex Desktop IPC stream-state patches when
+available. Rollout tailing remains the reliability layer for startup backfill,
+tool summaries, final messages, and failure states.
 
 For current Desktop testing, `codex debug app-server send-message-v2` is not a
 reliable injector because it can create a standalone session. A bridge-owned
@@ -187,10 +190,16 @@ reliable injector because it can create a standalone session. A bridge-owned
 it still does not make the current Desktop window show the phone-triggered reply
 process because the UI is not subscribed to that separate runtime.
 
-The current default test injector is now `ui`. The bridge opens the bound
+The current default input injector is `ui`. The bridge opens the bound
 `codex://threads/<threadId>` route, pastes the phone message into the visible
 Codex Desktop input, submits it, and verifies that the phone message is written
 to the bound rollout file.
+
+The phone UI does not expose raw tool payloads by default. It maps tool activity
+to progress actions like reading files, searching code, modifying files, running
+checks, or managing the Codex To Phone service. This keeps the phone surface
+useful for remote monitoring without flooding it with code patches or terminal
+logs.
 
 The QR URL carries both a short token and `session=<threadId>`. The bridge
 rejects requests without the exact startup session binding, so a stale QR cannot

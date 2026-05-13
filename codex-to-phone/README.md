@@ -2,7 +2,7 @@
 
 把一个正在打开的 Codex Desktop 会话同步到手机端，并允许手机向当前会话发送输入。
 
-当前版本是可复现 MVP：PC 端启动本地 bridge，Cloudflare Quick Tunnel 暴露临时 HTTPS 通道，生成 PNG 二维码，手机扫码后进入轻量 Web UI。
+当前版本是可复现 MVP：PC 端启动本地 bridge，Cloudflare Quick Tunnel 暴露临时 HTTPS 通道，生成 PNG 二维码，手机扫码后进入轻量 Web UI。默认输出链路优先监听 Codex Desktop 当前窗口的 IPC 状态补丁，手机页面再做平滑流式渲染。
 
 这个目录同时也是一个 Codex 本地插件：包含 `.codex-plugin/plugin.json` 和 `skills/codex-to-phone/SKILL.md`。安装插件后，可以在 Codex 里用自然语言启动、停止和查看状态。
 
@@ -10,7 +10,8 @@
 
 - 手机实时查看当前 Codex 会话的用户输入、Codex 回复、工具调用摘要和最终结果。
 - 手机发送消息后，默认打开绑定的 Codex 会话并通过可见 UI 注入当前 PC 窗口。
-- 手机 UI 默认隐藏代码补丁、命令完整输出和 bridge 内部 ack，只展示输入、输出和工具名称。
+- 手机 UI 默认隐藏代码补丁、命令完整输出和 bridge 内部 ack，只展示输入、输出和简化工具进度。
+- Codex 回复使用 Desktop IPC 状态补丁增量 + 手机端缓冲打字机，观感比 rollout 整段更新更接近流式输出。
 - 每次启动生成短期 token、当前会话 session 绑定和临时公网 URL；bridge 退出后本次配对失效。
 - 如果 Android 对 Cloudflare 临时域名报错 `-2`，可使用同 Wi-Fi 下的 LAN 二维码兜底。
 - 默认不保存手机端历史，不导入旧会话全量历史。
@@ -114,10 +115,12 @@ npm run plugin:lan
 
 PC 到手机：
 
-1. bridge 读取当前 Codex rollout JSONL。
-2. 启动时只回填上一轮完成回合；启动后的新事件再实时同步。
-3. 运行时 tail rollout，把事件转换成手机 UI 需要的轻量事件。
-4. 手机端使用 SSE + polling 双通道接收，Cloudflare SSE 不稳定时仍可轮询同步。
+1. bridge 绑定当前 Codex thread，并读取对应 rollout JSONL。
+2. 启动时只回填上一轮完成回合，避免把旧历史全量导入手机。
+3. 运行时优先监听 Codex Desktop IPC 的 `thread-stream-state-changed` 状态补丁，把当前窗口里的 assistant 文本变化转换成 `assistant.delta`。
+4. rollout tail 继续作为用户消息、工具调用、失败状态和最终消息的可靠补充来源。
+5. 手机端使用 SSE + polling 双通道接收，Cloudflare SSE 不稳定时仍可轮询同步。
+6. 手机端把 delta 放入缓冲区，用自适应打字机节奏平滑显示；工具调用显示为“读取文件 / 搜索代码 / 修改文件 / 运行项目检查”等摘要。
 
 手机到 PC：
 
@@ -127,6 +130,11 @@ PC 到手机：
 4. bridge 通过 macOS UI 注入把手机文本粘贴进当前 Codex 输入框并提交。
 5. PC UI 直接显示这条手机输入触发的新回合，手机端继续从 rollout tail 看进展。
 6. bridge 校验该输入写入绑定的 rollout，避免误发到旁路会话。
+
+手机界面默认信息密度：
+
+- 显示：用户输入、Codex 流式回复、简化工具进度、工具失败摘要、断开/错误状态。
+- 隐藏：完整 shell 命令、代码 diff、长日志、bridge accepted/sending/sent 内部确认。
 
 断开连接：
 
@@ -151,6 +159,7 @@ node scripts/bridge.mjs --help
 - 当前只绑定一个会话窗口。后续可以扩展为多个 bridge session，并在手机端做会话列表和切换。
 - Cloudflare Quick Tunnel 是临时测试通道，不适合作为正式产品后端。
 - 手机到 PC 默认依赖 macOS 辅助功能权限来粘贴和提交输入；如果被系统拦截，需要允许 `Codex Live Session Input.app` 控制电脑。启动脚本会复用已构建的 helper，避免每次启动重新签名导致权限失效。
+- Desktop IPC 流式输出来自 Codex Desktop 渲染层状态补丁，不是模型底层 token 流。如果 Desktop 某些内容只在结束时一次性写入状态，手机端也只能一次性显示。
 - 如果本地已有旧插件目录，`npm run plugin:install` 会自动更新旧 symlink；如果存在同名普通目录，按提示备份后运行 `npm run plugin:install -- --force`。
 - 远程审批、文件确认和多端权限控制还没有做成手机端能力。
 

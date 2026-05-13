@@ -154,15 +154,36 @@ npm run plugin:lan
 手机页面会显示：
 
 - 用户输入；
-- Codex 回复；
-- 简化后的工具调用摘要；
-- 最终结果。
+- Codex 回复，优先使用 Desktop IPC 状态补丁做增量同步；
+- 平滑流式输出，前端会把突发 delta 缓冲成打字机效果；
+- 简化后的工具进度，例如“搜索代码”“读取 bridge.mjs”“修改文件”“运行项目检查”；
+- 工具失败摘要和连接状态。
 
 它会隐藏：
 
 - 完整代码补丁；
 - 完整命令输出；
 - bridge 内部 accepted/sending/sent 确认消息。
+
+当前默认链路是：
+
+```text
+Codex Desktop 当前窗口
+  -> Desktop IPC 状态补丁 + rollout 事件补充
+  -> 本地 bridge
+  -> Cloudflare Tunnel
+  -> 手机 Web UI
+```
+
+手机向 PC 发送消息时仍走可见 UI 注入：
+
+```text
+手机输入
+  -> bridge
+  -> 打开 codex://threads/<threadId>
+  -> Codex Live Session Input.app 粘贴并回车
+  -> Codex Desktop 当前窗口执行
+```
 
 ## 9. 更新
 
@@ -175,6 +196,19 @@ npm run plugin:install
 ```
 
 如果插件说明或 skill 有更新，重启 Codex Desktop。
+
+## 9.1 验证当前 checkout 是否可用
+
+每次更新后建议运行：
+
+```bash
+npm install
+npm run check
+npm run doctor
+npm run plugin:install
+```
+
+`npm run check` 只检查项目脚本语法；`npm run doctor` 会检查本机是否满足 macOS、Node.js、`cloudflared`、`swiftc` 和 Codex Desktop 等运行条件。
 
 ## 10. 常见问题
 

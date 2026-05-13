@@ -22,6 +22,7 @@ function parseArgs(argv) {
     rolloutFile: "",
     threadId: "",
     injector: "ui",
+    streamSource: "auto",
     desktopIpcSock: "",
     urlFile: "",
     qrImageFile: path.join(os.homedir(), ".codex-to-phone", "pairing-qr.png"),
@@ -41,6 +42,7 @@ function parseArgs(argv) {
     else if (arg === "--rollout-file") options.rolloutFile = next();
     else if (arg === "--thread-id") options.threadId = next();
     else if (arg === "--injector") options.injector = next();
+    else if (arg === "--stream-source") options.streamSource = next();
     else if (arg === "--desktop-ipc-sock") options.desktopIpcSock = next();
     else if (arg === "--url-file") options.urlFile = next();
     else if (arg === "--qr-image-file") options.qrImageFile = next();
@@ -59,6 +61,9 @@ function parseArgs(argv) {
   if (!["app-server", "debug", "desktop-ipc", "ui", "none"].includes(options.injector)) {
     throw new Error("--injector must be app-server, debug, desktop-ipc, ui, or none");
   }
+  if (!["auto", "desktop-ipc", "app-server", "rollout"].includes(options.streamSource)) {
+    throw new Error("--stream-source must be auto, desktop-ipc, app-server, or rollout");
+  }
   return options;
 }
 
@@ -76,6 +81,7 @@ Options:
   --rollout-file <path>      Codex Desktop rollout JSONL file.
   --thread-id <id>           Codex session/thread id.
   --injector <mode>          Phone input injector: app-server, desktop-ipc, ui, debug, or none. Default: ui.
+  --stream-source <mode>     Phone output stream source: auto, desktop-ipc, app-server, or rollout. Default: auto.
   --desktop-ipc-sock <path>  Optional Codex Desktop IPC socket for desktop-ipc mode.
   --url-file <path>          Optional file that receives the generated phone URL for service management.
   --qr-image-file <path>     File that receives the generated PNG QR image.
@@ -258,6 +264,8 @@ async function main() {
     threadId,
     "--injector",
     options.injector,
+    "--stream-source",
+    options.streamSource,
     "--host",
     options.host,
     "--port",

@@ -259,3 +259,15 @@ User motivation:
 - 2026-05-13: Reverted the default phone-to-PC injector to focused visible UI
   injection after Desktop IPC owner discovery continued to return
   `no-client-found` for the active Desktop window.
+- 2026-05-13: Added Desktop IPC output observation using
+  `thread-stream-state-changed` snapshot/patch broadcasts from the owning
+  Desktop window. The bridge converts growing `agentMessage.text` fields into
+  phone-side `assistant.delta` events while keeping visible UI injection as the
+  default phone-to-PC input path.
+- 2026-05-13: Added phone-side smooth stream rendering. Assistant deltas are
+  buffered and displayed with an adaptive typewriter so Desktop patch chunks do
+  not appear as abrupt block updates.
+- 2026-05-13: Added simplified tool progress rendering on the phone. The UI
+  shows high-level actions such as searching code, reading files, modifying
+  files, running checks, or managing the service, while hiding raw commands,
+  code diffs, and long logs by default.
