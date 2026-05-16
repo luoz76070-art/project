@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Mobile Codex Token 安全</title>
+  <style>
+    body { font-family: "Segoe UI", sans-serif; margin: 32px; line-height: 1.65; color: #172033; }
+    code, pre { background: #f3f6f8; padding: 2px 5px; border-radius: 4px; }
+    pre { padding: 12px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>Token 安全</h1>
+  <p>公网访问时不能使用开发默认 token。建议点击管理器里的“生成 Token”，使用 32 字节以上随机值。</p>
+  <p>手机 APK 中 Token 必须和电脑管理器显示的 <code>MOBILE_CODEX_TOKEN</code> 一致。</p>
+  <p>如果出现 401，说明 Relay 能连通但 Token 不正确。</p>
+</body>
+</html>

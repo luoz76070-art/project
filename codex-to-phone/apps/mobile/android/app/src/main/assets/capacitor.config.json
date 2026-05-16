@@ -1,0 +1,13 @@
+{
+	"appId": "com.mobilecodex.app",
+	"appName": "Mobile Codex",
+	"webDir": "dist",
+	"server": {
+		"cleartext": true
+	},
+	"plugins": {
+		"CapacitorHttp": {
+			"enabled": true
+		}
+	}
+}

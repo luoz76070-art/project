@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mobile Codex Demo</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --panel-2: #f0f3f7;
+        --ink: #16181d;
+        --muted: #69707d;
+        --line: #d8dde5;
+        --accent: #0f7b6c;
+        --accent-2: #2457d6;
+        --warn: #c46a1a;
+        --shadow: 0 22px 70px rgba(28, 34, 45, 0.16);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        background:
+          linear-gradient(180deg, #ffffff 0%, #eef1f5 100%);
+      }
+
+      .stage {
+        min-height: 100vh;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+      }
+
+      header {
+        height: 68px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 32px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.9);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 720;
+      }
+
+      .mark {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        background:
+          linear-gradient(135deg, var(--accent), #8cd8c4 52%, var(--accent-2));
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .pulse {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 0 0 rgba(15, 123, 108, 0.36);
+        animation: pulse 1.8s infinite;
+      }
+
+      main {
+        display: grid;
+        place-items: center;
+        padding: 30px 32px;
+      }
+
+      .canvas {
+        width: min(1180px, 100%);
+        aspect-ratio: 16 / 9;
+        display: grid;
+        grid-template-columns: 1.08fr 0.68fr;
+        gap: 28px;
+        align-items: center;
+      }
+
+      .desktop,
+      .phone {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+      }
+
+      .desktop {
+        height: 620px;
+        border-radius: 14px;
+        overflow: hidden;
+        display: grid;
+        grid-template-rows: 46px 1fr;
+      }
+
+      .desktop-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 16px;
+        background: #edf1f5;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 999px;
+      }
+
+      .red { background: #e15b4f; }
+      .yellow { background: #d9a441; }
+      .green { background: #43a96f; }
+
+      .desktop-body {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        min-height: 0;
+      }
+
+      .side {
+        border-right: 1px solid var(--line);
+        background: #f8fafc;
+        padding: 18px 14px;
+      }
+
+      .side-title {
+        font-size: 12px;
+        color: var(--muted);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        margin-bottom: 14px;
+      }
+
+      .thread {
+        height: 46px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        margin-bottom: 8px;
+        color: #323844;
+        font-size: 14px;
+      }
+
+      .thread.active {
+        background: #e6f3ef;
+        color: #0b5148;
+        font-weight: 650;
+      }
+
+      .chat {
+        min-width: 0;
+        display: grid;
+        grid-template-rows: 1fr 76px;
+        background: #ffffff;
+      }
+
+      .messages {
+        padding: 28px 34px;
+        overflow: hidden;
+      }
+
+      .msg {
+        max-width: 78%;
+        margin-bottom: 18px;
+        line-height: 1.58;
+        font-size: 15px;
+      }
+
+      .msg.user {
+        margin-left: auto;
+        padding: 13px 16px;
+        border-radius: 10px;
+        background: #e9f1ff;
+      }
+
+      .msg.assistant {
+        padding-left: 16px;
+        border-left: 3px solid var(--accent);
+      }
+
+      .thinking {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 14px;
+      }
+
+      .tiny-dots {
+        display: inline-flex;
+        gap: 4px;
+      }
+
+      .tiny-dots span {
+        width: 5px;
+        height: 5px;
+        border-radius: 999px;
+        background: var(--accent);
+        animation: blink 1.2s infinite;
+      }
+
+      .tiny-dots span:nth-child(2) { animation-delay: 0.16s; }
+      .tiny-dots span:nth-child(3) { animation-delay: 0.32s; }
+
+      .composer {
+        border-top: 1px solid var(--line);
+        padding: 14px 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .input {
+        flex: 1;
+        height: 44px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0 14px;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+      }
+
+      .send {
+        width: 44px;
+        height: 44px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--ink);
+        color: white;
+        font-weight: 800;
+      }
+
+      .phone-wrap {
+        display: flex;
+        justify-content: center;
+      }
+
+      .phone {
+        width: 330px;
+        height: 660px;
+        border-radius: 34px;
+        padding: 14px;
+        background: #15181d;
+      }
+
+      .screen {
+        height: 100%;
+        border-radius: 24px;
+        background: #fbfcfd;
+        overflow: hidden;
+        display: grid;
+        grid-template-rows: 58px 1fr 72px;
+      }
+
+      .mobile-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 18px;
+        border-bottom: 1px solid #e5e9ef;
+      }
+
+      .mobile-title strong {
+        display: block;
+        font-size: 15px;
+      }
+
+      .mobile-title span {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .chip {
+        height: 26px;
+        padding: 0 10px;
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        background: #e6f3ef;
+        color: #0b5148;
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .mobile-feed {
+        padding: 18px;
+        background: #f5f7fa;
+      }
+
+      .mobile-card {
+        background: white;
+        border: 1px solid #e3e8ef;
+        border-radius: 12px;
+        padding: 13px 14px;
+        margin-bottom: 12px;
+        font-size: 13px;
+        line-height: 1.54;
+      }
+
+      .mobile-card.user {
+        background: #eef5ff;
+        border-color: #d7e6ff;
+      }
+
+      .label {
+        color: var(--muted);
+        font-size: 11px;
+        margin-bottom: 6px;
+      }
+
+      .typing::after {
+        content: "";
+        display: inline-block;
+        width: 7px;
+        height: 16px;
+        margin-left: 2px;
+        vertical-align: -3px;
+        background: var(--accent);
+        animation: cursor 0.8s infinite;
+      }
+
+      .mobile-compose {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 12px 14px;
+        border-top: 1px solid #e5e9ef;
+        background: white;
+      }
+
+      .mobile-input {
+        flex: 1;
+        height: 42px;
+        border-radius: 10px;
+        background: #f2f4f7;
+        color: #69707d;
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        font-size: 13px;
+      }
+
+      .mobile-send {
+        width: 42px;
+        height: 42px;
+        border-radius: 10px;
+        background: var(--accent);
+        color: white;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+      }
+
+      footer {
+        padding: 0 32px 26px;
+      }
+
+      .timeline {
+        max-width: 1180px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 10px;
+      }
+
+      .step {
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.78);
+        border-radius: 10px;
+        padding: 12px;
+        min-height: 88px;
+      }
+
+      .step strong {
+        display: block;
+        font-size: 13px;
+        margin-bottom: 6px;
+      }
+
+      .step span {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      @keyframes pulse {
+        70% { box-shadow: 0 0 0 10px rgba(15, 123, 108, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(15, 123, 108, 0); }
+      }
+
+      @keyframes blink {
+        0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+        40% { opacity: 1; transform: translateY(-3px); }
+      }
+
+      @keyframes cursor {
+        0%, 45% { opacity: 1; }
+        46%, 100% { opacity: 0; }
+      }
+
+      @media (max-width: 920px) {
+        header {
+          padding: 0 18px;
+        }
+
+        main {
+          padding: 20px 14px;
+        }
+
+        .canvas {
+          aspect-ratio: auto;
+          grid-template-columns: 1fr;
+        }
+
+        .desktop {
+          height: 520px;
+        }
+
+        .desktop-body {
+          grid-template-columns: 150px 1fr;
+        }
+
+        .phone {
+          width: min(330px, 100%);
+        }
+
+        .timeline {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <header>
+        <div class="brand">
+          <div class="mark" aria-hidden="true"></div>
+          <div>Mobile Codex</div>
+        </div>
+        <div class="status"><span class="pulse"></span> Broker connected · v1.1.11-text-sync</div>
+      </header>
+
+      <main>
+        <section class="canvas" aria-label="Mobile Codex demo">
+          <div class="desktop">
+            <div class="desktop-bar">
+              <span class="dot red"></span>
+              <span class="dot yellow"></span>
+              <span class="dot green"></span>
+            </div>
+            <div class="desktop-body">
+              <aside class="side">
+                <div class="side-title">Codex Desktop</div>
+                <div class="thread active">当前项目重构</div>
+                <div class="thread">Relay 部署</div>
+                <div class="thread">Android UI 审核</div>
+              </aside>
+              <section class="chat">
+                <div class="messages">
+                  <div class="msg user">把手机端改成只显示输入和 Codex 文本结果，降低同步延迟。</div>
+                  <div class="thinking">
+                    <span class="tiny-dots"><span></span><span></span><span></span></span>
+                    Codex 正在桌面会话中执行
+                  </div>
+                  <div class="msg assistant">
+                    已将工具调用和桥接事件从手机 UI 隐藏，保留文本结果；同步轮询和前端渲染节奏也已收紧。
+                  </div>
+                </div>
+                <div class="composer">
+                  <div class="input">来自手机的下一条指令会进入这里</div>
+                  <button class="send" type="button">↑</button>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div class="phone-wrap">
+            <div class="phone">
+              <div class="screen">
+                <div class="mobile-top">
+                  <div class="mobile-title">
+                    <strong>当前 Codex 会话</strong>
+                    <span>https://zyzlz.xin/mobile-codex/r/rorance-mac</span>
+                  </div>
+                  <span class="chip">远程</span>
+                </div>
+                <div class="mobile-feed">
+                  <div class="mobile-card user">
+                    <div class="label">你</div>
+                    看一下当前进度，完成后只展示结果。
+                  </div>
+                  <div class="mobile-card">
+                    <div class="label">Codex</div>
+                    <span class="typing">已完成 1.1.11 文本同步优化，手机端只保留输入与结果，工具细节默认隐藏。</span>
+                  </div>
+                  <div class="mobile-card">
+                    <div class="label">状态</div>
+                    Mac Relay 在线，Broker 隧道正常，等待下一条手机输入。
+                  </div>
+                </div>
+                <div class="mobile-compose">
+                  <div class="mobile-input">继续让 Codex 修改 README...</div>
+                  <div class="mobile-send">↑</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <div class="timeline">
+          <div class="step"><strong>扫码网页</strong><span>证明单会话绑定和手机可见性。</span></div>
+          <div class="step"><strong>UI 注入</strong><span>让手机输入进入当前 Codex Desktop 窗口。</span></div>
+          <div class="step"><strong>Broker</strong><span>摆脱同 Wi-Fi，支持公网远程连接。</span></div>
+          <div class="step"><strong>Android App</strong><span>替代浏览器页面，加入主题、附件和更新。</span></div>
+          <div class="step"><strong>1.1.11</strong><span>隐藏工具细节，只显示输入和文本结果。</span></div>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
