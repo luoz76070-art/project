@@ -34,6 +34,7 @@ import {
   Wifi,
   X,
 } from "lucide-react";
+import { collapseMirroredMessages, reconcileMessages, stripCodexAppDirectives } from "./messageReconciliation";
 import "./styles.css";
 
 type ThreadSummary = {
@@ -251,8 +252,8 @@ const statusKeepaliveMs = 60_000;
 const threadRuntimeCacheKey = "mobileCodexThreadRuntimeCacheV1";
 const cachedThreadLimit = 24;
 const cachedMessagesPerThread = 120;
-const appVersionName = "1.1.12-status-context-fix";
-const appVersionCode = 13;
+const appVersionName = "1.1.13-message-order-fix";
+const appVersionCode = 14;
 const appVersionLabel = `v${appVersionName}`;
 const updateManifestUrl = (import.meta.env.VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL ?? "").trim();
 
@@ -3051,19 +3052,14 @@ function shouldFallbackToRelay(error: unknown) {
 }
 
 function messagesForRender(messages: CodexMessage[]) {
-  const rendered: CodexMessage[] = [];
-  for (const message of messages) {
-    if (!isTextConversationMessage(message)) continue;
-    if (isEmptyChatMessage(message)) continue;
-    if (isGeneratedContextMessage(message)) continue;
-    const duplicateIndex = findRenderDuplicate(rendered, message);
-    if (duplicateIndex >= 0) {
-      rendered[duplicateIndex] = mergeRenderDuplicate(rendered[duplicateIndex], message);
-      continue;
-    }
-    rendered.push(message);
-  }
-  return rendered;
+  return collapseMirroredMessages(
+    messages.flatMap((message) => {
+      if (!isTextConversationMessage(message) || isEmptyChatMessage(message) || isGeneratedContextMessage(message)) return [];
+      if (message.role !== "assistant") return [message];
+      const text = stripCodexAppDirectives(message.text);
+      return text ? [{ ...message, text }] : [];
+    }),
+  );
 }
 
 function isTextConversationMessage(message: CodexMessage) {
@@ -3171,121 +3167,12 @@ function isRuntimeTurnActive(runtime: ThreadRuntime) {
   return runtime.sending;
 }
 
-function findRenderDuplicate(rendered: CodexMessage[], message: CodexMessage) {
-  if (!canDedupeRenderMessage(message)) return -1;
-  const start = Math.max(0, rendered.length - 18);
-  for (let index = rendered.length - 1; index >= start; index -= 1) {
-    const current = rendered[index];
-    if (!canDedupeRenderMessage(current)) continue;
-    if (current.role === "user" && message.role === "user" && isRenderDuplicate(current, message)) return index;
-    if (!isNearMessageTime(current, message)) continue;
-    if (isRenderDuplicate(current, message)) return index;
-  }
-  return -1;
-}
-
-function canDedupeRenderMessage(message: CodexMessage) {
-  return message.role === "user" || message.role === "assistant";
-}
-
-function isRenderDuplicate(current: CodexMessage, incoming: CodexMessage) {
-  if (current.role !== incoming.role) return false;
-  const currentText = normalizedRenderText(current.text);
-  const incomingText = normalizedRenderText(incoming.text);
-  if (!currentText || !incomingText) return false;
-
-  if (current.role === "user") {
-    return currentText === incomingText && (isOptimisticMessage(current) || isOptimisticMessage(incoming) || current.kind !== incoming.kind);
-  }
-
-  if (currentText === incomingText) return true;
-  return isIncrementalAssistantDuplicate(currentText, incomingText);
-}
-
-function mergeRenderDuplicate(current: CodexMessage, incoming: CodexMessage) {
-  const preferred = preferredRenderMessage(current, incoming);
-  return {
-    ...preferred,
-    id: current.id,
-  };
-}
-
-function preferredRenderMessage(current: CodexMessage, incoming: CodexMessage) {
-  if (current.role === "user") {
-    if (isOptimisticMessage(current) && !isOptimisticMessage(incoming)) {
-      return { ...incoming, attachments: incoming.attachments ?? current.attachments };
-    }
-    return current;
-  }
-  if (incoming.text.length > current.text.length) return incoming;
-  return current;
-}
-
-function isOptimisticMessage(message: CodexMessage) {
-  return message.kind === "local" || message.kind === "steeringUserMessage" || message.id.startsWith("local-") || message.id.startsWith("desktop-local-");
-}
-
-function isNearMessageTime(current: CodexMessage, incoming: CodexMessage) {
-  const currentTime = Date.parse(current.timestamp);
-  const incomingTime = Date.parse(incoming.timestamp);
-  if (!Number.isFinite(currentTime) || !Number.isFinite(incomingTime)) return true;
-  return Math.abs(incomingTime - currentTime) <= 180_000;
-}
-
-function normalizedRenderText(text: string) {
-  return text.replace(/\s+/g, " ").trim();
-}
-
-function isIncrementalAssistantDuplicate(currentText: string, incomingText: string) {
-  const shorter = currentText.length <= incomingText.length ? currentText : incomingText;
-  const longer = currentText.length > incomingText.length ? currentText : incomingText;
-  return shorter.length >= 24 && longer.startsWith(shorter);
-}
-
 function mergeMessages(current: CodexMessage[], incoming: CodexMessage[]) {
-  if (incoming.length === 0) return current;
-  const next = [...current];
-  const indexByKey = new Map(current.map((message, index) => [messageMergeKey(message), index]));
-  for (const message of incoming) {
-    const key = messageMergeKey(message);
-    const existingIndex = indexByKey.get(key);
-    if (existingIndex !== undefined) {
-      next[existingIndex] = preferredRenderMessage(next[existingIndex], message);
-      continue;
-    }
-    indexByKey.set(key, next.length);
-    next.push(message);
-  }
-  return sortMessages(next);
-}
-
-function messageMergeKey(message: CodexMessage) {
-  return `${message.timestamp}:${message.kind}:${message.role}:${message.text.slice(0, 120)}`;
+  return reconcileMessages(current, incoming);
 }
 
 function mergeMessagesById(current: CodexMessage[], incoming: CodexMessage[]) {
-  if (incoming.length === 0) return current;
-  const byId = new Map(current.map((message) => [message.id, message]));
-  const order = current.map((message) => message.id);
-  for (const message of incoming) {
-    if (!byId.has(message.id)) order.push(message.id);
-    byId.set(message.id, message);
-  }
-  return order.map((id) => byId.get(id)).filter((message): message is CodexMessage => Boolean(message));
-}
-
-function sortMessages(messages: CodexMessage[]) {
-  return messages
-    .map((message, index) => ({ message, index }))
-    .sort((left, right) => {
-      const leftTime = Date.parse(left.message.timestamp);
-      const rightTime = Date.parse(right.message.timestamp);
-      if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
-        return leftTime - rightTime;
-      }
-      return left.index - right.index;
-    })
-    .map((item) => item.message);
+  return reconcileMessages(current, incoming);
 }
 
 function capMessages(messages: CodexMessage[]) {

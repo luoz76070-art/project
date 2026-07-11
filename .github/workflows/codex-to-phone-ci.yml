@@ -30,5 +30,6 @@ jobs:
           cache: pnpm
           cache-dependency-path: codex-to-phone/pnpm-lock.yaml
       - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm test:messages
       - run: corepack pnpm typecheck
       - run: corepack pnpm build

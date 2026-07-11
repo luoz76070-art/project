@@ -18,7 +18,7 @@ Android App
 
 ```bash
 export VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL=https://downloads.example.com/mobile-codex/android/latest.json
-corepack pnpm android:apk:mac -- 1.1.12-self-hosted
+corepack pnpm android:apk:mac -- 1.1.13-self-hosted
 ```
 
 不配置 `VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL` 时，App 会显示“未配置更新源”，聊天、连接和控制功能仍可正常使用。
@@ -34,7 +34,7 @@ corepack pnpm android:apk:mac -- 1.1.12-self-hosted
 
    ```bash
    export VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL=https://downloads.example.com/mobile-codex/android/latest.json
-   corepack pnpm android:apk:mac -- 1.1.12-self-hosted
+   corepack pnpm android:apk:mac -- 1.1.13-self-hosted
    ```
 
 3. 配置发布目标：
@@ -50,9 +50,9 @@ corepack pnpm android:apk:mac -- 1.1.12-self-hosted
 
    ```bash
    scripts/publish-android-update.sh \
-     dist-apk/mobile-codex-1.1.12-self-hosted-debug.apk \
-     1.1.12-self-hosted \
-     13 \
+     dist-apk/mobile-codex-1.1.13-self-hosted-debug.apk \
+     1.1.13-self-hosted \
+     14 \
      "Release notes"
    ```
 
@@ -67,9 +67,9 @@ corepack pnpm android:apk:mac -- 1.1.12-self-hosted
 ```json
 {
   "platform": "android",
-  "versionName": "1.1.12-self-hosted",
-  "versionCode": 13,
-  "apkUrl": "https://downloads.example.com/mobile-codex/android/mobile-codex-1.1.12-self-hosted.apk",
+  "versionName": "1.1.13-self-hosted",
+  "versionCode": 14,
+  "apkUrl": "https://downloads.example.com/mobile-codex/android/mobile-codex-1.1.13-self-hosted.apk",
   "size": 4000000,
   "sha256": "replace-with-generated-sha256",
   "mandatory": false,

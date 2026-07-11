@@ -771,13 +771,11 @@ function truncate(value: string): string {
 }
 
 function dedupeMessages(messages: CodexMessage[]): CodexMessage[] {
-  const seen = new Set<string>();
-  const result: CodexMessage[] = [];
+  const byId = new Map<string, CodexMessage>();
+  const order: string[] = [];
   for (const message of messages) {
-    const key = `${message.role}:${message.kind}:${message.text}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(message);
+    if (!byId.has(message.id)) order.push(message.id);
+    byId.set(message.id, message);
   }
-  return result;
+  return order.map((id) => byId.get(id)).filter((message): message is CodexMessage => Boolean(message));
 }

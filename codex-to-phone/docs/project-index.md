@@ -14,7 +14,7 @@
 
 当前主入口：
 
-- Android APK：`1.1.12-status-context-fix` 或本地 `dist-apk/` 构建产物
+- Android APK：`1.1.13-message-order-fix` 或本地 `dist-apk/` 构建产物
 - Mac Relay App：`Mobile Codex Relay.app`
 - Mac 输入 helper：`Mobile Codex Input.app`
 - Relay/Broker：`apps/relay`
@@ -47,6 +47,7 @@
 - 公网 Broker 模型已落地，Android Endpoint 可以使用 `https://broker.example.com/r/my-mac` 这类稳定入口。
 - Android App 已支持 Endpoint/Token、线程列表、发送输入、上传附件、主题切换和在线更新检查。
 - `1.1.12-status-context-fix` 已把手机 UI 收敛为用户输入和 Codex 文本结果，默认隐藏工具调用、环境上下文和内部桥接事件。
+- `1.1.13-message-order-fix` 修复重复文本被误删、乐观消息与桌面落盘消息错配，以及缓存/增量消息排序不一致。
 - Android 更新源已经改成构建时配置，仓库不再绑定个人服务器或域名。
 
 ## 当前不应再继续的方向

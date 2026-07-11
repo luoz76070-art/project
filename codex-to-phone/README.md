@@ -45,7 +45,7 @@ Mac Relay App  ->  Codex Desktop
 | Input Helper | Swift、macOS Accessibility | 聚焦目标线程并把手机输入提交到 Codex Desktop |
 | Protocol Types | Codex app-server generated types | 解析线程、turn、审批和增量事件 |
 
-当前源码版本为 `1.1.12-status-context-fix`。主验证环境是 **macOS + Codex Desktop + Android**。Windows 相关代码仍保留，但不是当前重点支持路径。
+当前源码版本为 `1.1.13-message-order-fix`。主验证环境是 **macOS + Codex Desktop + Android**。Windows 相关代码仍保留，但不是当前重点支持路径。
 
 ## 快速开始
 
@@ -114,13 +114,13 @@ corepack pnpm android:setup:mac
 构建 APK：
 
 ```bash
-corepack pnpm android:apk:mac -- 1.1.12-local
+corepack pnpm android:apk:mac -- 1.1.13-local
 ```
 
 产物位于：
 
 ```text
-dist-apk/mobile-codex-1.1.12-local-debug.apk
+dist-apk/mobile-codex-1.1.13-local-debug.apk
 ```
 
 在 Android 上安装后，打开设置，填写 Relay Endpoint 和 Token，然后执行“测试连接”。
@@ -188,7 +188,7 @@ Token: replace-with-a-separate-phone-access-token
 
 ```bash
 export VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL=https://downloads.example.com/mobile-codex/android/latest.json
-corepack pnpm android:apk:mac -- 1.1.12-self-hosted
+corepack pnpm android:apk:mac -- 1.1.13-self-hosted
 ```
 
 不设置该变量时，App 会禁用在线更新检查，其他功能不受影响。
@@ -202,9 +202,9 @@ export MOBILE_CODEX_RELEASE_DIR=/var/www/mobile-codex/releases/android
 export MOBILE_CODEX_RELEASE_BASE_URL=https://downloads.example.com/mobile-codex/android
 
 scripts/publish-android-update.sh \
-  dist-apk/mobile-codex-1.1.12-self-hosted-debug.apk \
-  1.1.12-self-hosted \
-  13 \
+  dist-apk/mobile-codex-1.1.13-self-hosted-debug.apk \
+  1.1.13-self-hosted \
+  14 \
   "Your release notes"
 ```
 
@@ -215,6 +215,9 @@ scripts/publish-android-update.sh \
 ```bash
 # 类型检查
 corepack pnpm typecheck
+
+# 消息顺序和重复消息回归测试
+corepack pnpm test:messages
 
 # 构建 Relay 和移动端 Web
 corepack pnpm build
@@ -262,6 +265,7 @@ marketing            项目介绍素材和演示 HTML
 - `Phase 3`：用 React + Capacitor Android App 替代扫码网页。
 - `Phase 4`：增加线程分组、最近记录、平滑输出、状态标签、附件缩略图和在线更新。
 - `1.1.12`：保留连接后的记录，过滤环境上下文卡片，补充 Codex 运行状态。
+- `1.1.13`：按桌面事件顺序同步消息，保留连续相同输入，并只合并同一事件的双来源副本。
 
 早期方案的完成内容和限制记录在 [legacy-notes.md](docs/legacy-notes.md)。
 
@@ -281,6 +285,13 @@ marketing            项目介绍素材和演示 HTML
 - [架构与可行性](docs/architecture-feasibility.md)
 - [测试与验收](docs/test-and-acceptance-plan.md)
 - [项目档案入口](docs/project-index.md)
+- [参与贡献](CONTRIBUTING.md)
+
+## 参与贡献
+
+仓库公开，任何 GitHub 用户都可以 Fork 项目并提交 Pull Request。提交前请运行消息回归测试、类型检查和生产构建，并确保改动不包含 Token、私有地址、会话数据或本机绝对路径。
+
+直接提交到主仓库的权限只授予经过确认的协作者，需要由仓库管理员按 GitHub 用户名逐个邀请。完整流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## License
 
