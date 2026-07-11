@@ -403,7 +403,7 @@ function extractConversationMessages(state: Record<string, unknown>): CodexMessa
     const items = Array.isArray(record.items) ? record.items : [];
     const hasUserItem = items.some((item) => item && typeof item === "object" && (item as Record<string, unknown>).type === "userMessage");
     const inputText = hasUserItem ? "" : extractDesktopInputText((record.params as Record<string, unknown> | undefined)?.input);
-    if (inputText) {
+    if (inputText && isDisplayableUserText(inputText)) {
       messages.push({
         id: `${turnId}-input`,
         timestamp,
@@ -430,7 +430,7 @@ function desktopItemToMessage(item: unknown, turnId: string, itemIndex: number, 
   const timestamp = timestampFromItem(record) ?? fallbackTimestamp;
   if (type === "userMessage") {
     const text = extractDesktopInputText(record.content);
-    return text ? { id, timestamp, role: "user", text, kind: type } : null;
+    return text && isDisplayableUserText(text) ? { id, timestamp, role: "user", text, kind: type } : null;
   }
   if (type === "agentMessage") {
     const text = typeof record.text === "string" ? record.text : "";
@@ -467,6 +467,28 @@ function extractDesktopInputText(content: unknown): string {
     .filter(Boolean)
     .join("\n\n")
     .trim();
+}
+
+function isDisplayableUserText(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return !isGeneratedContextText(trimmed);
+}
+
+function isGeneratedContextText(trimmed: string): boolean {
+  return (
+    trimmed.startsWith("<environment_context>") ||
+    trimmed.startsWith("<permissions instructions>") ||
+    trimmed.startsWith("<app-context>") ||
+    trimmed.startsWith("<collaboration_mode>") ||
+    trimmed.startsWith("<personality_spec>") ||
+    trimmed.startsWith("<skills_instructions>") ||
+    trimmed.startsWith("<plugins_instructions>") ||
+    trimmed.startsWith("# AGENTS.md instructions") ||
+    trimmed.startsWith("<INSTRUCTIONS>") ||
+    trimmed.startsWith("Knowledge cutoff:") ||
+    trimmed.startsWith("You are ")
+  );
 }
 
 function normalizeStreamStatus(state: Record<string, unknown>): DesktopStreamSnapshot["status"] {

@@ -473,6 +473,35 @@ textarea {
   scrollbar-width: thin;
 }
 
+.thread-group {
+  display: grid;
+  gap: 7px;
+}
+
+.thread-group-label {
+  min-height: 24px;
+  padding: 2px 2px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.thread-group-label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-group-label em {
+  font-style: normal;
+  color: var(--subtle);
+}
+
 .thread-row {
   width: 100%;
   min-height: 74px;
@@ -834,23 +863,46 @@ textarea {
 
 .generation-status {
   align-self: flex-start;
-  width: min(360px, 92%);
-  min-height: 40px;
-  padding: 9px 11px;
+  width: max-content;
+  max-width: min(360px, 92%);
+  min-height: 30px;
+  margin-top: -3px;
+  padding: 6px 10px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   border: 1px solid var(--hairline);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--panel-strong);
   color: var(--muted);
   box-shadow: var(--inner);
 }
 
+.generation-status.from-user {
+  align-self: flex-end;
+  margin-right: 10px;
+}
+
+.generation-status.from-assistant,
+.generation-status.from-system {
+  align-self: flex-start;
+  margin-left: 10px;
+}
+
+.generation-status.outputting {
+  border-color: rgba(42, 120, 168, 0.22);
+  background: var(--accent-soft);
+}
+
+.generation-status.approval {
+  border-color: rgba(226, 180, 94, 0.28);
+  background: rgba(226, 180, 94, 0.13);
+}
+
 .generation-status > span:last-child {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 1px;
 }
 
 .generation-status strong,
@@ -862,13 +914,18 @@ textarea {
 
 .generation-status strong {
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .generation-status em {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-style: normal;
+}
+
+.generation-status.approval strong,
+.generation-status.approval em {
+  color: var(--warning);
 }
 
 .generation-dots {
@@ -1660,6 +1717,7 @@ textarea {
   .codex-shell.mode-left .thread-path,
   .codex-shell.mode-left .thread-time,
   .codex-shell.mode-left .thread-source,
+  .codex-shell.mode-left .thread-group-label,
   .codex-shell.mode-left .search-field {
     display: none;
   }
@@ -1698,7 +1756,8 @@ textarea {
   }
 
   .codex-shell.mode-top .thread-path,
-  .codex-shell.mode-top .thread-source {
+  .codex-shell.mode-top .thread-source,
+  .codex-shell.mode-top .thread-group-label {
     display: none;
   }
 
@@ -1815,9 +1874,10 @@ textarea {
   }
 
   .generation-status {
-    width: min(320px, 92%);
-    min-height: 38px;
-    padding: 8px 10px;
+    width: max-content;
+    max-width: min(320px, 92%);
+    min-height: 30px;
+    padding: 6px 9px;
   }
 
   .composer-panel {

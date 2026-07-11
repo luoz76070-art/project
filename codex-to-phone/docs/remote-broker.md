@@ -1,10 +1,6 @@
-# 远程 Broker 模式
+# 远程 Broker 部署
 
-## 目标
-
-远程模式不依赖局域网、同一 Wi-Fi、手机热点或路由器端口转发。
-
-链路：
+远程模式不依赖同一 Wi-Fi、公网家庭 IP、手机热点或路由器端口转发。
 
 ```text
 Android App
@@ -17,34 +13,73 @@ Public Broker
         |
 Mac Relay App
   outbound WebSocket tunnel
-  local Relay: http://127.0.0.1:8787
         |
         v
 Codex Desktop
 ```
 
-Mac 只需要能访问公网；Android 也只需要能访问公网。
+## 1. 准备凭证
 
-## Broker 部署
-
-在一台有公网域名或公网 IP 的服务器上运行：
+为每台 Mac 生成独立的 Relay Secret：
 
 ```bash
-corepack pnpm install
-corepack pnpm --filter @mobile-codex/relay build
-MOBILE_CODEX_BROKER_HOST=0.0.0.0 MOBILE_CODEX_BROKER_PORT=18888 \
-  node apps/relay/dist/brokerServer.js
+openssl rand -hex 32
 ```
 
-生产环境建议用 Nginx/Caddy/Cloudflare 将 HTTPS 域名反代到 `127.0.0.1:18888`，并确保 WebSocket upgrade 可用。
+Broker 使用 JSON 对象配置允许连接的 Relay：
 
-如果 Broker 挂在域名前缀下，例如 `https://zyzlz.xin/mobile-codex`，需要让反代去掉这个前缀：
+```bash
+export MOBILE_CODEX_BROKER_RELAYS='{"my-mac":"replace-with-at-least-24-random-characters"}'
+```
+
+生产环境不要启用 `MOBILE_CODEX_BROKER_ALLOW_DYNAMIC_RELAYS=true`。该开关只用于本机开发。
+
+## 2. 启动 Broker
+
+```bash
+corepack pnpm install --frozen-lockfile
+corepack pnpm --filter @mobile-codex/relay build
+
+export MOBILE_CODEX_BROKER_HOST=127.0.0.1
+export MOBILE_CODEX_BROKER_PORT=18888
+export MOBILE_CODEX_BROKER_RELAYS='{"my-mac":"replace-with-at-least-24-random-characters"}'
+
+corepack pnpm --filter @mobile-codex/relay broker:start
+```
+
+建议使用 systemd、Supervisor 或容器编排保持 Broker 常驻。
+
+## 3. 配置反向代理
+
+Nginx 示例：
 
 ```nginx
-location = /mobile-codex {
-    return 301 https://$host/mobile-codex/;
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    '' close;
 }
 
+server {
+    listen 443 ssl http2;
+    server_name broker.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:18888;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+}
+```
+
+Broker 如果部署在 `/mobile-codex/` 前缀下，反向代理需要在转发时去掉该前缀：
+
+```nginx
 location ^~ /mobile-codex/ {
     proxy_pass http://127.0.0.1:18888/;
     proxy_http_version 1.1;
@@ -58,9 +93,9 @@ location ^~ /mobile-codex/ {
 }
 ```
 
-## Mac 配置
+## 4. 配置 Mac Relay
 
-Mac Relay App 配置文件：
+配置文件：
 
 ```text
 ~/Library/Application Support/Mobile Codex Relay/config.json
@@ -71,75 +106,51 @@ Mac Relay App 配置文件：
 ```json
 {
   "port": 8787,
-  "token": "mobile-codex-CHANGE-ME",
+  "token": "replace-with-a-separate-phone-access-token",
   "brokerUrl": "https://broker.example.com",
   "relayId": "my-mac",
-  "relaySecret": "replace-with-long-random-secret"
+  "relaySecret": "replace-with-at-least-24-random-characters"
 }
 ```
 
-保存后重新打开 `Mobile Codex Relay.app`。App 会启动：
+`token` 用于 Android 访问 Relay。`relaySecret` 只用于 Mac 和 Broker 建立隧道，两者必须使用不同的随机值。
 
-- 本地 Relay：`http://127.0.0.1:8787`
-- 远程隧道：Mac 主动连 `brokerUrl`
+重新打开 `Mobile Codex Relay.app` 后，App 会自动启动本地 Relay 和公网隧道。
 
-当前 `zyzlz.xin` 部署示例：
-
-```json
-{
-  "port": 8787,
-  "token": "mobile-codex-CHANGE-ME",
-  "brokerUrl": "https://zyzlz.xin/mobile-codex",
-  "relayId": "rorance-mac",
-  "relaySecret": "replace-with-long-random-secret"
-}
-```
-
-## Android 配置
-
-安装：
-
-```text
-dist-apk/mobile-codex-mac-remote-debug.apk
-```
-
-Android App 设置里填写：
+## 5. 配置 Android
 
 ```text
 Endpoint: https://broker.example.com/r/my-mac
-Token: mobile-codex-CHANGE-ME
+Token: replace-with-a-separate-phone-access-token
 ```
 
-当前 `zyzlz.xin` 部署对应：
-
-```text
-Endpoint: https://zyzlz.xin/mobile-codex/r/rorance-mac
-Token: mobile-codex-CHANGE-ME
-```
-
-这里的 Token 仍然是 Mac Relay 的 `token`，不是 `relaySecret`。`relaySecret` 只用于 Mac 和 Broker 建立隧道。
-
-## 本地验证
-
-本机模拟 Broker：
+## 6. 验证
 
 ```bash
-MOBILE_CODEX_BROKER_HOST=127.0.0.1 MOBILE_CODEX_BROKER_PORT=18888 \
+curl https://broker.example.com/health
+curl -H 'Authorization: Bearer replace-with-a-separate-phone-access-token' \
+  https://broker.example.com/r/my-mac/api/threads?limit=1
+```
+
+健康检查只返回连接数量，不公开 Relay ID。
+
+## 7. 本机开发模式
+
+```bash
+MOBILE_CODEX_BROKER_HOST=127.0.0.1 \
+MOBILE_CODEX_BROKER_PORT=18888 \
+MOBILE_CODEX_BROKER_ALLOW_DYNAMIC_RELAYS=true \
   node apps/relay/dist/brokerServer.js
 ```
 
-另开一个终端模拟 Mac 隧道：
+另开一个终端：
 
 ```bash
 MOBILE_CODEX_BROKER_URL=http://127.0.0.1:18888 \
 MOBILE_CODEX_RELAY_ID=test-mac \
-MOBILE_CODEX_RELAY_SECRET=test-secret \
+MOBILE_CODEX_RELAY_SECRET=local-development-secret-only \
 MOBILE_CODEX_LOCAL_RELAY=http://127.0.0.1:8787 \
   node apps/relay/dist/remoteTunnelClient.js
 ```
 
-验证：
-
-```bash
-curl http://127.0.0.1:18888/r/test-mac/health
-```
+动态 Relay 模式不适合公网部署。

@@ -1,6 +1,6 @@
 # Mobile Codex 工程档案入口
 
-更新时间：2026-05-16
+更新时间：2026-07-11
 
 ## 作用
 
@@ -14,7 +14,7 @@
 
 当前主入口：
 
-- Android APK：`1.1.11-text-sync` 发布包或本地 `dist-apk/` 构建产物
+- Android APK：`1.1.12-status-context-fix` 或本地 `dist-apk/` 构建产物
 - Mac Relay App：`Mobile Codex Relay.app`
 - Mac 输入 helper：`Mobile Codex Input.app`
 - Relay/Broker：`apps/relay`
@@ -44,10 +44,10 @@
 
 - Mac Relay App 可以本地启动 Relay 并读取 Codex Desktop 会话。
 - Mac 输入 helper 通过辅助功能把手机文本提交到 Codex Desktop 当前线程。
-- 公网 Broker 模型已落地，Android Endpoint 可以使用 `https://zyzlz.xin/mobile-codex/r/rorance-mac` 这类稳定入口。
+- 公网 Broker 模型已落地，Android Endpoint 可以使用 `https://broker.example.com/r/my-mac` 这类稳定入口。
 - Android App 已支持 Endpoint/Token、线程列表、发送输入、上传附件、主题切换和在线更新检查。
-- `1.1.11-text-sync` 已把手机 UI 收敛为用户输入和 Codex 文本结果，默认隐藏工具调用和内部桥接事件。
-- 公开 APK 和 manifest 已按 `1.1.11-text-sync` 发布。
+- `1.1.12-status-context-fix` 已把手机 UI 收敛为用户输入和 Codex 文本结果，默认隐藏工具调用、环境上下文和内部桥接事件。
+- Android 更新源已经改成构建时配置，仓库不再绑定个人服务器或域名。
 
 ## 当前不应再继续的方向
 

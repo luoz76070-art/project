@@ -1,6 +1,6 @@
 # Legacy Notes
 
-这份文件只保留 Codex To Phone 早期实现的“完成内容”和“局限性”。旧 bridge、Cloudflare Quick Tunnel、Codex 本地 skill 以及 `Codex Live Session Input.app` 相关代码已经从当前源码主线清理，避免污染 1.1.11 App 架构。
+这份文件只保留 Codex To Phone 早期实现的“完成内容”和“局限性”。旧 bridge、Cloudflare Quick Tunnel、Codex 本地 skill 以及 `Codex Live Session Input.app` 相关代码已经从当前源码主线清理，避免污染当前 App 架构。
 
 ## 早期目标
 

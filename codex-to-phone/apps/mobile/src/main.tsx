@@ -231,7 +231,7 @@ const defaultProfileId = localStorage.getItem("activeConnectionProfileId") ?? sa
 const defaultEndpoint =
   savedProfiles.find((profile) => profile.id === defaultProfileId)?.endpoint ?? localStorage.getItem("relayEndpoint") ?? "http://127.0.0.1:8787";
 const defaultToken =
-  savedProfiles.find((profile) => profile.id === defaultProfileId)?.token ?? localStorage.getItem("relayToken") ?? "change-me";
+  savedProfiles.find((profile) => profile.id === defaultProfileId)?.token ?? localStorage.getItem("relayToken") ?? "";
 const defaultTheme = (localStorage.getItem("themeMode") as ThemeMode | null) ?? "system";
 const defaultSplitMode = (localStorage.getItem("splitMode") as SplitMode | null) ?? "auto";
 const defaultApprovalPolicy = (localStorage.getItem("approvalPolicy") as ApprovalPolicy | null) ?? "never";
@@ -239,19 +239,22 @@ const defaultSandboxMode = (localStorage.getItem("sandboxMode") as SandboxMode |
 const defaultSidePaneSize = savedNumber("sidePaneSize", 320, 96, 520);
 const defaultTopPaneSize = savedNumber("topPaneSize", 220, 110, 520);
 const newThreadId = "__new_thread__";
-const maxMessagesPerThread = 90;
-const desktopLatestMaxBytes = 131_072;
-const desktopLatestMaxMessages = 50;
+const maxMessagesPerThread = 240;
+const desktopLatestMaxBytes = 65_536;
+const desktopLatestMaxMessages = 24;
 const desktopPollActiveMs = 300;
 const desktopPollIdleMs = 1200;
 const livePollFallbackMs = 800;
 const liveSnapshotThrottleMs = 80;
 const smoothTextFrameMs = 26;
 const statusKeepaliveMs = 60_000;
-const appVersionName = "1.1.11-text-sync";
-const appVersionCode = 12;
+const threadRuntimeCacheKey = "mobileCodexThreadRuntimeCacheV1";
+const cachedThreadLimit = 24;
+const cachedMessagesPerThread = 120;
+const appVersionName = "1.1.12-status-context-fix";
+const appVersionCode = 13;
 const appVersionLabel = `v${appVersionName}`;
-const updateManifestUrl = "https://zyzlz.xin/mobile-codex/releases/android/latest.json";
+const updateManifestUrl = (import.meta.env.VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL ?? "").trim();
 
 function App() {
   const [connectionProfiles, setConnectionProfiles] = useState<ConnectionProfile[]>(savedProfiles);
@@ -266,7 +269,7 @@ function App() {
   const [topPaneSize, setTopPaneSize] = useState(defaultTopPaneSize);
   const [resizingPane, setResizingPane] = useState<"side" | "top" | null>(null);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
-  const [threadState, setThreadState] = useState<Record<string, ThreadRuntime>>({});
+  const [threadState, setThreadState] = useState<Record<string, ThreadRuntime>>(() => loadThreadRuntimeCache());
   const [selected, setSelected] = useState<ThreadSummary | null>(null);
   const [isNewThread, setIsNewThread] = useState(false);
   const [query, setQuery] = useState("");
@@ -322,6 +325,7 @@ function App() {
         .includes(needle),
     );
   }, [threads, query]);
+  const groupedFiltered = useMemo(() => groupThreadsByProject(filtered), [filtered]);
 
   const workspaceTitle = selected?.threadName || (isNewThread ? "新线程" : "Mobile Codex");
   const workspaceSubtitle =
@@ -343,8 +347,15 @@ function App() {
     hasAssistantOutput: latestAssistantHasText,
     pendingApproval: pendingApprovals.length > 0,
   });
-  const showTurnActivity = Boolean(
-    !loadingMessages && (isLiveTurnActive || sending) && !activeRuntime.lastTurnError && !(activeRuntime.turnStatus === "completed" && latestAssistantHasText),
+  const inlineTurnIndicator = turnInlineIndicator(visibleMessages, activeRuntime, {
+    desktop: canUseDesktopIpc || activeRuntime.watchMode === "desktop-tail",
+    pendingApproval: pendingApprovals.length > 0,
+  });
+  const showInlineTurnIndicator = Boolean(
+    !loadingMessages &&
+      inlineTurnIndicator &&
+      !activeRuntime.lastTurnError &&
+      !(activeRuntime.turnStatus === "completed" && latestAssistantHasText),
   );
   const canControlSelected = Boolean(isNewThread || selected);
   const canSend = Boolean(draft.trim() || attachments.length > 0) && canControlSelected && (!sending || isLiveTurnActive);
@@ -392,10 +403,15 @@ function App() {
       saveConnectionSettings(endpoint, token);
       const data = await loadThreadList(endpoint, token);
       const activeTurns = await loadActiveTurns(endpoint, token).catch(() => []);
+      const retainedThreads = threads.filter((thread) => {
+        const runtime = getRuntime(threadState, thread.id);
+        return thread.id === selected?.id || runtime.loaded || runtime.messages.length > 0;
+      });
       const mergedThreads = mergeThreads(
         activeTurns.map((turn) => threadFromLiveTurn(turn)).filter((thread): thread is ThreadSummary => Boolean(thread)),
         data.threads,
-      );
+        retainedThreads,
+      ).slice(0, 12);
       setThreads(mergedThreads);
       setStatus(`已同步 ${mergedThreads.length} 个线程`);
       void refreshActiveDesktopThread();
@@ -493,18 +509,28 @@ function App() {
       const shouldUseDesktopTail = isDesktopSource(thread);
       if (!getRuntime(threadState, thread.id).loaded || shouldUseDesktopTail) {
         const data = await readThread(endpoint, token, thread);
-        patchRuntime(thread.id, {
-          messages: capMessages(data.messages),
-          loaded: true,
-          cursor: data.cursor ?? 0,
-          watchMode: shouldUseDesktopTail ? "desktop-tail" : "none",
-          watching: shouldUseDesktopTail,
-          readonlyReason: shouldUseDesktopTail
-            ? "当前通过桌面 session 日志实时读取；发送会优先进入电脑 Codex。Windows 走 Desktop IPC，macOS 走可见 UI 注入。"
-            : "",
-          status: shouldUseDesktopTail ? `桌面实时监听中，${data.messages.length} 条消息` : `已打开 ${data.messages.length} 条消息`,
+        updateRuntime(thread.id, (runtime) => {
+          const mergedMessages = capMessages(mergeMessages(runtime.messages, data.messages));
+          return {
+            ...runtime,
+            messages: mergedMessages,
+            loaded: true,
+            cursor: data.cursor ?? runtime.cursor,
+            watchMode: shouldUseDesktopTail ? "desktop-tail" : "none",
+            watching: shouldUseDesktopTail,
+            readonlyReason: shouldUseDesktopTail
+              ? "当前通过桌面 session 日志实时读取；发送会优先进入电脑 Codex。Windows 走 Desktop IPC，macOS 走可见 UI 注入。"
+              : "",
+            status: shouldUseDesktopTail
+              ? `桌面实时监听中，保留 ${messagesForRender(mergedMessages).length} 条记录`
+              : `已打开 ${messagesForRender(mergedMessages).length} 条记录`,
+          };
         });
-        setStatus(`已打开 ${data.messages.length} 条消息`);
+        patchRuntime(thread.id, {
+          loaded: true,
+          loading: false,
+        });
+        setStatus(data.messages.length > 0 ? "已同步最新记录，原有记录已保留" : "已打开线程，原有记录已保留");
       } else {
         setStatus("已切换线程");
       }
@@ -548,6 +574,17 @@ function App() {
   }
 
   async function checkForUpdates(manual: boolean) {
+    if (!updateManifestUrl) {
+      const detail = "当前构建未配置在线更新地址";
+      setUpdateState((current) => ({
+        ...current,
+        checking: false,
+        error: manual ? detail : "",
+        lastCheckedAt: manual ? new Date().toISOString() : current.lastCheckedAt,
+      }));
+      if (manual) setStatus(detail);
+      return;
+    }
     setUpdateState((current) => ({ ...current, checking: true, error: "" }));
     try {
       const manifest = await apiGet<AndroidUpdateManifest>(`${updateManifestUrl}?t=${Date.now()}`);
@@ -1220,6 +1257,10 @@ function App() {
   }, [sandboxMode]);
 
   useEffect(() => {
+    saveThreadRuntimeCache(threadState);
+  }, [threadState]);
+
+  useEffect(() => {
     const element = messagesRef.current;
     if (!element) return;
     if (forceBottomRef.current || atBottomRef.current) {
@@ -1544,22 +1585,30 @@ function App() {
           </div>
 
           <div className="thread-list" aria-label="Codex 线程列表">
-            {filtered.map((thread) => {
-              const detail = threadListDetail(thread);
-              return (
-                <button
-                  key={thread.id}
-                  className={`thread-row ${selected?.id === thread.id ? "active" : ""}`}
-                  onClick={() => void openThread(thread, { closeSidebar: true })}
-                >
-                  <span className="thread-name">{cleanTitle(thread.threadName)}</span>
-                  <span className="thread-time">{formatDate(thread.updatedAt)}</span>
-                  <span className={`thread-source ${sourceClass(thread.source)}`}>{sourceLabel(thread.source)}</span>
-                  {activeDesktopThreadId === thread.id && <span className="live-chip">当前桌面</span>}
-                  {detail && <span className="thread-path">{detail}</span>}
-                </button>
-              );
-            })}
+            {groupedFiltered.map((group) => (
+              <section className="thread-group" key={group.key}>
+                <div className="thread-group-label">
+                  <span>{group.label}</span>
+                  <em>{group.threads.length}</em>
+                </div>
+                {group.threads.map((thread) => {
+                  const detail = threadListDetail(thread);
+                  return (
+                    <button
+                      key={thread.id}
+                      className={`thread-row ${selected?.id === thread.id ? "active" : ""}`}
+                      onClick={() => void openThread(thread, { closeSidebar: true })}
+                    >
+                      <span className="thread-name">{cleanTitle(thread.threadName)}</span>
+                      <span className="thread-time">{formatDate(thread.updatedAt)}</span>
+                      <span className={`thread-source ${sourceClass(thread.source)}`}>{sourceLabel(thread.source)}</span>
+                      {activeDesktopThreadId === thread.id && <span className="live-chip">当前桌面</span>}
+                      {detail && <span className="thread-path">{detail}</span>}
+                    </button>
+                  );
+                })}
+              </section>
+            ))}
             {filtered.length === 0 && (
               <div className="empty-state">
                 <MessageSquare size={22} />
@@ -1621,20 +1670,28 @@ function App() {
               </div>
             )}
             {visibleMessages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                smooth={smoothLatestAssistant && message.id === latestAssistantMessageId}
-                smoothPending={smoothPending && message.id === latestAssistantMessageId}
-                onSmoothDone={() => {
-                  if (!activeThreadKey || message.id !== activeRuntime.smoothMessageId) return;
-                  if (activeRuntime.sending || activeRuntime.turnStatus === "starting" || activeRuntime.turnStatus === "inProgress") return;
-                  patchRuntime(activeThreadKey, { smoothMessageId: null });
-                }}
-                onCopy={() => copyText(message.text, message.id)}
-              />
+              <React.Fragment key={message.id}>
+                <MessageBubble
+                  message={message}
+                  smooth={smoothLatestAssistant && message.id === latestAssistantMessageId}
+                  smoothPending={smoothPending && message.id === latestAssistantMessageId}
+                  onSmoothDone={() => {
+                    if (!activeThreadKey || message.id !== activeRuntime.smoothMessageId) return;
+                    if (activeRuntime.sending || activeRuntime.turnStatus === "starting" || activeRuntime.turnStatus === "inProgress") return;
+                    patchRuntime(activeThreadKey, { smoothMessageId: null });
+                  }}
+                  onCopy={() => copyText(message.text, message.id)}
+                />
+                {showInlineTurnIndicator && inlineTurnIndicator?.messageId === message.id && (
+                  <GenerationStatus
+                    label={inlineTurnIndicator.label}
+                    detail={inlineTurnIndicator.detail}
+                    tone={inlineTurnIndicator.tone}
+                    anchorRole={message.role}
+                  />
+                )}
+              </React.Fragment>
             ))}
-            {showTurnActivity && <GenerationStatus label={turnActivity.label} detail={turnActivity.detail} />}
           </div>
 
           {hasNewMessages && (
@@ -1748,6 +1805,8 @@ function App() {
                 ? "检查中"
                 : updateState.available
                   ? `可升级到 v${updateState.manifest?.versionName}`
+                  : !updateManifestUrl
+                    ? "未配置更新源"
                   : updateState.error
                     ? "检查失败"
                     : "已是最新"}
@@ -1755,7 +1814,7 @@ function App() {
           </div>
           {updateState.manifest?.notes && <p className="update-note">{updateState.manifest.notes}</p>}
           <div className="settings-actions">
-            <button className="action-button" onClick={() => void checkForUpdates(true)} disabled={updateState.checking}>
+            <button className="action-button" onClick={() => void checkForUpdates(true)} disabled={updateState.checking || !updateManifestUrl}>
               {updateState.checking ? <Loader2 size={16} className="spin" /> : <RefreshCcw size={16} />}
               <span>检查更新</span>
             </button>
@@ -2018,9 +2077,19 @@ function SmoothText({ text, active, pending, onDone }: { text: string; active: b
   );
 }
 
-function GenerationStatus({ label, detail }: { label: string; detail: string }) {
+function GenerationStatus({
+  label,
+  detail,
+  tone,
+  anchorRole,
+}: {
+  label: string;
+  detail: string;
+  tone: "thinking" | "outputting" | "approval";
+  anchorRole: string;
+}) {
   return (
-    <div className="generation-status" role="status" aria-live="polite">
+    <div className={`generation-status ${tone} ${roleClass(anchorRole)}`} role="status" aria-live="polite">
       <span className="generation-dots" aria-hidden="true">
         <i />
         <i />
@@ -2230,9 +2299,9 @@ function clamp(value: number, min: number, max: number) {
 
 async function loadThreadList(endpoint: string, token: string): Promise<{ threads: ThreadSummary[] }> {
   try {
-    return await apiGet<{ threads: ThreadSummary[] }>(buildUrl(endpoint, "/api/live/threads?limit=120"), token);
-  } catch {
     return await apiGet<{ threads: ThreadSummary[] }>(buildUrl(endpoint, "/api/threads?limit=120"), token);
+  } catch {
+    return await apiGet<{ threads: ThreadSummary[] }>(buildUrl(endpoint, "/api/live/threads?limit=120"), token);
   }
 }
 
@@ -2254,10 +2323,10 @@ function threadFromLiveTurn(turn: LiveTurnSnapshot): ThreadSummary | null {
   };
 }
 
-function mergeThreads(primary: ThreadSummary[], secondary: ThreadSummary[]) {
+function mergeThreads(...groups: ThreadSummary[][]) {
   const seen = new Set<string>();
   const result: ThreadSummary[] = [];
-  for (const thread of [...primary, ...secondary]) {
+  for (const thread of groups.flat()) {
     if (seen.has(thread.id)) continue;
     seen.add(thread.id);
     result.push(thread);
@@ -2504,7 +2573,7 @@ function loadConnectionProfiles(): ConnectionProfile[] {
       id: "default",
       name: "本机 Relay",
       endpoint: normalizeEndpoint(localStorage.getItem("relayEndpoint") ?? "http://127.0.0.1:8787"),
-      token: localStorage.getItem("relayToken") ?? "change-me",
+      token: localStorage.getItem("relayToken") ?? "",
       updatedAt: new Date().toISOString(),
     },
   ];
@@ -2557,6 +2626,29 @@ function threadListDetail(thread: ThreadSummary) {
   return isUsefulThreadDetail(detail) ? detail : "";
 }
 
+function groupThreadsByProject(threads: ThreadSummary[]) {
+  const groups = new Map<string, { key: string; label: string; threads: ThreadSummary[] }>();
+  for (const thread of threads) {
+    const key = projectGroupKey(thread.cwd);
+    const group = groups.get(key) ?? { key, label: projectGroupLabel(thread.cwd), threads: [] };
+    group.threads.push(thread);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
+function projectGroupKey(cwd: string | null | undefined) {
+  const normalized = normalizePathText(cwd);
+  return normalized || "__uncategorized__";
+}
+
+function projectGroupLabel(cwd: string | null | undefined) {
+  const normalized = normalizePathText(cwd);
+  if (!normalized) return "未分类项目";
+  const parts = normalized.split(/[\\/]+/).filter(Boolean);
+  return parts.at(-1) || normalized;
+}
+
 function cleanThreadOriginator(value: string | null | undefined) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   if (/^codex\s+desktop$/i.test(text)) return "";
@@ -2568,12 +2660,57 @@ function firstLine(value: string) {
 }
 
 function pathTail(value: string | null | undefined) {
-  if (!value) return "";
-  const normalized = value.replace(/^["'`]+|["'`]+$/g, "").trim();
+  const normalized = normalizePathText(value);
   if (!isUsefulThreadDetail(normalized) || normalized === "." || normalized === "~") return "";
   const parts = normalized.split(/[\\/]+/).filter(Boolean);
   const tail = parts.slice(-2).join("\\");
   return isUsefulThreadDetail(tail) ? tail : "";
+}
+
+function normalizePathText(value: string | null | undefined) {
+  return String(value || "").replace(/^["'`]+|["'`]+$/g, "").trim();
+}
+
+function loadThreadRuntimeCache(): Record<string, ThreadRuntime> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(threadRuntimeCacheKey) ?? "{}") as Record<string, { messages?: CodexMessage[]; cursor?: number }>;
+    const result: Record<string, ThreadRuntime> = {};
+    for (const [threadId, item] of Object.entries(parsed)) {
+      const messages = Array.isArray(item.messages) ? item.messages.slice(-cachedMessagesPerThread) : [];
+      if (messages.length === 0) continue;
+      result[threadId] = {
+        ...defaultRuntime(),
+        messages,
+        loaded: true,
+        cursor: Number.isFinite(item.cursor) ? Number(item.cursor) : 0,
+        status: `已载入最近 ${messages.length} 条缓存`,
+      };
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function saveThreadRuntimeCache(state: Record<string, ThreadRuntime>) {
+  try {
+    const entries = Object.entries(state)
+      .filter(([, runtime]) => runtime.messages.length > 0)
+      .sort(([, left], [, right]) => Date.parse(right.messages.at(-1)?.timestamp ?? "") - Date.parse(left.messages.at(-1)?.timestamp ?? ""))
+      .slice(0, cachedThreadLimit);
+    const payload = Object.fromEntries(
+      entries.map(([threadId, runtime]) => [
+        threadId,
+        {
+          cursor: runtime.cursor,
+          messages: runtime.messages.slice(-cachedMessagesPerThread),
+        },
+      ]),
+    );
+    localStorage.setItem(threadRuntimeCacheKey, JSON.stringify(payload));
+  } catch {
+    // Cache is a best-effort mobile UX layer.
+  }
 }
 
 function isUsefulThreadDetail(value: string | null | undefined) {
@@ -2918,6 +3055,7 @@ function messagesForRender(messages: CodexMessage[]) {
   for (const message of messages) {
     if (!isTextConversationMessage(message)) continue;
     if (isEmptyChatMessage(message)) continue;
+    if (isGeneratedContextMessage(message)) continue;
     const duplicateIndex = findRenderDuplicate(rendered, message);
     if (duplicateIndex >= 0) {
       rendered[duplicateIndex] = mergeRenderDuplicate(rendered[duplicateIndex], message);
@@ -2934,6 +3072,24 @@ function isTextConversationMessage(message: CodexMessage) {
 
 function isEmptyChatMessage(message: CodexMessage) {
   return !isToolMessage(message) && message.text.trim().length === 0;
+}
+
+function isGeneratedContextMessage(message: CodexMessage) {
+  if (message.role !== "user") return false;
+  const text = message.text.trim();
+  return (
+    text.startsWith("<environment_context>") ||
+    text.startsWith("<permissions instructions>") ||
+    text.startsWith("<app-context>") ||
+    text.startsWith("<collaboration_mode>") ||
+    text.startsWith("<personality_spec>") ||
+    text.startsWith("<skills_instructions>") ||
+    text.startsWith("<plugins_instructions>") ||
+    text.startsWith("# AGENTS.md instructions") ||
+    text.startsWith("<INSTRUCTIONS>") ||
+    text.startsWith("Knowledge cutoff:") ||
+    text.startsWith("You are ")
+  );
 }
 
 function isEmptyToolMessage(message: CodexMessage) {
@@ -2969,6 +3125,50 @@ function nextSmoothMessageId(runtime: ThreadRuntime, messages: CodexMessage[]) {
   if (runtime.smoothMessageId === latest.id) return latest.id;
   const previous = runtime.messages.find((message) => message.id === latest.id);
   return !previous || previous.text !== latest.text ? latest.id : runtime.smoothMessageId;
+}
+
+function turnInlineIndicator(
+  messages: CodexMessage[],
+  runtime: ThreadRuntime,
+  options: { desktop: boolean; pendingApproval: boolean },
+): { messageId: string; label: string; detail: string; tone: "thinking" | "outputting" | "approval" } | null {
+  const active = isRuntimeTurnActive(runtime);
+  if (!active && !options.pendingApproval) return null;
+
+  const latestAssistant = latestAssistantFromMessages(messages);
+  const latestUser = [...messages].reverse().find((message) => message.role === "user") ?? null;
+  const fallback = [...messages].reverse().find((message) => message.role === "assistant" || message.role === "user") ?? null;
+
+  if (options.pendingApproval) {
+    const target = latestAssistant ?? latestUser ?? fallback;
+    return target ? { messageId: target.id, label: "等待审批", detail: "确认后继续执行", tone: "approval" } : null;
+  }
+
+  if (hasAssistantOutputAfterLatestUser(messages) && latestAssistant) {
+    return {
+      messageId: latestAssistant.id,
+      label: "正在输出",
+      detail: options.desktop ? "同步桌面输出" : "实时接收输出",
+      tone: "outputting",
+    };
+  }
+
+  const target = latestUser ?? fallback;
+  return target
+    ? {
+        messageId: target.id,
+        label: "正在思考",
+        detail: options.desktop ? "等待桌面响应" : "等待 Codex 回复",
+        tone: "thinking",
+      }
+    : null;
+}
+
+function isRuntimeTurnActive(runtime: ThreadRuntime) {
+  if (runtime.lastTurnError) return false;
+  if (runtime.turnStatus === "starting" || runtime.turnStatus === "inProgress") return true;
+  if (runtime.turnStatus === "completed" || runtime.turnStatus === "interrupted" || runtime.turnStatus === "failed") return false;
+  return runtime.sending;
 }
 
 function findRenderDuplicate(rendered: CodexMessage[], message: CodexMessage) {
@@ -3044,15 +3244,23 @@ function isIncrementalAssistantDuplicate(currentText: string, incomingText: stri
 
 function mergeMessages(current: CodexMessage[], incoming: CodexMessage[]) {
   if (incoming.length === 0) return current;
-  const seen = new Set(current.map((message) => `${message.timestamp}:${message.kind}:${message.role}:${message.text.slice(0, 120)}`));
   const next = [...current];
+  const indexByKey = new Map(current.map((message, index) => [messageMergeKey(message), index]));
   for (const message of incoming) {
-    const key = `${message.timestamp}:${message.kind}:${message.role}:${message.text.slice(0, 120)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const key = messageMergeKey(message);
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex !== undefined) {
+      next[existingIndex] = preferredRenderMessage(next[existingIndex], message);
+      continue;
+    }
+    indexByKey.set(key, next.length);
     next.push(message);
   }
-  return next;
+  return sortMessages(next);
+}
+
+function messageMergeKey(message: CodexMessage) {
+  return `${message.timestamp}:${message.kind}:${message.role}:${message.text.slice(0, 120)}`;
 }
 
 function mergeMessagesById(current: CodexMessage[], incoming: CodexMessage[]) {
@@ -3064,6 +3272,20 @@ function mergeMessagesById(current: CodexMessage[], incoming: CodexMessage[]) {
     byId.set(message.id, message);
   }
   return order.map((id) => byId.get(id)).filter((message): message is CodexMessage => Boolean(message));
+}
+
+function sortMessages(messages: CodexMessage[]) {
+  return messages
+    .map((message, index) => ({ message, index }))
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.message.timestamp);
+      const rightTime = Date.parse(right.message.timestamp);
+      if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+        return leftTime - rightTime;
+      }
+      return left.index - right.index;
+    })
+    .map((item) => item.message);
 }
 
 function capMessages(messages: CodexMessage[]) {
@@ -3090,12 +3312,12 @@ function activeTurnActivity(
 ) {
   if (options.pendingApproval) return { label: "等待审批", detail: "确认后继续执行" };
   if (runtime.turnStatus === "starting") {
-    return { label: "思考中", detail: options.desktop ? "等待桌面输出" : "准备运行" };
+    return { label: "正在思考", detail: options.desktop ? "等待桌面响应" : "等待 Codex 回复" };
   }
   if (options.hasAssistantOutput) {
-    return { label: "正在生成", detail: options.desktop || runtime.watchMode === "desktop-tail" ? "同步桌面输出" : "实时接收输出" };
+    return { label: "正在输出", detail: options.desktop || runtime.watchMode === "desktop-tail" ? "同步桌面输出" : "实时接收输出" };
   }
-  return { label: "思考中", detail: options.desktop || runtime.watchMode === "desktop-tail" ? "监听桌面输出" : "等待第一段输出" };
+  return { label: "正在思考", detail: options.desktop || runtime.watchMode === "desktop-tail" ? "等待桌面响应" : "等待 Codex 回复" };
 }
 
 function connectionBadge(connectionState: "idle" | "testing" | "ok" | "error", detail: string) {

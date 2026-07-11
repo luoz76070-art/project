@@ -33,7 +33,9 @@ try {
   if ($Ipv6) { $env:MOBILE_CODEX_HOST = "::" }
   if (!$env:MOBILE_CODEX_HOST) { $env:MOBILE_CODEX_HOST = "0.0.0.0" }
   if (!$env:MOBILE_CODEX_PORT) { $env:MOBILE_CODEX_PORT = "8787" }
-  if (!$env:MOBILE_CODEX_TOKEN) { $env:MOBILE_CODEX_TOKEN = "change-me" }
+  if (!$env:MOBILE_CODEX_TOKEN) {
+    $env:MOBILE_CODEX_TOKEN = "mobile-codex-" + [Guid]::NewGuid().ToString("N") + [Guid]::NewGuid().ToString("N")
+  }
   if (!$env:MOBILE_CODEX_DEFAULT_CWD) { $env:MOBILE_CODEX_DEFAULT_CWD = $Root }
   $relayExeCandidates = @(
     (Join-Path $Root "MobileCodexRelay.exe"),

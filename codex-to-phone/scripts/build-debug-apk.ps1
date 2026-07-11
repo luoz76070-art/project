@@ -33,6 +33,8 @@ Push-Location $Root
 try {
   Invoke-Pnpm --filter @mobile-codex/mobile build
   Invoke-Pnpm --filter @mobile-codex/mobile exec cap sync android
+  & node scripts/normalize-capacitor-config.mjs
+  if ($LASTEXITCODE -ne 0) { throw "normalize-capacitor-config failed with exit code $LASTEXITCODE" }
 
   $sourceAndroid = Join-Path $Root "apps\mobile\android"
   $sourceCapacitor = Join-Path $Root "node_modules\.pnpm\@capacitor+android@7.4.4_@capacitor+core@7.4.4\node_modules\@capacitor\android\capacitor"

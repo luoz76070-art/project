@@ -94,7 +94,7 @@ C:\Program Files\WindowsApps\OpenAI.Codex_26.506.3741.0_x64__2p2nqsd0c76g0\app\r
 
 已实测：
 
-- 手机浏览器可访问 `http://192.168.6.43:8787/health`。
+- 手机浏览器可访问 `http://192.168.1.50:8787/health`。
 - APK 之前的 WebView `fetch` 有失败案例。
 - 已改为 Capacitor 原生 HTTP，作为真机请求层。
 

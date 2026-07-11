@@ -5,7 +5,14 @@ cd "$(dirname "$0")"
 
 export MOBILE_CODEX_HOST="${MOBILE_CODEX_HOST:-0.0.0.0}"
 export MOBILE_CODEX_PORT="${MOBILE_CODEX_PORT:-8787}"
-export MOBILE_CODEX_TOKEN="${MOBILE_CODEX_TOKEN:-change-me}"
+if [[ -z "${MOBILE_CODEX_TOKEN:-}" ]]; then
+  if command -v openssl >/dev/null 2>&1; then
+    MOBILE_CODEX_TOKEN="mobile-codex-$(openssl rand -hex 24)"
+  else
+    MOBILE_CODEX_TOKEN="mobile-codex-$(uuidgen | tr -d '-')"
+  fi
+  export MOBILE_CODEX_TOKEN
+fi
 export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 export MOBILE_CODEX_DEFAULT_CWD="${MOBILE_CODEX_DEFAULT_CWD:-$PWD}"
 

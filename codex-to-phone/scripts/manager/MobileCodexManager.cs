@@ -54,7 +54,7 @@ namespace MobileCodex
             var config = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             config["MOBILE_CODEX_HOST"] = "0.0.0.0";
             config["MOBILE_CODEX_PORT"] = "8787";
-            config["MOBILE_CODEX_TOKEN"] = "change-me";
+            config["MOBILE_CODEX_TOKEN"] = GenerateToken();
             config["CODEX_HOME"] = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex");
             config["MOBILE_CODEX_DEFAULT_CWD"] = RootDir;
             config["MOBILE_CODEX_DDNS_DOMAIN"] = "";
@@ -79,6 +79,18 @@ namespace MobileCodex
                 config["MOBILE_CODEX_DEFAULT_CWD"] = RootDir;
             }
             return config;
+        }
+
+        private static string GenerateToken()
+        {
+            using (var random = RandomNumberGenerator.Create())
+            {
+                var bytes = new byte[32];
+                random.GetBytes(bytes);
+                var builder = new StringBuilder("mobile-codex-");
+                foreach (var value in bytes) builder.Append(value.ToString("x2"));
+                return builder.ToString();
+            }
         }
 
         public void SaveConfig(Dictionary<string, string> config)

@@ -34,7 +34,7 @@ Token: .env.local 或脚本里设置的 MOBILE_CODEX_TOKEN
 当前电脑已验证过的局域网 IP 包括：
 
 ```text
-192.168.6.43
+192.168.1.50
 ```
 
 实际使用时以 `start-relay.bat` 打印出来的 endpoint 为准。

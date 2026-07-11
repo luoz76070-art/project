@@ -3,21 +3,28 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mobile Codex Demo</title>
+    <title>Mobile Codex 演示文稿</title>
     <link rel="icon" href="data:," />
     <style>
       :root {
         color-scheme: light;
-        --bg: #f6f7f9;
+        --paper: #f7f4ee;
+        --paper-2: #eef2f4;
+        --ink: #17191f;
+        --muted: #66707d;
+        --line: #d8dce1;
         --panel: #ffffff;
-        --panel-2: #f0f3f7;
-        --ink: #16181d;
-        --muted: #69707d;
-        --line: #d8dde5;
-        --accent: #0f7b6c;
-        --accent-2: #2457d6;
-        --warn: #c46a1a;
-        --shadow: 0 22px 70px rgba(28, 34, 45, 0.16);
+        --panel-soft: #f4f6f8;
+        --charcoal: #20242b;
+        --teal: #0c766c;
+        --teal-soft: #dff3ee;
+        --blue: #335fd1;
+        --blue-soft: #e4ebff;
+        --amber: #c8792f;
+        --amber-soft: #fff0dc;
+        --red: #d65f54;
+        --green: #3b9b6d;
+        --shadow: 0 26px 76px rgba(32, 36, 43, 0.16);
         font-family:
           Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
           "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -27,100 +34,305 @@
         box-sizing: border-box;
       }
 
+      html,
       body {
         margin: 0;
-        min-height: 100vh;
-        color: var(--ink);
+        min-height: 100%;
         background:
-          linear-gradient(180deg, #ffffff 0%, #eef1f5 100%);
+          radial-gradient(circle at 8% 8%, rgba(12, 118, 108, 0.08), transparent 26%),
+          radial-gradient(circle at 90% 12%, rgba(51, 95, 209, 0.08), transparent 28%),
+          linear-gradient(180deg, #fffaf2 0%, #eef2f4 100%);
+        color: var(--ink);
       }
 
-      .stage {
-        min-height: 100vh;
+      body {
         display: grid;
-        grid-template-rows: auto 1fr auto;
+        grid-template-rows: 64px 1fr 70px;
+        overflow: hidden;
       }
 
-      header {
-        height: 68px;
+      button {
+        font: inherit;
+      }
+
+      .topbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 32px;
-        border-bottom: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.9);
+        padding: 0 30px;
+        border-bottom: 1px solid rgba(23, 25, 31, 0.1);
+        background: rgba(255, 255, 255, 0.78);
+        backdrop-filter: blur(18px);
       }
 
       .brand {
         display: flex;
         align-items: center;
         gap: 12px;
-        font-weight: 720;
+        font-weight: 780;
       }
 
       .mark {
         width: 34px;
         height: 34px;
-        border-radius: 8px;
+        border-radius: 9px;
         background:
-          linear-gradient(135deg, var(--accent), #8cd8c4 52%, var(--accent-2));
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+          linear-gradient(135deg, #0c766c 0%, #96d4c7 48%, #335fd1 100%);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.68),
+          0 8px 18px rgba(12, 118, 108, 0.18);
       }
 
-      .status {
+      .top-meta {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 14px;
         color: var(--muted);
         font-size: 14px;
       }
 
-      .pulse {
-        width: 9px;
-        height: 9px;
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 30px;
+        padding: 0 12px;
+        border: 1px solid rgba(12, 118, 108, 0.22);
         border-radius: 999px;
-        background: var(--accent);
-        box-shadow: 0 0 0 0 rgba(15, 123, 108, 0.36);
+        background: rgba(223, 243, 238, 0.76);
+        color: #0a524b;
+        font-weight: 680;
+      }
+
+      .live-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--teal);
+        box-shadow: 0 0 0 0 rgba(12, 118, 108, 0.34);
         animation: pulse 1.8s infinite;
       }
 
-      main {
+      .deck-shell {
         display: grid;
         place-items: center;
-        padding: 30px 32px;
+        padding: 24px;
+        min-height: 0;
       }
 
-      .canvas {
-        width: min(1180px, 100%);
+      .deck {
+        position: relative;
+        width: min(1440px, calc(100vw - 48px), calc((100vh - 182px) * 16 / 9));
         aspect-ratio: 16 / 9;
+        border-radius: 22px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        background: var(--panel);
+        border: 1px solid rgba(23, 25, 31, 0.12);
+      }
+
+      .slide {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        transform: translateX(28px) scale(0.992);
+        pointer-events: none;
+        transition:
+          opacity 360ms ease,
+          transform 360ms ease;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 251, 0.96));
+      }
+
+      .slide.active {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+        pointer-events: auto;
+      }
+
+      .slide-inner {
+        width: 100%;
+        height: 100%;
+        padding: clamp(32px, 3.2vw, 54px) clamp(44px, 5vw, 72px);
         display: grid;
-        grid-template-columns: 1.08fr 0.68fr;
-        gap: 28px;
+        gap: 24px;
+      }
+
+      .slide-title {
+        max-width: 920px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 30px;
+        padding: 0 12px;
+        border-radius: 999px;
+        background: var(--teal-soft);
+        color: #07534c;
+        font-size: 13px;
+        font-weight: 760;
+        margin-bottom: 16px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(42px, 4.2vw, 72px);
+        line-height: 1.02;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        font-size: clamp(34px, 3.25vw, 56px);
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      h3 {
+        font-size: 20px;
+        line-height: 1.25;
+      }
+
+      .lead {
+        max-width: 760px;
+        color: #3f4753;
+        font-size: clamp(18px, 1.65vw, 22px);
+        line-height: 1.56;
+        margin-top: 18px;
+      }
+
+      .body-copy {
+        color: #46505c;
+        font-size: 18px;
+        line-height: 1.62;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 34px;
         align-items: center;
       }
 
-      .desktop,
-      .phone {
-        background: var(--panel);
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+      }
+
+      .panel {
+        background: rgba(255, 255, 255, 0.9);
         border: 1px solid var(--line);
-        box-shadow: var(--shadow);
+        border-radius: 14px;
+        padding: 24px;
+      }
+
+      .panel.dark {
+        background: var(--charcoal);
+        color: white;
+        border-color: rgba(255, 255, 255, 0.1);
+      }
+
+      .panel.dark .muted,
+      .panel.dark .body-copy {
+        color: #b6beca;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .quote {
+        font-size: 30px;
+        line-height: 1.36;
+        font-weight: 760;
+      }
+
+      .fine {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .story-stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .story-card {
+        min-height: 96px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        padding: 20px 22px;
+        display: grid;
+        grid-template-columns: 42px 1fr;
+        gap: 16px;
+        align-items: start;
+      }
+
+      .icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        color: white;
+        font-weight: 850;
+      }
+
+      .icon.teal { background: var(--teal); }
+      .icon.blue { background: var(--blue); }
+      .icon.amber { background: var(--amber); }
+      .icon.dark { background: var(--charcoal); }
+
+      .device-row {
+        display: grid;
+        grid-template-columns: 1.15fr 0.76fr;
+        gap: 30px;
+        align-items: center;
+      }
+
+      .experience-slide .slide-inner {
+        gap: 16px;
+      }
+
+      .experience-slide .lead {
+        margin-top: 10px;
+      }
+
+      .experience-slide .desktop {
+        height: clamp(220px, 20vw, 410px);
+      }
+
+      .experience-slide .phone {
+        width: clamp(160px, 12.5vw, 240px);
       }
 
       .desktop {
-        height: 620px;
-        border-radius: 14px;
+        height: clamp(260px, 25vw, 520px);
+        border-radius: 16px;
         overflow: hidden;
-        display: grid;
-        grid-template-rows: 46px 1fr;
+        border: 1px solid #cfd5dd;
+        background: var(--panel);
+        box-shadow: 0 18px 46px rgba(32, 36, 43, 0.12);
       }
 
       .desktop-bar {
+        height: 42px;
         display: flex;
         align-items: center;
         gap: 8px;
         padding: 0 16px;
-        background: #edf1f5;
-        border-bottom: 1px solid var(--line);
+        background: #eef2f5;
+        border-bottom: 1px solid #d8dde5;
       }
 
       .dot {
@@ -130,208 +342,513 @@
       }
 
       .red { background: #e15b4f; }
-      .yellow { background: #d9a441; }
+      .yellow { background: #dca846; }
       .green { background: #43a96f; }
 
       .desktop-body {
+        height: calc(100% - 42px);
         display: grid;
-        grid-template-columns: 220px 1fr;
-        min-height: 0;
+        grid-template-columns: 190px 1fr;
       }
 
-      .side {
-        border-right: 1px solid var(--line);
-        background: #f8fafc;
+      .sidebar {
         padding: 18px 14px;
+        border-right: 1px solid #e1e5eb;
+        background: #f8fafc;
       }
 
-      .side-title {
-        font-size: 12px;
+      .sidebar-label {
         color: var(--muted);
-        letter-spacing: 0.06em;
+        font-size: 12px;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
         margin-bottom: 14px;
       }
 
       .thread {
-        height: 46px;
-        border-radius: 8px;
+        height: 42px;
+        border-radius: 9px;
         display: flex;
         align-items: center;
-        padding: 0 12px;
+        padding: 0 11px;
         margin-bottom: 8px;
-        color: #323844;
-        font-size: 14px;
+        color: #3c4551;
+        font-size: 13px;
       }
 
       .thread.active {
-        background: #e6f3ef;
-        color: #0b5148;
-        font-weight: 650;
+        background: #e2f1ed;
+        color: #0a534c;
+        font-weight: 740;
       }
 
       .chat {
-        min-width: 0;
         display: grid;
-        grid-template-rows: 1fr 76px;
-        background: #ffffff;
+        grid-template-rows: 1fr 70px;
+        min-width: 0;
       }
 
       .messages {
-        padding: 28px 34px;
+        padding: 24px 30px;
         overflow: hidden;
       }
 
-      .msg {
+      .bubble {
         max-width: 78%;
-        margin-bottom: 18px;
-        line-height: 1.58;
-        font-size: 15px;
-      }
-
-      .msg.user {
-        margin-left: auto;
         padding: 13px 16px;
-        border-radius: 10px;
-        background: #e9f1ff;
+        border-radius: 12px;
+        margin-bottom: 16px;
+        font-size: 15px;
+        line-height: 1.52;
       }
 
-      .msg.assistant {
-        padding-left: 16px;
-        border-left: 3px solid var(--accent);
+      .bubble.user {
+        margin-left: auto;
+        background: var(--blue-soft);
       }
 
-      .thinking {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
+      .bubble.assistant {
+        background: #fff;
+        border-left: 3px solid var(--teal);
+        box-shadow: inset 0 0 0 1px #e4e8ee;
+      }
+
+      .bubble.ghost {
         color: var(--muted);
-        font-size: 13px;
-        margin-bottom: 14px;
+        background: #f5f7fa;
+        border: 1px dashed #cdd4dc;
       }
-
-      .tiny-dots {
-        display: inline-flex;
-        gap: 4px;
-      }
-
-      .tiny-dots span {
-        width: 5px;
-        height: 5px;
-        border-radius: 999px;
-        background: var(--accent);
-        animation: blink 1.2s infinite;
-      }
-
-      .tiny-dots span:nth-child(2) { animation-delay: 0.16s; }
-      .tiny-dots span:nth-child(3) { animation-delay: 0.32s; }
 
       .composer {
-        border-top: 1px solid var(--line);
-        padding: 14px 20px;
+        border-top: 1px solid #e1e5eb;
+        padding: 12px 18px;
         display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .field {
+        flex: 1;
+        height: 42px;
+        border-radius: 10px;
+        border: 1px solid #d5dbe3;
+        display: flex;
+        align-items: center;
+        padding: 0 14px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .submit {
+        width: 42px;
+        height: 42px;
+        border-radius: 10px;
+        border: 0;
+        background: var(--charcoal);
+        color: white;
+        font-weight: 900;
+      }
+
+      .phone {
+        width: clamp(168px, 14vw, 304px);
+        aspect-ratio: 304 / 610;
+        height: auto;
+        margin: 0 auto;
+        border-radius: 36px;
+        padding: 14px;
+        background: #171b21;
+        box-shadow: 0 24px 62px rgba(23, 27, 33, 0.24);
+      }
+
+      .phone-screen {
+        height: 100%;
+        overflow: hidden;
+        border-radius: 24px;
+        background: #fbfcfd;
+        display: grid;
+        grid-template-rows: 58px 1fr 68px;
+      }
+
+      .phone-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        border-bottom: 1px solid #e3e8ef;
+      }
+
+      .phone-title strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .phone-title span {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        max-width: 190px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .phone-pill {
+        min-width: 48px;
+        height: 28px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: var(--teal-soft);
+        color: #0a534c;
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      .phone-feed {
+        padding: 16px;
+        background: #f3f6f9;
+      }
+
+      .phone-card {
+        border: 1px solid #e0e6ee;
+        background: #fff;
+        border-radius: 13px;
+        padding: 12px 13px;
+        margin-bottom: 11px;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .phone-card.user {
+        background: #eef5ff;
+        border-color: #d6e4ff;
+      }
+
+      .phone-card.image {
+        display: grid;
+        grid-template-columns: 52px 1fr;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .thumb {
+        width: 52px;
+        height: 52px;
+        border-radius: 10px;
+        background:
+          linear-gradient(135deg, rgba(12, 118, 108, 0.82), rgba(51, 95, 209, 0.82)),
+          linear-gradient(45deg, #fff 25%, transparent 25%);
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        padding: 0 9px;
+        border-radius: 999px;
+        background: var(--panel-soft);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 680;
+      }
+
+      .phone-compose {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border-top: 1px solid #e3e8ef;
+        background: white;
+      }
+
+      .phone-input {
+        flex: 1;
+        height: 42px;
+        border-radius: 11px;
+        background: #f2f4f7;
+        color: #69707d;
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        font-size: 13px;
+      }
+
+      .phone-send {
+        width: 42px;
+        height: 42px;
+        border-radius: 11px;
+        background: var(--teal);
+        color: white;
+        display: grid;
+        place-items: center;
+        font-weight: 900;
+      }
+
+      .arch {
+        display: grid;
+        grid-template-columns: 1fr 86px 1fr 86px 1fr 86px 1fr;
         align-items: center;
         gap: 12px;
       }
 
-      .input {
-        flex: 1;
-        height: 44px;
+      .node {
+        min-height: 136px;
         border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 0 14px;
-        color: var(--muted);
-        display: flex;
-        align-items: center;
-      }
-
-      .send {
-        width: 44px;
-        height: 44px;
-        border: 0;
-        border-radius: 8px;
-        background: var(--ink);
-        color: white;
-        font-weight: 800;
-      }
-
-      .phone-wrap {
-        display: flex;
-        justify-content: center;
-      }
-
-      .phone {
-        width: 330px;
-        height: 660px;
-        border-radius: 34px;
-        padding: 14px;
-        background: #15181d;
-      }
-
-      .screen {
-        height: 100%;
-        border-radius: 24px;
-        background: #fbfcfd;
-        overflow: hidden;
-        display: grid;
-        grid-template-rows: 58px 1fr 72px;
-      }
-
-      .mobile-top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 18px;
-        border-bottom: 1px solid #e5e9ef;
-      }
-
-      .mobile-title strong {
-        display: block;
-        font-size: 15px;
-      }
-
-      .mobile-title span {
-        display: block;
-        color: var(--muted);
-        font-size: 11px;
-      }
-
-      .chip {
-        height: 26px;
-        padding: 0 10px;
-        display: inline-flex;
-        align-items: center;
-        border-radius: 999px;
-        background: #e6f3ef;
-        color: #0b5148;
-        font-size: 12px;
-        font-weight: 650;
-      }
-
-      .mobile-feed {
-        padding: 18px;
-        background: #f5f7fa;
-      }
-
-      .mobile-card {
+        border-radius: 16px;
         background: white;
-        border: 1px solid #e3e8ef;
-        border-radius: 12px;
-        padding: 13px 14px;
-        margin-bottom: 12px;
-        font-size: 13px;
-        line-height: 1.54;
+        padding: 20px;
+        display: grid;
+        align-content: center;
+        gap: 10px;
       }
 
-      .mobile-card.user {
-        background: #eef5ff;
-        border-color: #d7e6ff;
+      .node strong {
+        font-size: 19px;
       }
 
-      .label {
+      .arrow {
+        height: 2px;
+        background: linear-gradient(90deg, var(--teal), var(--blue));
+        position: relative;
+      }
+
+      .arrow::after {
+        content: "";
+        position: absolute;
+        right: -2px;
+        top: -5px;
+        width: 0;
+        height: 0;
+        border-top: 6px solid transparent;
+        border-bottom: 6px solid transparent;
+        border-left: 10px solid var(--blue);
+      }
+
+      .phase-line {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 14px;
+      }
+
+      .phase {
+        min-height: 210px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 20px;
+        background: white;
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 12px;
+      }
+
+      .phase-number {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        background: var(--charcoal);
+        color: white;
+        font-weight: 820;
+      }
+
+      .phase small {
         color: var(--muted);
-        font-size: 11px;
-        margin-bottom: 6px;
+        line-height: 1.45;
+      }
+
+      .comparison {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+      }
+
+      .comparison .panel {
+        min-height: 310px;
+      }
+
+      .checklist {
+        display: grid;
+        gap: 14px;
+        margin-top: 20px;
+      }
+
+      .check-item {
+        display: grid;
+        grid-template-columns: 26px 1fr;
+        gap: 10px;
+        align-items: start;
+        color: #414a55;
+        line-height: 1.5;
+      }
+
+      .check-item span:first-child {
+        width: 24px;
+        height: 24px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        background: var(--teal-soft);
+        color: var(--teal);
+        font-weight: 900;
+      }
+
+      .timeline {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 20px;
+        align-items: start;
+      }
+
+      .timeline-rail {
+        display: grid;
+        gap: 12px;
+      }
+
+      .time-chip {
+        border-radius: 999px;
+        padding: 8px 12px;
+        background: var(--panel-soft);
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .shots {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+      }
+
+      .shot {
+        min-height: 126px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: white;
+        padding: 16px;
+      }
+
+      .shot strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .slide-note {
+        display: none;
+      }
+
+      .note-dot {
+        width: 9px;
+        height: 9px;
+        flex: 0 0 auto;
+        border-radius: 999px;
+        background: var(--teal);
+      }
+
+      .dark-slide {
+        background:
+          linear-gradient(135deg, #1f232a 0%, #252a31 60%, #2b302f 100%);
+        color: white;
+      }
+
+      .dark-slide .lead,
+      .dark-slide .body-copy,
+      .dark-slide .muted {
+        color: #c1c9d4;
+      }
+
+      .dark-slide .panel {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+
+      .dark-slide .slide-note {
+        color: #d6dde8;
+        background: rgba(255, 255, 255, 0.09);
+        border-color: rgba(255, 255, 255, 0.14);
+      }
+
+      .route {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+      }
+
+      .route-card {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 24px;
+        background: white;
+        min-height: 360px;
+      }
+
+      .route-card.bad {
+        background: #fff8f2;
+        border-color: #f0d6bc;
+      }
+
+      .route-card.good {
+        background: #f2fbf8;
+        border-color: #cce8df;
+      }
+
+      .mini-window {
+        height: 168px;
+        margin-top: 18px;
+        border: 1px solid #d7dde5;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #fff;
+      }
+
+      .mini-window-head {
+        height: 32px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 11px;
+        background: #eef2f5;
+        border-bottom: 1px solid #d7dde5;
+      }
+
+      .mini-window-body {
+        padding: 16px;
+        color: #454e5b;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .terminal {
+        min-height: 230px;
+        border-radius: 16px;
+        overflow: hidden;
+        background: #20242b;
+        color: #dbe3ee;
+        box-shadow: 0 16px 42px rgba(32, 36, 43, 0.18);
+      }
+
+      .terminal-head {
+        height: 38px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 0 14px;
+        background: #2b3038;
+      }
+
+      .terminal-body {
+        padding: 20px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 15px;
+        line-height: 1.62;
+      }
+
+      .cmd {
+        color: #8fd8ca;
+      }
+
+      .warn {
+        color: #f0b977;
       }
 
       .typing::after {
@@ -341,82 +858,113 @@
         height: 16px;
         margin-left: 2px;
         vertical-align: -3px;
-        background: var(--accent);
-        animation: cursor 0.8s infinite;
+        background: var(--teal);
+        animation: cursor 0.82s infinite;
       }
 
-      .mobile-compose {
+      .bottom {
+        display: grid;
+        grid-template-columns: 230px 1fr auto auto;
+        align-items: center;
+        gap: 18px;
+        padding: 0 30px;
+      }
+
+      .progress {
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(23, 25, 31, 0.12);
+        overflow: hidden;
+      }
+
+      .progress span {
+        display: block;
+        height: 100%;
+        width: 10%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--teal), var(--blue));
+        transition: width 280ms ease;
+      }
+
+      .controls {
         display: flex;
         gap: 10px;
         align-items: center;
-        padding: 12px 14px;
-        border-top: 1px solid #e5e9ef;
+        justify-content: center;
+      }
+
+      .nav-button {
+        width: 44px;
+        height: 40px;
+        border-radius: 11px;
+        border: 1px solid rgba(23, 25, 31, 0.12);
+        background: white;
+        color: var(--ink);
+        font-weight: 860;
+        cursor: pointer;
+      }
+
+      .slide-count {
+        color: var(--muted);
+        font-size: 14px;
+        text-align: right;
+        min-width: 54px;
+      }
+
+      .chapter {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .speaker-note {
+        min-height: 42px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border: 1px solid rgba(12, 118, 108, 0.18);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.68);
+        color: #3f4753;
+        font-size: 13px;
+        line-height: 1.35;
+        overflow: hidden;
+      }
+
+      .speaker-note span:last-child {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .index-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 12px;
+      }
+
+      .index-card {
+        min-height: 118px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
         background: white;
       }
 
-      .mobile-input {
-        flex: 1;
-        height: 42px;
-        border-radius: 10px;
-        background: #f2f4f7;
-        color: #69707d;
-        display: flex;
-        align-items: center;
-        padding: 0 12px;
-        font-size: 13px;
-      }
-
-      .mobile-send {
-        width: 42px;
-        height: 42px;
-        border-radius: 10px;
-        background: var(--accent);
-        color: white;
-        display: grid;
-        place-items: center;
-        font-weight: 800;
-      }
-
-      footer {
-        padding: 0 32px 26px;
-      }
-
-      .timeline {
-        max-width: 1180px;
-        margin: 0 auto;
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 10px;
-      }
-
-      .step {
-        border: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.78);
-        border-radius: 10px;
-        padding: 12px;
-        min-height: 88px;
-      }
-
-      .step strong {
+      .index-card strong {
         display: block;
-        font-size: 13px;
-        margin-bottom: 6px;
+        margin-bottom: 10px;
       }
 
-      .step span {
+      .index-card span {
         color: var(--muted);
-        font-size: 12px;
+        font-size: 13px;
         line-height: 1.45;
       }
 
       @keyframes pulse {
-        70% { box-shadow: 0 0 0 10px rgba(15, 123, 108, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(15, 123, 108, 0); }
-      }
-
-      @keyframes blink {
-        0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
-        40% { opacity: 1; transform: translateY(-3px); }
+        70% { box-shadow: 0 0 0 10px rgba(12, 118, 108, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(12, 118, 108, 0); }
       }
 
       @keyframes cursor {
@@ -424,125 +972,557 @@
         46%, 100% { opacity: 0; }
       }
 
-      @media (max-width: 920px) {
-        header {
-          padding: 0 18px;
+      @media (max-width: 980px) {
+        body {
+          grid-template-rows: 56px 1fr 64px;
         }
 
-        main {
-          padding: 20px 14px;
+        .topbar {
+          padding: 0 16px;
         }
 
-        .canvas {
+        .top-meta span:not(.status-pill) {
+          display: none;
+        }
+
+        .deck-shell {
+          padding: 10px;
+        }
+
+        .deck {
+          width: calc(100vw - 20px);
           aspect-ratio: auto;
+          height: calc(100vh - 130px);
+        }
+
+        .slide-inner {
+          padding: 34px 28px 86px;
+          overflow: auto;
+        }
+
+        h1 {
+          font-size: 40px;
+        }
+
+        h2 {
+          font-size: 34px;
+        }
+
+        .lead {
+          font-size: 18px;
+        }
+
+        .grid-2,
+        .grid-3,
+        .device-row,
+        .route,
+        .comparison,
+        .arch,
+        .phase-line,
+        .index-grid,
+        .timeline,
+        .shots {
           grid-template-columns: 1fr;
+        }
+
+        .arrow {
+          height: 34px;
+          width: 2px;
+          justify-self: center;
+        }
+
+        .arrow::after {
+          right: -5px;
+          top: auto;
+          bottom: -2px;
+          border-left: 6px solid transparent;
+          border-right: 6px solid transparent;
+          border-top: 10px solid var(--blue);
+          border-bottom: 0;
         }
 
         .desktop {
-          height: 520px;
-        }
-
-        .desktop-body {
-          grid-template-columns: 150px 1fr;
+          height: 420px;
         }
 
         .phone {
-          width: min(330px, 100%);
+          width: 286px;
+          height: 560px;
         }
 
-        .timeline {
-          grid-template-columns: 1fr;
+        .slide-note {
+          display: none;
+        }
+
+        .bottom {
+          grid-template-columns: 1fr auto;
+        }
+
+        .speaker-note {
+          display: none;
         }
       }
     </style>
   </head>
   <body>
-    <div class="stage">
-      <header>
-        <div class="brand">
-          <div class="mark" aria-hidden="true"></div>
-          <div>Mobile Codex</div>
-        </div>
-        <div class="status"><span class="pulse"></span> Broker connected · v1.1.11-text-sync</div>
-      </header>
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true"></div>
+        <span>Mobile Codex 演示文稿</span>
+      </div>
+      <div class="top-meta">
+        <span>从扫码桥接到 1.1.11 App</span>
+        <span class="status-pill"><span class="live-dot"></span> 远程控制台</span>
+      </div>
+    </header>
 
-      <main>
-        <section class="canvas" aria-label="Mobile Codex demo">
-          <div class="desktop">
-            <div class="desktop-bar">
-              <span class="dot red"></span>
-              <span class="dot yellow"></span>
-              <span class="dot green"></span>
+    <main class="deck-shell">
+      <div class="deck" id="deck" aria-live="polite">
+        <section class="slide active" data-title="开场">
+          <div class="slide-inner grid-2">
+            <div class="slide-title">
+              <div class="eyebrow">Project Story</div>
+              <h1>我把 Codex 的当前工作流搬到了手机上</h1>
+              <p class="lead">
+                电脑继续运行 Codex Desktop，手机只负责看进度、发指令、收结果。
+                它不是远程桌面，也不是另一个聊天机器人。
+              </p>
             </div>
-            <div class="desktop-body">
-              <aside class="side">
-                <div class="side-title">Codex Desktop</div>
-                <div class="thread active">当前项目重构</div>
-                <div class="thread">Relay 部署</div>
-                <div class="thread">Android UI 审核</div>
-              </aside>
-              <section class="chat">
-                <div class="messages">
-                  <div class="msg user">把手机端改成只显示输入和 Codex 文本结果，降低同步延迟。</div>
-                  <div class="thinking">
-                    <span class="tiny-dots"><span></span><span></span><span></span></span>
-                    Codex 正在桌面会话中执行
-                  </div>
-                  <div class="msg assistant">
-                    已将工具调用和桥接事件从手机 UI 隐藏，保留文本结果；同步轮询和前端渲染节奏也已收紧。
-                  </div>
-                </div>
-                <div class="composer">
-                  <div class="input">来自手机的下一条指令会进入这里</div>
-                  <button class="send" type="button">↑</button>
-                </div>
-              </section>
+            <div class="panel dark">
+              <p class="quote">“人离开电脑以后，还能不能知道 Codex 在干什么，甚至继续给它发指令？”</p>
+              <div class="checklist">
+                <div class="check-item"><span>✓</span><div>绑定当前 Mac 上的 Codex Desktop 工作流</div></div>
+                <div class="check-item"><span>✓</span><div>手机端显示输入与文本结果，隐藏工具噪音</div></div>
+                <div class="check-item"><span>✓</span><div>通过公网 Broker 支持异地和蜂窝网络</div></div>
+              </div>
             </div>
           </div>
+          <div class="slide-note"><span class="note-dot"></span>旁白：先讲一个真实痛点，Codex 在电脑上跑着，人一走开就只能猜。</div>
+        </section>
 
-          <div class="phone-wrap">
-            <div class="phone">
-              <div class="screen">
-                <div class="mobile-top">
-                  <div class="mobile-title">
-                    <strong>当前 Codex 会话</strong>
-                    <span>https://zyzlz.xin/mobile-codex/r/rorance-mac</span>
-                  </div>
-                  <span class="chip">远程</span>
+        <section class="slide" data-title="痛点">
+          <div class="slide-inner">
+            <div class="slide-title">
+              <div class="eyebrow">Problem</div>
+              <h2>用户要的不是远程桌面，而是当前会话的遥控器</h2>
+              <p class="lead">手机应该连到正在发生的本机工作流，而不是复制整个桌面画面，也不是另开一个没有上下文的手机聊天。</p>
+            </div>
+            <div class="grid-3">
+              <div class="story-card">
+                <div class="icon teal">1</div>
+                <div>
+                  <h3>离开电脑后失去进度感</h3>
+                  <p class="body-copy">Codex 是在读文件、跑测试、等授权，还是已经写完结果，手机上都看不到。</p>
                 </div>
-                <div class="mobile-feed">
-                  <div class="mobile-card user">
-                    <div class="label">你</div>
-                    看一下当前进度，完成后只展示结果。
-                  </div>
-                  <div class="mobile-card">
-                    <div class="label">Codex</div>
-                    <span class="typing">已完成 1.1.11 文本同步优化，手机端只保留输入与结果，工具细节默认隐藏。</span>
-                  </div>
-                  <div class="mobile-card">
-                    <div class="label">状态</div>
-                    Mac Relay 在线，Broker 隧道正常，等待下一条手机输入。
-                  </div>
+              </div>
+              <div class="story-card">
+                <div class="icon blue">2</div>
+                <div>
+                  <h3>远程桌面太重</h3>
+                  <p class="body-copy">整屏投过来不是移动工作台，它只是把桌面缩小，输入和阅读都别扭。</p>
                 </div>
-                <div class="mobile-compose">
-                  <div class="mobile-input">继续让 Codex 修改 README...</div>
-                  <div class="mobile-send">↑</div>
+              </div>
+              <div class="story-card">
+                <div class="icon amber">3</div>
+                <div>
+                  <h3>普通手机聊天没有本机上下文</h3>
+                  <p class="body-copy">另开一个聊天机器人不知道电脑上的仓库、会话、工具执行和当前任务状态。</p>
+                </div>
+              </div>
+            </div>
+            <div class="comparison">
+              <div class="panel">
+                <h3>不要做成</h3>
+                <div class="checklist">
+                  <div class="check-item"><span>×</span><div>远程桌面画面同步</div></div>
+                  <div class="check-item"><span>×</span><div>历史聊天归档器</div></div>
+                  <div class="check-item"><span>×</span><div>后台影子 Codex</div></div>
+                </div>
+              </div>
+              <div class="panel">
+                <h3>应该做成</h3>
+                <div class="checklist">
+                  <div class="check-item"><span>✓</span><div>当前 Codex Desktop 会话的移动控制台</div></div>
+                  <div class="check-item"><span>✓</span><div>从手机看结果、发输入、继续推进</div></div>
+                  <div class="check-item"><span>✓</span><div>跨网络、短链路、少噪音</div></div>
                 </div>
               </div>
             </div>
           </div>
+          <div class="slide-note"><span class="note-dot"></span>旁白：这个项目的边界很重要，手机不是替代电脑，是拽住电脑上那条正在跑的工作流。</div>
         </section>
-      </main>
 
-      <footer>
-        <div class="timeline">
-          <div class="step"><strong>扫码网页</strong><span>证明单会话绑定和手机可见性。</span></div>
-          <div class="step"><strong>UI 注入</strong><span>让手机输入进入当前 Codex Desktop 窗口。</span></div>
-          <div class="step"><strong>Broker</strong><span>摆脱同 Wi-Fi，支持公网远程连接。</span></div>
-          <div class="step"><strong>Android App</strong><span>替代浏览器页面，加入主题、附件和更新。</span></div>
-          <div class="step"><strong>1.1.11</strong><span>隐藏工具细节，只显示输入和文本结果。</span></div>
-        </div>
-      </footer>
-    </div>
+        <section class="slide" data-title="扫码版">
+          <div class="slide-inner grid-2">
+            <div>
+              <div class="eyebrow">Phase 0</div>
+              <h2>第一版：扫码网页证明链路可行</h2>
+              <p class="lead">
+                电脑启动 bridge，生成二维码，手机扫码打开网页。它解决了“能不能看见当前会话”的验证问题。
+              </p>
+              <div class="checklist">
+                <div class="check-item"><span>✓</span><div>PC 到手机的会话可见性成立</div></div>
+                <div class="check-item"><span>✓</span><div>短 token 与 session 绑定可限制单会话</div></div>
+                <div class="check-item"><span>✓</span><div>启动时只回填上一轮，避免历史污染</div></div>
+              </div>
+            </div>
+            <div class="terminal">
+              <div class="terminal-head">
+                <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span>
+              </div>
+              <div class="terminal-body">
+                <div><span class="cmd">$</span> start codex-to-phone</div>
+                <div>binding current thread...</div>
+                <div>pairing token created</div>
+                <div>QR ready for one session</div>
+                <br />
+                <div class="warn">Limit: 临时域名、浏览器体验、局域网限制</div>
+              </div>
+            </div>
+          </div>
+          <div class="slide-note"><span class="note-dot"></span>旁白：扫码版不是产品形态，但它给了第一个确定性，当前 Codex 会话可以被手机看到。</div>
+        </section>
+
+        <section class="slide dark-slide" data-title="关键转折">
+          <div class="slide-inner">
+            <div class="slide-title">
+              <div class="eyebrow">Key Finding</div>
+              <h2>手机输入必须进入 Desktop 当前窗口，不能只写 thread 文件</h2>
+              <p class="lead">后台 app-server 能生成回复，也能写到同一个 thread，但 Desktop 当前窗口不会显示实时过程。</p>
+            </div>
+            <div class="route">
+              <div class="route-card bad">
+                <h3>后台 app-server 路线</h3>
+                <p class="body-copy">手机能看到回复，rollout 文件也会变化，但当前 Codex Desktop UI 没订阅这一轮。</p>
+                <div class="mini-window">
+                  <div class="mini-window-head"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span></div>
+                  <div class="mini-window-body">Bridge-owned runtime<br />同一个 thread 文件<br /><strong>PC 当前窗口不直播</strong></div>
+                </div>
+              </div>
+              <div class="route-card good">
+                <h3>当前窗口 UI 注入路线</h3>
+                <p class="body-copy">先打开目标 thread，再把手机文本提交到 Codex Desktop 输入框，让当前窗口自己发起 turn。</p>
+                <div class="mini-window">
+                  <div class="mini-window-head"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span></div>
+                  <div class="mini-window-body">codex://threads/&lt;threadId&gt;<br />Mobile Codex Input.app<br /><strong>PC 和手机同步看到过程</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slide-note"><span class="note-dot"></span>旁白：这是整个项目最关键的工程判断，目标不是制造一个影子 Codex，而是控制当前 Desktop 会话。</div>
+        </section>
+
+        <section class="slide" data-title="Broker 架构">
+          <div class="slide-inner">
+            <div class="slide-title">
+              <div class="eyebrow">Remote Architecture</div>
+              <h2>远程场景不能靠同一 Wi-Fi，正式路径是 Broker</h2>
+              <p class="lead">Mac 和 Android 都主动访问公网 Broker。Broker 只转发，不保存完整会话，也不变成第二个 Codex。</p>
+            </div>
+            <div class="arch">
+              <div class="node">
+                <span class="tag">Android</span>
+                <strong>Mobile App</strong>
+                <p class="muted">查看会话、发送输入、上传附件、检查更新</p>
+              </div>
+              <div class="arrow"></div>
+              <div class="node">
+                <span class="tag">Public</span>
+                <strong>Broker</strong>
+                <p class="muted">HTTPS/WSS 转发，匹配 relayId，不保存历史</p>
+              </div>
+              <div class="arrow"></div>
+              <div class="node">
+                <span class="tag">Mac</span>
+                <strong>Relay App</strong>
+                <p class="muted">读取 Codex 会话，注入手机输入，保持隧道</p>
+              </div>
+              <div class="arrow"></div>
+              <div class="node">
+                <span class="tag">Desktop</span>
+                <strong>Codex</strong>
+                <p class="muted">当前窗口执行任务，保留本机安全边界</p>
+              </div>
+            </div>
+            <div class="panel">
+              <p class="body-copy">
+                示例 Endpoint：<strong>https://broker.example.com/r/my-mac</strong>。
+                生产部署时用户可以替换成自己的域名和 relayId。
+              </p>
+            </div>
+          </div>
+          <div class="slide-note"><span class="note-dot"></span>旁白：Broker 是长期远距离使用的基础，PC 不开放端口，手机也不需要在同一个网络。</div>
+        </section>
+
+        <section class="slide experience-slide" data-title="当前体验">
+          <div class="slide-inner">
+            <div class="slide-title">
+              <div class="eyebrow">1.1.11 Experience</div>
+              <h2>当前体验：手机只看输入和 Codex 文本结果</h2>
+              <p class="lead">1.1.11 做了减法，隐藏工具调用、命令日志、补丁 diff 和桥接 ack，让手机端更像远程控制台。</p>
+            </div>
+            <div class="device-row">
+              <div class="desktop">
+                <div class="desktop-bar">
+                  <span class="dot red"></span>
+                  <span class="dot yellow"></span>
+                  <span class="dot green"></span>
+                </div>
+                <div class="desktop-body">
+                  <aside class="sidebar">
+                    <div class="sidebar-label">Codex Desktop</div>
+                    <div class="thread active">当前项目重构</div>
+                    <div class="thread">Relay 部署</div>
+                    <div class="thread">Android UI 审核</div>
+                  </aside>
+                  <section class="chat">
+                    <div class="messages">
+                      <div class="bubble user">把手机端改成只显示输入和 Codex 文本结果，降低同步延迟。</div>
+                      <div class="bubble assistant">已完成 1.1.11 文本同步优化：工具细节默认隐藏，手机端只保留用户输入和 Codex 回复。</div>
+                      <div class="bubble ghost">工具调用已执行，但不在手机主对话里打断阅读。</div>
+                    </div>
+                    <div class="composer">
+                      <div class="field">来自手机的下一条指令会进入这里</div>
+                      <button class="submit" type="button">↑</button>
+                    </div>
+                  </section>
+                </div>
+              </div>
+              <div class="phone">
+                <div class="phone-screen">
+                  <div class="phone-head">
+                    <div class="phone-title">
+                      <strong>当前 Codex 会话</strong>
+                      <span>broker.example.com/r/my-mac</span>
+                    </div>
+                    <span class="phone-pill">远程</span>
+                  </div>
+                  <div class="phone-feed">
+                    <div class="phone-card user">
+                      <span class="tag">你</span>
+                      <p>看一下当前进度，完成后只展示结果。</p>
+                    </div>
+                    <div class="phone-card">
+                      <span class="tag">Codex</span>
+                      <p class="typing">已完成文本同步优化，手机端保留输入与结果，工具细节默认隐藏。</p>
+                    </div>
+                    <div class="phone-card image">
+                      <div class="thumb"></div>
+                      <div>
+                        <span class="tag">附件</span>
+                        <p>上传图片以缩略图显示，不把路径塞进对话。</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="phone-compose">
+                    <div class="phone-input">继续让 Codex 修改 README...</div>
+                    <div class="phone-send">↑</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slide-note"><span class="note-dot"></span>旁白：用户在手机上不是来审 diff 的，他只关心输入有没有送到、结果是什么、现在是否还在生成。</div>
+        </section>
+
+        <section class="slide" data-title="版本演进">
+          <div class="slide-inner">
+            <div class="slide-title">
+              <div class="eyebrow">Version Timeline</div>
+              <h2>从扫码绑定到 1.1.11 的演进</h2>
+              <p class="lead">每个阶段都解决一个更具体的问题，也留下一个更清楚的限制。</p>
+            </div>
+            <div class="phase-line">
+              <div class="phase">
+                <div class="phase-number">0</div>
+                <h3>扫码网页</h3>
+                <small>证明当前会话能被手机看见。限制是临时域名、浏览器体验和局域网依赖。</small>
+              </div>
+              <div class="phase">
+                <div class="phase-number">1</div>
+                <h3>手机输入</h3>
+                <small>验证 UI 注入进入 Desktop 当前窗口。限制是依赖 macOS 辅助功能授权。</small>
+              </div>
+              <div class="phase">
+                <div class="phase-number">2</div>
+                <h3>Broker</h3>
+                <small>摆脱同一 Wi-Fi，支持公网远程连接。限制是需要维护公网服务。</small>
+              </div>
+              <div class="phase">
+                <div class="phase-number">3</div>
+                <h3>Android App</h3>
+                <small>替换浏览器页面，支持配置、线程列表、附件、主题和在线更新。</small>
+              </div>
+              <div class="phase">
+                <div class="phase-number">11</div>
+                <h3>文本同步</h3>
+                <small>只显示用户输入和 Codex 文本结果，降低同步延迟，隐藏工具噪音。</small>
+              </div>
+            </div>
+          </div>
+          <div class="slide-note"><span class="note-dot"></span>旁白：这不是一开始就想清楚的架构，而是一轮轮被真实问题逼出来的路线。</div>
+        </section>
+
+        <section class="slide" data-title="视频分镜">
+          <div class="slide-inner">
+            <div class="slide-title">
+              <div class="eyebrow">Video Script</div>
+              <h2>视频演示的 6 个镜头</h2>
+              <p class="lead">这页把视频稿提示词转成可直接拍摄或生成的分镜结构。</p>
+            </div>
+            <div class="timeline">
+              <div class="timeline-rail">
+                <div class="time-chip">0:00-0:12</div>
+                <div class="time-chip">0:12-0:35</div>
+                <div class="time-chip">0:35-0:58</div>
+                <div class="time-chip">0:58-1:25</div>
+                <div class="time-chip">1:25-1:55</div>
+                <div class="time-chip">1:55-2:55</div>
+              </div>
+              <div class="shots">
+                <div class="shot"><strong>片头</strong><p class="muted">Mac Codex 正在生成，用户切到手机，手机显示同一个会话。</p></div>
+                <div class="shot"><strong>痛点</strong><p class="muted">不是远程桌面，不是影子聊天，是当前会话控制。</p></div>
+                <div class="shot"><strong>扫码版</strong><p class="muted">二维码证明链路可行，但不够稳定和产品化。</p></div>
+                <div class="shot"><strong>输入回 PC</strong><p class="muted">后台 app-server 旁路失败，必须进入 Desktop 当前窗口。</p></div>
+                <div class="shot"><strong>Broker</strong><p class="muted">Android App、Public Broker、Mac Relay App 三段式远程链路。</p></div>
+                <div class="shot"><strong>1.1.11</strong><p class="muted">只显示文本结果，附件缩略图、主题切换、在线更新快速闪过。</p></div>
+              </div>
+            </div>
+          </div>
+          <div class="slide-note"><span class="note-dot"></span>旁白：这一页给剪辑或 AI 视频生成用，镜头短、字幕短、画面自解释。</div>
+        </section>
+
+        <section class="slide" data-title="边界">
+          <div class="slide-inner grid-2">
+            <div>
+              <div class="eyebrow">Reality Check</div>
+              <h2>当前版本可用，但不装作完美</h2>
+              <p class="lead">这类工具最容易的问题是过度承诺。真实边界要写清楚，用户才知道怎么部署和排错。</p>
+            </div>
+            <div class="story-stack">
+              <div class="story-card">
+                <div class="icon amber">!</div>
+                <div>
+                  <h3>Mac 输入依赖辅助功能</h3>
+                  <p class="body-copy">`Mobile Codex Input.app` 需要 Accessibility 权限，Codex Desktop 也需要能聚焦到目标线程。</p>
+                </div>
+              </div>
+              <div class="story-card">
+                <div class="icon blue">W</div>
+                <div>
+                  <h3>Broker 需要自己维护</h3>
+                  <p class="body-copy">公网使用依赖 HTTPS/WSS、反向代理和稳定重连；局域网只是验证路线。</p>
+                </div>
+              </div>
+              <div class="story-card">
+                <div class="icon teal">T</div>
+                <div>
+                  <h3>不是底层 token 流</h3>
+                  <p class="body-copy">输出来自 Desktop 状态与会话 tail，长文本仍可能按块同步，再由前端模拟平滑展示。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slide-note"><span class="note-dot"></span>旁白：承认限制不是削弱产品，而是让项目看起来更可信，也更方便别人复现。</div>
+        </section>
+
+        <section class="slide dark-slide" data-title="结尾">
+          <div class="slide-inner">
+            <div class="slide-title">
+              <div class="eyebrow">Next</div>
+              <h2>让手机成为 Codex 桌面工作流的线头</h2>
+              <p class="lead">
+                它不取代电脑，只是在你离开电脑以后，让你继续拽住那条正在往前跑的工作流。
+              </p>
+            </div>
+            <div class="index-grid">
+              <div class="index-card">
+                <strong>一键 Broker 部署</strong>
+                <span>降低公网服务器配置门槛。</span>
+              </div>
+              <div class="index-card">
+                <strong>开机自启动</strong>
+                <span>Mac Relay App 自动保持在线。</span>
+              </div>
+              <div class="index-card">
+                <strong>更稳的重连</strong>
+                <span>心跳、离线提示、断线恢复。</span>
+              </div>
+              <div class="index-card">
+                <strong>App 内更新</strong>
+                <span>减少用户寻找 APK 的步骤。</span>
+              </div>
+              <div class="index-card">
+                <strong>多会话管理</strong>
+                <span>未来支持多个窗口和设备。</span>
+              </div>
+            </div>
+            <div class="panel dark">
+              <p class="quote">Mobile Codex，手机上的 Codex 远程控制台。</p>
+              <p class="body-copy">当前公开版本：1.1.11-text-sync。源码、部署手册和阶段记录已整理进 GitHub 仓库。</p>
+            </div>
+          </div>
+          <div class="slide-note"><span class="note-dot"></span>旁白：最后落回项目价值，手机不是第二个 Codex，而是当前工作流的轻量遥控器。</div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="bottom">
+      <div>
+        <div class="chapter" id="chapter">开场</div>
+        <div class="progress"><span id="progress"></span></div>
+      </div>
+      <div class="speaker-note" id="speaker"><span class="note-dot"></span><span>旁白：先讲一个真实痛点。</span></div>
+      <div class="controls" aria-label="slide controls">
+        <button class="nav-button" type="button" id="prev" aria-label="上一页">‹</button>
+        <button class="nav-button" type="button" id="next" aria-label="下一页">›</button>
+      </div>
+      <div class="slide-count" id="count">1 / 10</div>
+    </footer>
+
+    <script>
+      const slides = Array.from(document.querySelectorAll(".slide"));
+      const progress = document.getElementById("progress");
+      const count = document.getElementById("count");
+      const chapter = document.getElementById("chapter");
+      const speaker = document.getElementById("speaker");
+      const prev = document.getElementById("prev");
+      const next = document.getElementById("next");
+      let index = 0;
+
+      function show(nextIndex) {
+        index = Math.max(0, Math.min(slides.length - 1, nextIndex));
+        slides.forEach((slide, slideIndex) => {
+          slide.classList.toggle("active", slideIndex === index);
+        });
+        progress.style.width = `${((index + 1) / slides.length) * 100}%`;
+        count.textContent = `${index + 1} / ${slides.length}`;
+        chapter.textContent = slides[index].dataset.title || "";
+        const note = slides[index].querySelector(".slide-note")?.textContent?.trim() || "";
+        speaker.querySelector("span:last-child").textContent = note;
+        prev.disabled = index === 0;
+        next.disabled = index === slides.length - 1;
+      }
+
+      prev.addEventListener("click", () => show(index - 1));
+      next.addEventListener("click", () => show(index + 1));
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") {
+          event.preventDefault();
+          show(index + 1);
+        }
+        if (event.key === "ArrowLeft" || event.key === "PageUp") {
+          event.preventDefault();
+          show(index - 1);
+        }
+        if (event.key === "Home") show(0);
+        if (event.key === "End") show(slides.length - 1);
+      });
+
+      show(0);
+    </script>
   </body>
 </html>

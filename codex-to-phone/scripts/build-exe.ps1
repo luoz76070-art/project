@@ -30,7 +30,7 @@ function Read-DotEnvMap([string]$Path) {
   $map = @{
     MOBILE_CODEX_HOST = "0.0.0.0"
     MOBILE_CODEX_PORT = "8787"
-    MOBILE_CODEX_TOKEN = "change-me"
+    MOBILE_CODEX_TOKEN = "mobile-codex-" + [Guid]::NewGuid().ToString("N") + [Guid]::NewGuid().ToString("N")
     CODEX_HOME = "$env:USERPROFILE\.codex"
     MOBILE_CODEX_DDNS_DOMAIN = ""
   }

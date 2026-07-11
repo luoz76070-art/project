@@ -39,10 +39,7 @@ async function main() {
 
   app.get("/health", async () => ({
     ok: true,
-    mode: "desktop-history-readonly",
-    codexHome: config.codexHome,
-    defaultCwd: config.defaultCwd,
-    codexExecutable: resolveCodexExecutable(),
+    mode: "mobile-codex-relay",
   }));
 
   app.get("/api/status", async () => {

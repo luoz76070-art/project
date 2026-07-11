@@ -13,6 +13,13 @@ data/
 mobile-uploads/
 .playwright-cli/
 output/
+config.json
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+google-services.json
 
 # Build outputs
 dist/

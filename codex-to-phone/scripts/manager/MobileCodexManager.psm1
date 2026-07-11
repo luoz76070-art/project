@@ -13,7 +13,7 @@ function Read-MobileCodexConfig {
   $config = [ordered]@{
     MOBILE_CODEX_HOST = "0.0.0.0"
     MOBILE_CODEX_PORT = "8787"
-    MOBILE_CODEX_TOKEN = "change-me"
+    MOBILE_CODEX_TOKEN = New-MobileCodexToken
     CODEX_HOME = Join-Path $env:USERPROFILE ".codex"
     MOBILE_CODEX_DEFAULT_CWD = $root
     MOBILE_CODEX_DDNS_DOMAIN = ""

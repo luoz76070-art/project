@@ -15,4 +15,4 @@ Excluded:
 - `.env.local`, relay pid files, logs, upload data, and personal paths.
 - Development smoke logs and local conversation notes.
 
-Before publishing, review the repository name, license choice, and whether you want docs in Chinese, English, or both.
+Before publishing, run the checks in `docs/github-public-release-plan.md` and review every credential-like match manually.

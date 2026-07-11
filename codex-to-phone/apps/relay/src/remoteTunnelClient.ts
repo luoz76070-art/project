@@ -41,9 +41,13 @@ for (;;) {
 }
 
 function connectOnce(): Promise<void> {
-  const url = buildBrokerWebSocketUrl(config.brokerUrl, config.relayId, config.relaySecret);
-  console.log(`[remote-tunnel] connecting ${redactSecret(url)}`);
-  const socket = new WebSocket(url);
+  const url = buildBrokerWebSocketUrl(config.brokerUrl, config.relayId);
+  console.log(`[remote-tunnel] connecting ${url}`);
+  const socket = new WebSocket(url, {
+    headers: {
+      authorization: `Bearer ${config.relaySecret}`,
+    },
+  });
 
   return new Promise((resolve, reject) => {
     socket.once("open", () => {
@@ -104,7 +108,7 @@ async function forwardLocal(request: BrokerRequest): Promise<BrokerResponse> {
   }
 }
 
-function buildBrokerWebSocketUrl(raw: string, relayId: string, secret: string): string {
+function buildBrokerWebSocketUrl(raw: string, relayId: string): string {
   const url = new URL(raw);
   if (url.protocol === "http:") url.protocol = "ws:";
   if (url.protocol === "https:") url.protocol = "wss:";
@@ -115,7 +119,6 @@ function buildBrokerWebSocketUrl(raw: string, relayId: string, secret: string): 
     url.pathname = `${pathname}/relay/connect`;
   }
   url.searchParams.set("relayId", relayId);
-  url.searchParams.set("secret", secret);
   return url.toString();
 }
 
@@ -127,10 +130,6 @@ function normalizeResponseHeaders(headers: Headers): Record<string, string> {
     result[name] = value;
   });
   return result;
-}
-
-function redactSecret(value: string): string {
-  return value.replace(/secret=[^&]+/u, "secret=***");
 }
 
 function delay(ms: number): Promise<void> {

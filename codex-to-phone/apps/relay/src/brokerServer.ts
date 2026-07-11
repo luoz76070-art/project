@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { WebSocketServer, type WebSocket } from "ws";
 import { z } from "zod";
 
@@ -22,7 +22,6 @@ type BrokerResponse = {
 
 type RelayConnection = {
   relayId: string;
-  secret: string;
   socket: WebSocket;
   connectedAt: string;
   lastSeenAt: string;
@@ -38,7 +37,16 @@ const config = {
   host: process.env.MOBILE_CODEX_BROKER_HOST ?? "0.0.0.0",
   port: Number(process.env.MOBILE_CODEX_BROKER_PORT ?? 18888),
   requestTimeoutMs: Number(process.env.MOBILE_CODEX_BROKER_REQUEST_TIMEOUT_MS ?? 180_000),
+  relayCredentials: loadRelayCredentials(process.env.MOBILE_CODEX_BROKER_RELAYS),
+  allowDynamicRelays: process.env.MOBILE_CODEX_BROKER_ALLOW_DYNAMIC_RELAYS === "true",
 };
+
+if (config.relayCredentials.size === 0 && !config.allowDynamicRelays) {
+  throw new Error(
+    "Set MOBILE_CODEX_BROKER_RELAYS to a JSON object of relay credentials. " +
+      "For local development only, set MOBILE_CODEX_BROKER_ALLOW_DYNAMIC_RELAYS=true.",
+  );
+}
 
 const app = Fastify({ logger: true, bodyLimit: 40 * 1024 * 1024 });
 const relays = new Map<string, RelayConnection>();
@@ -47,7 +55,7 @@ const pending = new Map<string, PendingRequest>();
 app.get("/health", async () => ({
   ok: true,
   mode: "mobile-codex-broker",
-  connectedRelays: [...relays.keys()],
+  connectedRelayCount: relays.size,
 }));
 
 app.all("/r/:relayId/*", async (request, reply) => {
@@ -79,22 +87,27 @@ const wss = new WebSocketServer({ server: app.server, path: "/relay/connect" });
 wss.on("connection", (socket, request) => {
   const url = new URL(request.url ?? "", "http://broker.local");
   const relayId = url.searchParams.get("relayId")?.trim();
-  const secret = url.searchParams.get("secret")?.trim();
+  const secret = bearerToken(request.headers.authorization) ?? url.searchParams.get("secret")?.trim();
   if (!relayId || !secret) {
     socket.close(1008, "missing relayId or secret");
     return;
   }
 
-  const existing = relays.get(relayId);
-  if (existing && existing.secret !== secret) {
+  const configuredSecret = config.relayCredentials.get(relayId);
+  if (!configuredSecret && !config.allowDynamicRelays) {
+    socket.close(1008, "relay is not configured");
+    return;
+  }
+  if (configuredSecret && !secretsMatch(secret, configuredSecret)) {
     socket.close(1008, "relay secret mismatch");
     return;
   }
+
+  const existing = relays.get(relayId);
   existing?.socket.close(1012, "replaced by a newer relay connection");
 
   const connection: RelayConnection = {
     relayId,
-    secret,
     socket,
     connectedAt: new Date().toISOString(),
     lastSeenAt: new Date().toISOString(),
@@ -177,4 +190,35 @@ function encodeRequestBody(body: unknown): string | null {
 function canForwardResponseHeader(name: string): boolean {
   const lower = name.toLowerCase();
   return lower !== "content-length" && lower !== "connection" && lower !== "transfer-encoding";
+}
+
+function loadRelayCredentials(raw: string | undefined): Map<string, string> {
+  if (!raw?.trim()) return new Map();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("MOBILE_CODEX_BROKER_RELAYS must be valid JSON.");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("MOBILE_CODEX_BROKER_RELAYS must be a JSON object.");
+  }
+  const credentials = new Map<string, string>();
+  for (const [relayId, value] of Object.entries(parsed)) {
+    if (!relayId.trim() || typeof value !== "string" || value.length < 24) {
+      throw new Error("Each broker relay credential must have a non-empty relayId and a secret of at least 24 characters.");
+    }
+    credentials.set(relayId, value);
+  }
+  return credentials;
+}
+
+function bearerToken(header: string | undefined): string | null {
+  return header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() || null : null;
+}
+
+function secretsMatch(actual: string, expected: string): boolean {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
 }

@@ -45,7 +45,7 @@ pnpm install
 ```text
 MOBILE_CODEX_HOST=0.0.0.0
 MOBILE_CODEX_PORT=8787
-MOBILE_CODEX_TOKEN=change-me
+MOBILE_CODEX_TOKEN=<至少 32 字节随机 Token>
 CODEX_HOME=C:\Users\<YOU>\.codex
 MOBILE_CODEX_DEFAULT_CWD=<PROJECT_ROOT>
 ```
@@ -55,7 +55,7 @@ MOBILE_CODEX_DEFAULT_CWD=<PROJECT_ROOT>
 ```text
 MOBILE_CODEX_HOST=0.0.0.0
 MOBILE_CODEX_PORT=8787
-MOBILE_CODEX_TOKEN=change-me
+MOBILE_CODEX_TOKEN=<启动脚本自动生成的随机 Token>
 ```
 
 ## 一键启动 Relay
@@ -100,7 +100,7 @@ Mobile Codex Relay.app
 - 显示 Android App 可填写的 Endpoint 和 Token。
 - 通过固定 Token 配置保持后续启动一致。
 
-如果目标是远程使用，不要填写这个 LAN Endpoint。请使用 [[remote-broker.md]] 里的 Broker 模式：Android Endpoint 填公网 Broker 的 `https://broker.example.com/r/<relayId>`，Mac App 主动连接 Broker。
+如果目标是远程使用，不要填写这个 LAN Endpoint。请使用 [remote-broker.md](remote-broker.md) 里的 Broker 模式：Android Endpoint 填公网 Broker 的 `https://broker.example.com/r/<relayId>`，Mac App 主动连接 Broker。
 
 `corepack pnpm mac:package` 会同时构建 `Mobile Codex Input.app`，用于把手机消息注入到 Codex Desktop 输入框。若 Helper 构建失败，Relay 会回退到 `osascript`。更稳定的方式是安装 Xcode Command Line Tools：
 
@@ -173,7 +173,7 @@ Token: MOBILE_CODEX_TOKEN
 电脑局域网 IP 以 `start-relay.bat` 打印为准，例如：
 
 ```text
-http://192.168.6.43:8787
+http://192.168.1.50:8787
 ```
 
 ## 查看电脑 Codex 当前窗口

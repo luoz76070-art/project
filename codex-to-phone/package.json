@@ -13,7 +13,7 @@
     "mac:package": "pnpm build && pnpm mac:helper && pnpm mac:relay-app",
     "android:setup:mac": "bash scripts/setup-android-tools-mac.sh",
     "android:apk:mac": "bash scripts/build-debug-apk-mac.sh",
-    "dev:relay:mac": "pnpm mac:helper && MOBILE_CODEX_HOST=${MOBILE_CODEX_HOST:-0.0.0.0} MOBILE_CODEX_PORT=${MOBILE_CODEX_PORT:-8787} MOBILE_CODEX_TOKEN=${MOBILE_CODEX_TOKEN:-change-me} pnpm dev:relay",
+    "dev:relay:mac": "pnpm mac:helper && MOBILE_CODEX_HOST=${MOBILE_CODEX_HOST:-0.0.0.0} MOBILE_CODEX_PORT=${MOBILE_CODEX_PORT:-8787} MOBILE_CODEX_TOKEN=${MOBILE_CODEX_TOKEN:?Set MOBILE_CODEX_TOKEN to a strong random value} pnpm dev:relay",
     "build": "pnpm --filter @mobile-codex/relay build && pnpm --filter @mobile-codex/mobile build",
     "smoke": "pnpm --filter @mobile-codex/relay smoke",
     "typecheck": "pnpm --filter @mobile-codex/relay typecheck && pnpm --filter @mobile-codex/mobile typecheck"

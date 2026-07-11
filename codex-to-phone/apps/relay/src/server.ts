@@ -40,10 +40,7 @@ app.addHook("preHandler", async (request, reply) => {
 
 app.get("/health", async () => ({
   ok: true,
-  mode: "desktop-history-readonly",
-  codexHome: config.codexHome,
-  defaultCwd: config.defaultCwd,
-  codexExecutable: resolveCodexExecutable(),
+  mode: "mobile-codex-relay",
 }));
 
 app.get("/api/status", async () => {
@@ -75,7 +72,12 @@ app.get("/api/live/threads", async (request) => {
       limit: z.coerce.number().int().positive().max(200).optional(),
     })
     .parse(request.query);
-  return { threads: await live.listThreads(query.limit ?? 50) };
+  const limit = query.limit ?? 50;
+  const [threads, liveThreads] = await Promise.all([
+    store.listThreads(limit).catch(() => []),
+    live.listThreads(Math.min(limit, 20)).catch(() => []),
+  ]);
+  return { threads: uniqueThreads([...liveThreads, ...threads], limit) };
 });
 
 app.get("/api/live/threads/:id", async (request) => {
@@ -314,11 +316,25 @@ app.get("/api/desktop/threads/:id", async (request) => {
       maxMessages: z.coerce.number().int().positive().max(500).optional(),
     })
     .parse(request.query);
+  const maxBytes = Math.min(query.maxBytes ?? 65_536, 65_536);
+  const maxMessages = Math.min(query.maxMessages ?? 24, 24);
   const data = query.latest
-    ? await store.readThreadLatest(params.id, query.maxBytes ?? 262_144, query.maxMessages ?? 80)
+    ? await store.readThreadLatest(params.id, maxBytes, maxMessages)
     : await store.readThreadWithCursor(params.id);
   return { ...data, mode: "desktop-session-tail-readonly" };
 });
+
+function uniqueThreads(threads: Array<Awaited<ReturnType<CodexStore["getActiveDesktopThread"]>>>, limit: number) {
+  const seen = new Set<string>();
+  const result = [];
+  for (const thread of threads) {
+    if (!thread || seen.has(thread.id)) continue;
+    seen.add(thread.id);
+    result.push(thread);
+    if (result.length >= limit) break;
+  }
+  return result;
+}
 
 app.get("/api/desktop/threads/:id/delta", async (request) => {
   const params = z.object({ id: z.string().min(1) }).parse(request.params);

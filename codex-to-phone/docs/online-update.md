@@ -1,62 +1,81 @@
-# Android 在线升级
+# Android 在线更新
 
-当前项目采用自托管 APK 更新：
+项目支持自托管 APK 更新：
 
 ```text
 Android App
-  -> https://zyzlz.xin/mobile-codex/releases/android/latest.json
-  -> 打开 latest.json 里的 apkUrl 下载新版 APK
+  -> latest.json
+  -> 读取 apkUrl
+  -> 下载 APK
+  -> Android 系统安装器确认安装
 ```
 
-这不是 Google Play 内购式静默升级。Android 侧载应用必须经过系统安装器确认；第一次安装同来源 APK 时，用户可能需要允许浏览器或系统文件管理器“安装未知应用”。
+在线更新不是静默升级。侧载应用仍需要用户确认安装，新来源第一次安装时还需要允许“安装未知应用”。
+
+## 构建时配置更新源
+
+更新地址通过 Vite 环境变量写入 APK：
+
+```bash
+export VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL=https://downloads.example.com/mobile-codex/android/latest.json
+corepack pnpm android:apk:mac -- 1.1.12-self-hosted
+```
+
+不配置 `VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL` 时，App 会显示“未配置更新源”，聊天、连接和控制功能仍可正常使用。
 
 ## 发布新版
 
-1. 更新版本号。
+1. 同步更新版本号：
 
-   需要同步修改：
+   - `apps/mobile/android/app/build.gradle`
+   - `apps/mobile/src/main.tsx`
 
-   - `apps/mobile/android/app/build.gradle` 的 `versionCode`
-   - `apps/mobile/android/app/build.gradle` 的 `versionName`
-   - `apps/mobile/src/main.tsx` 的 `appVersionCode`
-   - `apps/mobile/src/main.tsx` 的 `appVersionName`
-
-2. 构建 APK。
+2. 构建 APK：
 
    ```bash
-   corepack pnpm android:apk:mac -- mac-remote
+   export VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL=https://downloads.example.com/mobile-codex/android/latest.json
+   corepack pnpm android:apk:mac -- 1.1.12-self-hosted
    ```
 
-3. 发布 APK 和 manifest。
+3. 配置发布目标：
+
+   ```bash
+   export MOBILE_CODEX_RELEASE_HOST=deploy@example.com
+   export MOBILE_CODEX_RELEASE_SSH_KEY=$HOME/.ssh/id_ed25519
+   export MOBILE_CODEX_RELEASE_DIR=/var/www/mobile-codex/releases/android
+   export MOBILE_CODEX_RELEASE_BASE_URL=https://downloads.example.com/mobile-codex/android
+   ```
+
+4. 发布 APK 和 manifest：
 
    ```bash
    scripts/publish-android-update.sh \
-     dist-apk/mobile-codex-mac-remote-debug.apk \
-     1.1.5 \
-     6 \
-     "修复远程连接和手机端显示"
+     dist-apk/mobile-codex-1.1.12-self-hosted-debug.apk \
+     1.1.12-self-hosted \
+     13 \
+     "Release notes"
    ```
 
-4. 验证公网 manifest。
+5. 验证：
 
    ```bash
-   curl https://zyzlz.xin/mobile-codex/releases/android/latest.json
+   curl https://downloads.example.com/mobile-codex/android/latest.json
    ```
 
-## 手机端行为
+## Manifest 格式
 
-- App 启动后会自动检查一次更新。
-- 设置页显示当前版本和更新状态。
-- 有新版本时点击“下载新版”，系统会打开 APK 下载地址。
-- 下载完成后按 Android 系统提示安装。
+```json
+{
+  "platform": "android",
+  "versionName": "1.1.12-self-hosted",
+  "versionCode": 13,
+  "apkUrl": "https://downloads.example.com/mobile-codex/android/mobile-codex-1.1.12-self-hosted.apk",
+  "size": 4000000,
+  "sha256": "replace-with-generated-sha256",
+  "mandatory": false,
+  "notes": "Release notes",
+  "publishedAt": "2026-01-01T00:00:00Z"
+}
+```
 
-## 后续增强
-
-更完整的一键升级可以继续增加 Android 原生插件：
-
-- App 内下载 APK 到私有缓存目录；
-- 通过 `FileProvider` 生成 `content://` URI；
-- 使用 `Intent.ACTION_VIEW` + `application/vnd.android.package-archive` 唤起系统安装器；
-- 增加 `REQUEST_INSTALL_PACKAGES` 权限。
-
-这个增强仍然不能绕过系统安装确认，但能减少用户手动寻找下载文件的步骤。
+发布脚本会自动计算 `size` 和 `sha256`，并使用 Node.js 生成合法 JSON。

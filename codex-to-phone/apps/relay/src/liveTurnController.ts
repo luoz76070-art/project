@@ -708,7 +708,7 @@ function itemToMessage(item: AppThreadItem | undefined, turnId: string, timestam
   const id = `${turnId}-${item.id ?? item.type}`;
   if (item.type === "userMessage") {
     const text = extractUserText(item.content);
-    return text ? { id, timestamp, role: "user", text, kind: item.type } : null;
+    return text && isDisplayableUserText(text) ? { id, timestamp, role: "user", text, kind: item.type } : null;
   }
   if (item.type === "agentMessage" && typeof item.text === "string" && item.text) {
     return { id, timestamp, role: "assistant", text: item.text, kind: item.type };
@@ -730,6 +730,28 @@ function extractUserText(content: unknown): string {
     .map((item) => (item && typeof item === "object" && (item as { type?: unknown }).type === "text" ? (item as { text?: string }).text ?? "" : ""))
     .filter(Boolean)
     .join("\n\n");
+}
+
+function isDisplayableUserText(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return !isGeneratedContextText(trimmed);
+}
+
+function isGeneratedContextText(trimmed: string): boolean {
+  return (
+    trimmed.startsWith("<environment_context>") ||
+    trimmed.startsWith("<permissions instructions>") ||
+    trimmed.startsWith("<app-context>") ||
+    trimmed.startsWith("<collaboration_mode>") ||
+    trimmed.startsWith("<personality_spec>") ||
+    trimmed.startsWith("<skills_instructions>") ||
+    trimmed.startsWith("<plugins_instructions>") ||
+    trimmed.startsWith("# AGENTS.md instructions") ||
+    trimmed.startsWith("<INSTRUCTIONS>") ||
+    trimmed.startsWith("Knowledge cutoff:") ||
+    trimmed.startsWith("You are ")
+  );
 }
 
 function fromUnixSeconds(value: number | null): string {

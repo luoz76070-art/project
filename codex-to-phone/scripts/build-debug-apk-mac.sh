@@ -36,6 +36,7 @@ fi
 
 corepack pnpm --filter @mobile-codex/mobile build
 corepack pnpm --filter @mobile-codex/mobile exec cap sync android
+node scripts/normalize-capacitor-config.mjs
 
 pushd apps/mobile/android >/dev/null
 gradle assembleDebug --no-daemon

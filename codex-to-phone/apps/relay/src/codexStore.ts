@@ -83,7 +83,9 @@ export class CodexStore {
     for (const thread of [...enrichedFromIndex, ...enrichedFromRollouts]) {
       const existing = byId.get(thread.id);
       if (!existing || Date.parse(thread.updatedAt) > Date.parse(existing.updatedAt)) {
-        byId.set(thread.id, thread);
+        byId.set(thread.id, existing ? mergeThreadSummary(existing, thread) : thread);
+      } else if (existing) {
+        byId.set(thread.id, mergeThreadSummary(thread, existing));
       }
     }
 
@@ -185,6 +187,17 @@ export class CodexStore {
     return threads.find(isDesktopThread) ?? threads[0] ?? null;
   }
 
+  async listActiveDesktopThreads(limit = 8, activeWindowMs = 30 * 60_000): Promise<CodexThreadSummary[]> {
+    const threads = (await this.listThreads(Math.max(limit * 4, 20))).filter(isDesktopThread);
+    if (threads.length === 0) return [];
+
+    const latestMs = Math.max(...threads.map((thread) => Date.parse(thread.updatedAt)).filter(Number.isFinite));
+    if (!Number.isFinite(latestMs)) return threads.slice(0, Math.min(limit, 3));
+
+    const recent = threads.filter((thread) => Date.parse(thread.updatedAt) >= latestMs - activeWindowMs);
+    return (recent.length > 0 ? recent : threads.slice(0, 3)).slice(0, limit);
+  }
+
   private async readSessionIndex(): Promise<SessionIndexRow[]> {
     const file = path.join(this.codexHome, "session_index.jsonl");
     const lines = await this.readLines(file);
@@ -276,16 +289,26 @@ export class CodexStore {
   }
 
   private async readThreadSummary(threadId: string, rolloutPath: string, mtimeMs: number): Promise<CodexThreadSummary> {
-    const meta = await this.readSessionMeta(rolloutPath);
+    const [meta, indexedName, extractedName] = await Promise.all([
+      this.readSessionMeta(rolloutPath),
+      this.readIndexedThreadName(threadId),
+      this.extractThreadName(rolloutPath),
+    ]);
     return {
       id: meta?.id ?? threadId,
-      threadName: await this.extractThreadName(rolloutPath),
+      threadName: chooseThreadName(indexedName, extractedName),
       updatedAt: new Date(mtimeMs).toISOString(),
       cwd: meta?.cwd ?? null,
       source: meta?.source ?? null,
       originator: meta?.originator ?? null,
       rolloutPath,
     };
+  }
+
+  private async readIndexedThreadName(threadId: string): Promise<string | null> {
+    const rows = await this.readSessionIndex();
+    const row = rows.reverse().find((item) => item.id === threadId && typeof item.thread_name === "string");
+    return row?.thread_name ?? null;
   }
 
   private async extractThreadName(rolloutPath: string): Promise<string> {
@@ -377,6 +400,7 @@ export class CodexStore {
       if (payload?.type === "message") {
         const role = normalizeRole(payload.role);
         const text = extractContentText(payload.content);
+        if (role === "user" && !isDisplayableUserText(text)) return [];
         return text ? [{ id: `${idPrefix}-${index}`, timestamp, role, text, kind: "message" }] : [];
       }
       if (payload?.type === "function_call") {
@@ -394,6 +418,7 @@ export class CodexStore {
     if (line.type === "event_msg") {
       const payload = line.payload as Record<string, unknown> | undefined;
       if (payload?.type === "user_message" && typeof payload.message === "string") {
+        if (!isDisplayableUserText(payload.message)) return [];
         return [{ id: `${idPrefix}-${index}`, timestamp, role: "user", text: payload.message, kind: "user_message" }];
       }
       if (payload?.type === "agent_message" && typeof payload.message === "string") {
@@ -493,6 +518,47 @@ function dedupeMessages(messages: CodexMessage[]): CodexMessage[] {
   return result;
 }
 
+function mergeThreadSummary(existing: CodexThreadSummary, incoming: CodexThreadSummary): CodexThreadSummary {
+  const newer = Date.parse(incoming.updatedAt) >= Date.parse(existing.updatedAt) ? incoming : existing;
+  return {
+    ...newer,
+    threadName: chooseThreadName(existing.threadName, incoming.threadName),
+    cwd: newer.cwd ?? incoming.cwd ?? existing.cwd,
+    source: newer.source ?? incoming.source ?? existing.source,
+    originator: newer.originator ?? incoming.originator ?? existing.originator,
+    rolloutPath: newer.rolloutPath ?? incoming.rolloutPath ?? existing.rolloutPath,
+  };
+}
+
+function chooseThreadName(primary: string | null | undefined, fallback: string | null | undefined): string {
+  const first = normalizeThreadName(primary);
+  if (first && !isContextOrGeneratedThreadName(first)) return first;
+  const second = normalizeThreadName(fallback);
+  if (second && !isContextOrGeneratedThreadName(second)) return second;
+  return first || second || "Untitled";
+}
+
+function normalizeThreadName(value: string | null | undefined): string {
+  return (value ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
+}
+
+function isContextOrGeneratedThreadName(value: string): boolean {
+  return (
+    value === "Untitled" ||
+    value.startsWith("# AGENTS.md instructions") ||
+    value.startsWith("<INSTRUCTIONS>") ||
+    value.startsWith("<environment_context>") ||
+    value.startsWith("<permissions instructions>") ||
+    value.startsWith("<app-context>") ||
+    value.startsWith("<collaboration_mode>") ||
+    value.startsWith("<personality_spec>") ||
+    value.startsWith("<skills_instructions>") ||
+    value.startsWith("<plugins_instructions>") ||
+    value.startsWith("Knowledge cutoff:") ||
+    value.startsWith("You are ")
+  );
+}
+
 function extractThreadIdFromRolloutName(file: string): string | null {
   const match = path.basename(file).match(/rollout-.+-(019[0-9a-f-]+)\.jsonl$/i);
   return match?.[1] ?? null;
@@ -504,7 +570,13 @@ function isDisplayableUserText(text: string): boolean {
   return !(
     trimmed.startsWith("<environment_context>") ||
     trimmed.startsWith("<permissions instructions>") ||
+    trimmed.startsWith("<app-context>") ||
+    trimmed.startsWith("<collaboration_mode>") ||
+    trimmed.startsWith("<personality_spec>") ||
     trimmed.startsWith("<skills_instructions>") ||
+    trimmed.startsWith("<plugins_instructions>") ||
+    trimmed.startsWith("# AGENTS.md instructions") ||
+    trimmed.startsWith("<INSTRUCTIONS>") ||
     trimmed.startsWith("Knowledge cutoff:") ||
     trimmed.startsWith("You are ")
   );

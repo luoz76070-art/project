@@ -1,144 +1,161 @@
-# Mobile Codex / Codex To Phone
+# Codex To Phone
 
-把 Mac 上正在运行的 Codex Desktop 延伸到 Android 手机上：手机可以远程查看会话进展、发送输入到 Codex、上传附件、查看结果，并通过公网 Broker 在离开电脑网络后继续使用。
+> 把 Mac 上的 Codex Desktop 延伸到 Android 手机：远程查看线程、跟随输出、发送消息、上传附件，并继续控制正在运行的会话。
 
-当前仓库已经从早期的“单个会话扫码网页绑定”重构为 `1.1.11-text-sync` 版本的 App 项目：
+[![License: MIT](https://img.shields.io/badge/license-MIT-111827.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-2f855a.svg)](https://nodejs.org/)
+[![Android](https://img.shields.io/badge/client-Android-3ddc84.svg)](apps/mobile)
+[![macOS](https://img.shields.io/badge/relay-macOS-111827.svg)](scripts/helper/MobileCodexRelay.swift)
 
-- Mac 端：`Mobile Codex Relay.app`，负责读取 Codex 会话、连接公网 Broker、把手机输入注入 Codex Desktop。
-- Android 端：React + Capacitor App，负责连接 Relay/Broker、显示会话、发送输入和检查在线更新。
-- Relay/Broker：Fastify/Node 服务，提供本地 Relay、远程 Broker、WebSocket 隧道和移动端 API。
-
-> 当前主要验证目标是 Mac 本机 Codex Desktop + Android 手机远程使用。Windows IPC 路线仍保留在源码中，但不是这一轮主路径。
-
-## 当前能力
-
-- Android App 连接 Mac Relay 或公网 Broker，不再依赖浏览器扫码页面。
-- 支持远程公网连接：Android 和 Mac 只需要能访问同一个 Broker，手机不必和电脑在同一局域网。
-- 手机可以查看 Codex Desktop 会话列表、打开桌面当前线程、跟随最新消息。
-- 手机上发送文字后，Mac 端通过 `codex://threads/<threadId>` 聚焦目标线程，再用 `Mobile Codex Input.app` 或 `osascript` 把文字提交到 Codex Desktop 输入框。
-- UI 只显示用户输入和 Codex 文本结果，默认隐藏工具调用、命令日志、补丁 diff 和桥接内部确认。
-- 输出同步做了低延迟轮询和前端平滑显示，目标是接近 Codex 的阅读节奏，而不是一次性丢出整段缓存。
-- 支持 Light / Dark / System 主题。
-- 支持手机端上传附件，聊天区显示缩略图，不把本机绝对路径塞进对话文本。
-- Android 支持自托管在线更新检查，当前 manifest 示例：`https://zyzlz.xin/mobile-codex/releases/android/latest.json`。
-
-## 项目结构
+Codex To Phone 不是远程桌面，也不会把 Codex 账号放到手机上。Codex 仍在电脑上运行，手机通过你自己控制的 Relay 和 Broker 查看最近会话并提交输入。
 
 ```text
-apps/mobile          React + Capacitor Android 客户端
-apps/relay           Fastify/Node 本地 Relay、Broker、Codex 会话控制
-generated-protocol   Codex Desktop / app-server 协议类型
-scripts              Mac helper、Mac Relay App、Android APK、发布脚本
-docs                 架构、部署、网络、在线更新、历史与验收文档
-marketing            公众号推文、视频稿提示词、HTML 演示稿
+Android App
+    |
+    | HTTPS
+    v
+Public Broker
+    ^
+    | outbound WSS tunnel
+    |
+Mac Relay App  ->  Codex Desktop
 ```
 
-## 小白快速部署
+## 能做什么
 
-### 1. 下载源码
+- 在 Android 上查看 Codex Desktop 的线程列表和最近消息。
+- 按项目目录分组线程，并保留连接后的最近会话记录。
+- 从手机向指定 Codex Desktop 线程发送文字和附件。
+- 显示“正在思考”“正在输出”“等待审批”等运行状态。
+- 低延迟同步 Codex 文本结果，并在手机端平滑显示。
+- 支持 Light、Dark、System 三种主题。
+- 通过自建 Broker 跨网络使用，不要求手机和电脑连接同一 Wi-Fi。
+- 支持自托管 APK 更新源，不依赖应用商店。
+
+默认界面只展示用户输入和 Codex 文本结果。工具日志、补丁内容、环境上下文和桥接内部消息不会占据聊天区。
+
+## 当前实现
+
+| 组件 | 技术 | 作用 |
+| --- | --- | --- |
+| Android App | React 19、Vite 7、Capacitor 7 | 手机 UI、连接管理、消息同步、附件和更新检查 |
+| Local Relay | Node.js、TypeScript、Fastify | 读取 Codex 会话、提供 API、控制当前线程 |
+| Public Broker | Fastify、WebSocket | 转发 Android 请求和 Mac 主动建立的加密隧道 |
+| Mac Relay App | Swift、AppKit | 启停 Relay、保存本地配置、展示 Endpoint 和 Token |
+| Input Helper | Swift、macOS Accessibility | 聚焦目标线程并把手机输入提交到 Codex Desktop |
+| Protocol Types | Codex app-server generated types | 解析线程、turn、审批和增量事件 |
+
+当前源码版本为 `1.1.12-status-context-fix`。主验证环境是 **macOS + Codex Desktop + Android**。Windows 相关代码仍保留，但不是当前重点支持路径。
+
+## 快速开始
+
+### 环境要求
+
+- macOS 13 或更高版本
+- 已安装并登录 Codex Desktop
+- Node.js 20 或更高版本
+- Android 8 或更高版本
+- 构建 APK 时需要 JDK 17 和 Android SDK
+
+### 1. 获取源码
+
+本项目目前位于 `project` 仓库的 `codex-to-phone` 子目录：
 
 ```bash
 git clone https://github.com/luoz76070-art/project.git
 cd project/codex-to-phone
-```
-
-### 2. 安装依赖
-
-```bash
 corepack enable
-corepack pnpm install
+corepack pnpm install --frozen-lockfile
 ```
 
-### 3. 构建 Mac Relay App
+### 2. 构建 Mac Relay
 
 ```bash
 corepack pnpm mac:package
 ```
 
-构建成功后，项目根目录会生成：
+项目根目录会生成：
 
 ```text
 Mobile Codex Relay.app
 Mobile Codex Input.app
 ```
 
-这两个 `.app` 是本机构建产物，不提交到 GitHub。重新下载项目后按上面的命令生成即可。
+这两个 App 包含本机路径和本机构建信息，因此不会提交到 Git。每台 Mac 都应从源码重新构建。
 
-### 4. 打开 Mac Relay App
+### 3. 启动 Relay
 
-双击：
-
-```text
-Mobile Codex Relay.app
-```
-
-它会启动本地 Relay，并显示 Android 端需要填写的 Endpoint 和 Token。
-
-首次让手机向 Codex 发送消息前，在 macOS 打开：
+双击 `Mobile Codex Relay.app`。首次启动会在以下位置生成随机 Token、Relay ID 和 Relay Secret：
 
 ```text
-系统设置 > 隐私与安全性 > 辅助功能
+~/Library/Application Support/Mobile Codex Relay/config.json
 ```
 
-允许：
+局域网测试时，在 Android App 中填写 Mac App 显示的 `LAN Endpoint` 和 `Token`。
+
+### 4. 授予输入权限
+
+打开：
 
 ```text
-Mobile Codex Input.app
+系统设置 -> 隐私与安全性 -> 辅助功能
 ```
 
-这是 Mac 端把手机输入粘贴进 Codex Desktop 输入框的 helper。没有这个权限时，手机可能能看见会话，但不能稳定发送消息到当前 Codex 窗口。
+允许 `Mobile Codex Input.app`。该权限只用于把手机消息提交到可见的 Codex Desktop 输入框。
 
-### 5. 安装 Android App
+### 5. 构建 Android APK
 
-如果只是使用当前发布包，可以从在线更新地址下载：
-
-```text
-https://zyzlz.xin/mobile-codex/releases/android/mobile-codex-1.1.11-text-sync.apk
-```
-
-当前 manifest：
-
-```text
-https://zyzlz.xin/mobile-codex/releases/android/latest.json
-```
-
-如果要自己构建 APK：
+第一次构建先安装 Android 工具：
 
 ```bash
 corepack pnpm android:setup:mac
-corepack pnpm android:apk:mac -- 1.1.11-text-sync
 ```
 
-构建产物会放在 `dist-apk/`，该目录不会提交到仓库。
+构建 APK：
 
-### 6. 局域网验证
+```bash
+corepack pnpm android:apk:mac -- 1.1.12-local
+```
 
-Mac 和 Android 在同一 Wi-Fi 下时，可以先用 Mac Relay App 显示的 LAN Endpoint 测试，例如：
+产物位于：
 
 ```text
-Endpoint: http://192.168.x.x:8787
-Token: <Mac App 显示的 token>
+dist-apk/mobile-codex-1.1.12-local-debug.apk
 ```
 
-局域网只用于本机验证，不是项目的最终目标。
+在 Android 上安装后，打开设置，填写 Relay Endpoint 和 Token，然后执行“测试连接”。
 
-### 7. 远程公网使用
+## 远程使用
 
-正式远程使用请部署 Broker，让 Mac 主动连 Broker，Android 也连 Broker：
+正式远程场景使用 Public Broker。Mac 和手机都只需要能够主动访问 Broker，不需要公网 IP、路由器端口转发或同一局域网。
 
-```text
-Android App -> https://broker.example.com/r/<relayId>
-Mac Relay   -> outbound WSS tunnel -> https://broker.example.com
+### 1. 配置 Broker 凭证
+
+生成两个不同的随机值：
+
+```bash
+openssl rand -hex 32
+openssl rand -hex 32
 ```
 
-当前示例：
+其中一个作为手机访问 Relay 的 `token`，另一个作为 Broker 隧道的 `relaySecret`。不要混用。
 
-```text
-Broker URL:       https://zyzlz.xin/mobile-codex
-Android Endpoint: https://zyzlz.xin/mobile-codex/r/rorance-mac
+### 2. 启动 Broker
+
+```bash
+export MOBILE_CODEX_BROKER_HOST=127.0.0.1
+export MOBILE_CODEX_BROKER_PORT=18888
+export MOBILE_CODEX_BROKER_RELAYS='{"my-mac":"replace-with-at-least-24-random-characters"}'
+
+corepack pnpm --filter @mobile-codex/relay build
+corepack pnpm --filter @mobile-codex/relay broker:start
 ```
 
-Mac Relay App 配置文件：
+使用 Nginx、Caddy 或其他反向代理把 `https://broker.example.com` 转发到 `127.0.0.1:18888`，并启用 WebSocket upgrade。
+
+### 3. 配置 Mac Relay
+
+编辑：
 
 ```text
 ~/Library/Application Support/Mobile Codex Relay/config.json
@@ -149,196 +166,122 @@ Mac Relay App 配置文件：
 ```json
 {
   "port": 8787,
-  "token": "mobile-codex-CHANGE-ME",
-  "brokerUrl": "https://zyzlz.xin/mobile-codex",
-  "relayId": "rorance-mac",
-  "relaySecret": "replace-with-long-random-secret"
+  "token": "replace-with-a-separate-phone-access-token",
+  "brokerUrl": "https://broker.example.com",
+  "relayId": "my-mac",
+  "relaySecret": "replace-with-at-least-24-random-characters"
 }
 ```
 
-Android App 设置里填写：
+重新打开 `Mobile Codex Relay.app`。Android App 中填写：
 
 ```text
-Endpoint: https://zyzlz.xin/mobile-codex/r/rorance-mac
-Token: mobile-codex-CHANGE-ME
+Endpoint: https://broker.example.com/r/my-mac
+Token: replace-with-a-separate-phone-access-token
 ```
 
-`token` 是手机访问 Mac Relay 的凭证，`relaySecret` 只用于 Mac Relay 和 Broker 建立隧道，不应该填到手机里。
+完整的反向代理和验证步骤见 [公网 Broker 部署](docs/remote-broker.md)。
 
-完整部署说明见 [docs/remote-broker.md](docs/remote-broker.md)、[docs/usage.md](docs/usage.md) 和 [docs/online-update.md](docs/online-update.md)。
+## 在线更新
+
+在线更新地址不再写死在源码中。构建 APK 时通过环境变量注入：
+
+```bash
+export VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL=https://downloads.example.com/mobile-codex/android/latest.json
+corepack pnpm android:apk:mac -- 1.1.12-self-hosted
+```
+
+不设置该变量时，App 会禁用在线更新检查，其他功能不受影响。
+
+发布脚本同样不包含服务器、账号或 SSH 私钥默认值：
+
+```bash
+export MOBILE_CODEX_RELEASE_HOST=deploy@example.com
+export MOBILE_CODEX_RELEASE_SSH_KEY=$HOME/.ssh/id_ed25519
+export MOBILE_CODEX_RELEASE_DIR=/var/www/mobile-codex/releases/android
+export MOBILE_CODEX_RELEASE_BASE_URL=https://downloads.example.com/mobile-codex/android
+
+scripts/publish-android-update.sh \
+  dist-apk/mobile-codex-1.1.12-self-hosted-debug.apk \
+  1.1.12-self-hosted \
+  13 \
+  "Your release notes"
+```
+
+详情见 [Android 在线更新](docs/online-update.md)。
 
 ## 常用命令
 
 ```bash
-# 安装依赖
-corepack pnpm install
-
 # 类型检查
 corepack pnpm typecheck
 
-# 构建 relay + mobile web
+# 构建 Relay 和移动端 Web
 corepack pnpm build
 
-# 开发模式启动 relay
+# 开发模式启动 Relay
 corepack pnpm dev:relay
 
-# 开发模式启动 mobile web
+# 开发模式启动移动端
 corepack pnpm dev:mobile
 
-# 构建 Mac Relay App 和输入 helper
+# 构建 Mac App 和输入 Helper
 corepack pnpm mac:package
 
-# 构建 Android APK
-corepack pnpm android:setup:mac
-corepack pnpm android:apk:mac -- 1.1.11-text-sync
+# Relay 本地烟测
+corepack pnpm smoke
 ```
 
-## 从扫码绑定到 1.1.11 的阶段记录
+## 安全说明
 
-### Phase 0：单个会话扫码绑定
+- 不要把 `.env.local`、`config.json`、Token、Relay Secret、SSH 私钥、APK 或本地日志提交到 Git。
+- Public Broker 默认要求通过 `MOBILE_CODEX_BROKER_RELAYS` 明确配置允许连接的 Relay。
+- Relay Secret 通过 WebSocket `Authorization` 请求头发送，不会写入连接 URL。
+- Relay API 使用独立 Bearer Token；Broker 只负责转发，不应保存完整会话。
+- 生产环境必须使用 HTTPS/WSS，并限制服务器日志、备份和访问权限。
+- 手机端获得的是远程执行入口。只应连接自己控制的电脑、Broker 和 Codex 环境。
 
-最早版本是一个本地 bridge：启动后绑定当前 Codex 会话，生成二维码，手机扫码打开网页。
+更多边界和漏洞报告方式见 [SECURITY.md](SECURITY.md)。
 
-完成内容：
-
-- 验证 PC 到手机的会话可见性。
-- 验证手机可以打开当前会话页面。
-- 验证只加载“上一轮/当前轮”而不是导入全部历史。
-
-局限：
-
-- 依赖浏览器页面，体验不像 App。
-- Quick Tunnel 域名临时变化，二维码容易失效。
-- 局域网模式不满足“用户离开电脑也能用”的目标。
-
-### Phase 1：手机输入回到 PC
-
-项目开始解决手机到 PC 的链路：手机发送消息后，PC 端 Codex Desktop 要像用户亲自输入一样执行。
-
-完成内容：
-
-- 尝试过 bridge-owned app-server、Desktop IPC、UI 注入等路线。
-- 确认后台 app-server 能写入同一个 thread，但 Desktop 当前窗口不会实时显示过程。
-- 在 macOS 上落地可见 UI 注入路线：先聚焦 `codex://threads/<threadId>`，再通过辅助功能粘贴并提交。
-
-局限：
-
-- Desktop IPC owner 注册不稳定，不适合作为 Mac 端默认输入路径。
-- UI 注入依赖 macOS Accessibility 权限和当前 Codex Desktop 可见输入框。
-- 如果 Codex Desktop 没有成功聚焦目标线程，必须做 rollout 校验并报错。
-
-### Phase 2：公网 Relay/Broker
-
-为了摆脱同一 Wi-Fi 和临时隧道，项目切到 Relay/Broker 架构。
-
-完成内容：
-
-- Mac Relay 在本机读取 Codex 会话，并主动连公网 Broker。
-- Android 通过 Broker Endpoint 访问 Mac Relay。
-- Broker 只做转发，不保存完整会话历史。
-- 支持 `https://zyzlz.xin/mobile-codex/r/rorance-mac` 这类稳定公网入口。
-
-局限：
-
-- 需要维护一台公网 Broker。
-- Broker 反向代理必须正确支持 WebSocket upgrade。
-- 长期稳定性取决于 Broker、Mac Relay 和 Android 网络重连策略。
-
-### Phase 3：Android App 替代扫码网页
-
-浏览器页面被替换为 React + Capacitor Android App。
-
-完成内容：
-
-- 支持 Endpoint/Token 配置。
-- 支持会话列表、桌面当前线程、发送输入、上传附件。
-- 支持 Android 侧载 APK 和自托管在线更新检查。
-- 保留开发期 mobile web，方便在构建 APK 前调试。
-
-局限：
-
-- 当前 APK 仍是侧载安装，不是应用商店发布。
-- 在线更新需要用户确认安装，不能绕过 Android 系统安装器。
-- UI 仍需要持续做真机审核。
-
-### Version 1.1.7：发送链路和 UI 初步修复
-
-完成内容：
-
-- 修复手机端发送消息失败和连接状态不一致的问题。
-- 优化了发送后状态显示，减少重复的输入/输出桥接事件。
-
-局限：
-
-- 工具调用卡片、生成状态和流式观感仍不稳定。
-
-### Version 1.1.8：UI 与流式观感抛光
-
-完成内容：
-
-- 增加平滑显示逻辑，让长文本不再完全等结束后一次性展示。
-- 修复“正在生成，桌面同步输出”状态与实际结束不一致的部分场景。
-- 设置页和会话栏遮罩更接近真实面板，减少内容重叠。
-
-局限：
-
-- Desktop 同步不是底层 token 流，某些 Codex 状态仍会以块状更新。
-
-### Version 1.1.9：工具空白卡和输出体验修复
-
-完成内容：
-
-- 针对工具调用空白卡做了过滤和摘要逻辑。
-- 优化手机端输出的分段节奏。
-
-局限：
-
-- 工具概要信息仍然容易因为 Codex 事件格式变化而不稳定。
-
-### Version 1.1.10：主题与附件体验
-
-完成内容：
-
-- 增加 Light / Dark / System 主题。
-- 上传图片改为缩略图展示，不再把文件路径文本直接塞进对话框。
-- 优化会话栏视觉细节。
-
-局限：
-
-- 附件能力还没有做到和 Codex Desktop 完全一致。
-
-### Version 1.1.11-text-sync：只保留文本结果、降低同步延迟
-
-完成内容：
-
-- 手机 UI 默认只显示用户输入和 Codex 文本回复。
-- 隐藏工具调用、命令输出、补丁 diff 和内部 bridge ack，避免空白工具卡干扰阅读。
-- 降低桌面同步延迟：active polling、fallback polling、SSE throttle 都做了收紧。
-- 继续保留附件缩略图、主题切换、在线更新检查。
-
-当前公开构建：
+## 项目结构
 
 ```text
-Version: 1.1.11-text-sync
-VersionCode: 12
-APK: https://zyzlz.xin/mobile-codex/releases/android/mobile-codex-1.1.11-text-sync.apk
-Manifest: https://zyzlz.xin/mobile-codex/releases/android/latest.json
-SHA256: 9a8aa3a14761b2aa28a77a202d81aaf4e726fc039b3d614a89c6463648a078e8
+apps/mobile          React + Capacitor Android 客户端
+apps/relay           Relay、Broker、Codex 会话读取与控制
+generated-protocol   Codex app-server 协议类型
+scripts              Mac/Windows helper、构建和发布脚本
+docs                 架构、部署、更新、测试和历史记录
+marketing            项目介绍素材和演示 HTML
 ```
 
-## 当前限制
+## 演进过程
 
-- Mac 手机输入默认依赖 `Mobile Codex Input.app` 的辅助功能权限。
-- UI 注入要求 Codex Desktop 能被聚焦，且目标 thread 能通过 `codex://threads/<threadId>` 打开。
-- Desktop IPC 输出和 rollout/session tail 不是模型底层 token 流，长文本仍可能按块同步。
-- Broker 不应该保存会话历史；它是中转层，不是云端 Codex 运行时。
-- 多 Mac、多会话、多手机协同控制还没有产品化。
-- 当前 GitHub 仓库只提交源码和文档，不提交 APK、`.app`、`node_modules`、本地 token、上传文件和构建输出。
+- `Phase 0`：单会话二维码和浏览器页面，验证 PC 到手机的可见性。
+- `Phase 1`：增加手机输入，验证 app-server、Desktop IPC 和 UI 注入路线。
+- `Phase 2`：引入 Public Broker，摆脱局域网和临时隧道域名。
+- `Phase 3`：用 React + Capacitor Android App 替代扫码网页。
+- `Phase 4`：增加线程分组、最近记录、平滑输出、状态标签、附件缩略图和在线更新。
+- `1.1.12`：保留连接后的记录，过滤环境上下文卡片，补充 Codex 运行状态。
 
-## 后续方向
+早期方案的完成内容和限制记录在 [legacy-notes.md](docs/legacy-notes.md)。
 
-- 把 Broker 部署脚本完善成一键服务器安装。
-- 增强 Mac Relay App 的状态页、开机自启动和日志诊断。
-- 做更稳定的断线重连、心跳和离线提示。
-- 将在线更新从“下载 APK”升级为 App 内下载并唤起系统安装器。
-- 在保证安全边界的前提下，支持多会话绑定和多设备查看。
+## 已知限制
+
+- macOS 输入控制依赖 Accessibility 权限和可见的 Codex Desktop 窗口。
+- Codex Desktop 内部行为升级后，线程聚焦或会话格式可能需要适配。
+- 当前 APK 以侧载方式安装，更新时仍需 Android 系统确认。
+- Broker 是转发层，不是高可用集群；长期运行需要自行配置进程守护、TLS、监控和备份。
+- 本项目不是 OpenAI 官方产品，也不代表 OpenAI 提供或支持的远程控制能力。
+
+## 文档
+
+- [使用和部署](docs/usage.md)
+- [公网 Broker](docs/remote-broker.md)
+- [Android 在线更新](docs/online-update.md)
+- [架构与可行性](docs/architecture-feasibility.md)
+- [测试与验收](docs/test-and-acceptance-plan.md)
+- [项目档案入口](docs/project-index.md)
+
+## License
+
+[MIT](LICENSE)
