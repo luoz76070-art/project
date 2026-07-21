@@ -1,6 +1,6 @@
 # SPEC — 图书借阅管理系统
 
-> 版本: 1.0 · 状态: 已冻结（待实施）
+> 版本: 2.1 · 状态: MVP + v2.0 数据看板 + v2.1 Docker 一键部署
 > 最后更新: 2026-07-21
 > 适用范围: `/home/circleci/project/library-manage/`
 
@@ -454,3 +454,98 @@ export const tools = [
 | 日期 | 版本 | 变更 |
 |---|---|---|
 | 2026-07-21 | 1.0 | 初始冻结版本，作为 MVP 实施依据 |
+| 2026-07-21 | 2.0 | 新增 v2.0 数据看板（Phase 2.2），其他模块不变 |
+| 2026-07-21 | 2.1 | 新增 Docker 一键部署（Phase 2.3），含 Dockerfile / compose / cloudflared 可选服务 |
+
+---
+
+## 16. v2.0 数据看板规格（Phase 2.2）
+
+### 16.1 入口
+- 路径：`/admin/stats`
+- 权限：仅管理员（`ADMIN`）
+- 导航位置：admin nav 第 3 项"数据看板"
+
+### 16.2 数据指标（KPI 卡片 × 6）
+
+| 指标 | 数据源 | 说明 |
+|---|---|---|
+| 总图书数 | `db.book.count()` | 附加副本数提示 |
+| 总借阅数 | `db.borrow.count()` | 附加待审批提示 |
+| 在借中 | `db.borrow.count({ status: APPROVED/BORROWED/OVERDUE })` | 实际未归还数 |
+| 逾期率 | overdue / totalBorrows × 100% | 保留 1 位小数 |
+| 用户总数 | `db.user.count()` | 附加在读学生数 |
+| 分类数 | `db.book.groupBy(by: ['category'])` | 唯一分类数 |
+
+### 16.3 图表（5 张）
+
+| 图表 | 类型 | 数据源 |
+|---|---|---|
+| 借阅趋势 | 折线图（30 天） | `Borrow.findMany({ requestedAt >= 30天前 })` 按日聚合 |
+| 借阅状态分布 | 柱状图（彩色） | `Borrow.groupBy(by: ['status'])` |
+| 热门图书 TOP 10 | 横向条形图 | `Borrow.groupBy(by: ['bookId'], orderBy: count desc, take: 10)` |
+| 分类分布 | 饼图 | `Book.groupBy(by: ['category'])` |
+| 用户活跃度 TOP 10 | 柱状图 | `Borrow.groupBy(by: ['userId'], orderBy: count desc, take: 10)` 排除 REJECTED |
+
+### 16.4 技术实现
+- 图表库：**Recharts 3.x**
+- 数据获取：Server Action `getStats()` 一次性返回完整 `StatsData`
+- 渲染策略：Server Component 取数 → Client Component 渲染图表
+- 性能：`dynamic = "force-dynamic"` 确保数据实时
+
+### 16.5 设计规范
+- 色板：沿用 §7.1 鼠尾草绿系
+- 卡片：圆角 `rounded-xl`，与现有 UI 一致
+- 图表配色：5 色循环（`#02FF73`、`#09ADAA`、`#02C95E`、`#0A8FA1`、`#06B884`）
+- 字体：与现有一致
+- 状态色：PENDING 琥珀、APPROVED 青、BORROWED 绿、RETURNED 深绿、OVERDUE 暖红、REJECTED 灰
+
+### 16.6 演示价值
+- 演示场景：管理员展示图书馆运营状况
+- 研修场景：作为数据可视化教学的实战案例（Server Component + Client Component 分离）
+- KPI 卡片让数据一目了然，图表让趋势可视化
+
+---
+
+## 17. v2.1 Docker 一键部署规格（Phase 2.3）
+
+### 17.1 目标
+让任何用户（含 AI Agent）能在任何装 Docker 的环境（本地 / NAS / VPS）通过 `docker compose up -d` 拉起完整系统，无需懂 Node.js / pnpm / Prisma。
+
+### 17.2 文件清单
+- `Dockerfile` — 多阶段构建（deps → builder → runner）
+- `.dockerignore` — 排除源码无关文件
+- `docker-compose.yml` — 服务编排 + 卷管理 + 健康检查 + 可选 cloudflared
+- `scripts/docker-setup.sh` — 一键脚本（前置检查 + .env 准备 + 构建 + 启动）
+- `docs/DOCKER.md` — 详细部署文档
+
+### 17.3 镜像设计
+- 基础镜像：`node:20-alpine`
+- 多阶段：先安装依赖、构建产物，再用最小运行镜像
+- 非 root 用户运行（uid 1001 `library`）
+- standalone 输出（`next.config.ts` 加 `output: "standalone"`）
+- 数据卷：`/app/data` 持久化 SQLite
+
+### 17.4 docker-compose 服务
+
+| 服务 | 镜像 | 端口 | 用途 |
+|---|---|---|---|
+| library-manage | 自构建 | 3000 | 主应用（Next.js） |
+| cloudflared（可选，注释） | cloudflare/cloudflared | — | trycloudflare 公网隧道 |
+
+### 17.5 健康检查
+- 检查 `GET /login` 200
+- start_period 30s（Next.js 冷启动时间）
+- interval 30s，timeout 5s，retries 3
+
+### 17.6 环境变量（与 .env.example 一致）
+- `DATABASE_URL` — `file:/app/data/library.db`
+- `NEXTAUTH_SECRET` / `AUTH_SECRET` — 必改
+- `NEXTAUTH_URL` — 部署域名
+- `AI_PROVIDER_*` — MiniMax-M2 接入（可选）
+
+### 17.7 AI 部署友好度
+- 提供 `bash scripts/docker-setup.sh` 一行命令
+- 提供 `docs/DOCKER.md` 含"AI Agent 部署提示词模板"
+- 错误信息明确（如缺 NEXTAUTH_SECRET 会给出生成命令）
+- `cloudflared` 服务内置（无需手动启动隧道）

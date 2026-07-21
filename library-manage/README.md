@@ -15,8 +15,10 @@
 - 👥 **角色权限**：学生 / 管理员两套权限矩阵，扩展性友好
 - 📚 **库存与排队**：图书有总数 / 可借数双重属性，无库存自动按时间排队
 - 🔁 **归还晋升**：归还时自动晋升队列首位，无需手动干预
+- 📊 **数据看板（v2.0）**：管理员侧 6 个 KPI + 5 张图表（Recharts），实时统计借阅运营数据
 - 🤖 **AI 助理（预留）**：管理员侧 AI 对话面板，工具定义已就绪，待接入 MiniMax-M2
 - 💾 **零依赖部署**：SQLite 单文件数据库，无需额外服务
+- 🐳 **Docker 一键部署**：`docker compose up -d` 拉起完整系统（含可选 cloudflared 公网隧道），专为 AI 辅助自部署设计
 
 ---
 
@@ -29,6 +31,28 @@
 | Node.js | >= 20 | https://nodejs.org |
 | npm | 自带 | — |
 | pnpm（可选，更快） | >= 8 | `npm install -g pnpm` |
+| **Docker（推荐）** | >= 20 | https://docs.docker.com/engine/install/ |
+
+### 🐳 方案 D：Docker 一键部署（AI 友好，推荐）
+
+适合"让 AI 帮我部署"的场景，或在自己 NAS / 服务器 / VPS 上运行。
+
+```bash
+git clone https://github.com/luoz76070-art/project.git
+cd project/library-manage
+
+# 一键启动（含构建）
+bash scripts/docker-setup.sh
+
+# 或手动
+docker compose up -d --build
+```
+
+启动后访问 **http://localhost:3000**
+
+需要公网访问？编辑 `docker-compose.yml` 取消 `cloudflared` 服务注释即可获得 trycloudflare.com 临时域名。
+
+详细说明见 [docs/DOCKER.md](./docs/DOCKER.md)。
 
 ### 🎯 方案 A：Git 克隆（最推荐）
 
@@ -191,6 +215,7 @@ PORT=8080 HOSTNAME=0.0.0.0 pm2 start npm --name library-manage -- start
 |---|---|
 | `/admin/books` | 图书 CRUD + 补货 + 上下架 |
 | `/admin/borrows` | 借阅审批 + 状态过滤 |
+| `/admin/stats` | 数据看板（6 个 KPI + 5 张图表，v2.0 新增） |
 | `/admin/users` | 用户列表 + 新增 + 角色 / 状态调整 |
 | `/admin/ai-assistant` | AI Agent 对话面板（mock 回复） |
 
@@ -205,6 +230,8 @@ PORT=8080 HOSTNAME=0.0.0.0 pm2 start npm --name library-manage -- start
 | 样式 | TailwindCSS 3 |
 | 数据库 | SQLite (Prisma ORM) |
 | 认证 | NextAuth.js v5 (Credentials + JWT) |
+| 图表 | Recharts 3 (数据看板，v2.0) |
+| 日期 | date-fns 4 |
 | 校验 | Zod |
 | 图标 | lucide-react |
 | LLM（待接入） | MiniMax-M2 (OpenAI 兼容) |
@@ -286,3 +313,17 @@ AI_MODEL="MiniMax-M2"
 ## 📄 License
 
 MIT © 2026
+
+---
+
+## 📈 版本演进
+
+| 版本 | 主要变更 |
+|---|---|
+| **v1.0 (MVP)** | 三页面 + 角色 + 库存 + 排队 + AI mock |
+| **v2.0** | 数据看板（6 KPI + 5 图表，Recharts） |
+| **v2.1** | Docker 一键部署（Dockerfile + compose + cloudflared） |
+| v2.2 (计划) | 逾期提醒 / 深色模式 / 批量导入 |
+| v2.3 (计划) | E2E 测试 / 单元测试 / CI |
+
+详见 [SPEC.md](./SPEC.md)。
