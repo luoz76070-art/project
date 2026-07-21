@@ -1,0 +1,60 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name zyzlz.xin www.zyzlz.xin;
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name zyzlz.xin www.zyzlz.xin;
+
+    root /var/www/blog/current;
+    index index.html;
+
+    access_log /var/log/nginx/blog.access.log;
+    error_log /var/log/nginx/blog.error.log warn;
+
+    # 替换成你自己的证书路径，也可以改成 certbot 自动管理的路径。
+    ssl_certificate     /etc/letsencrypt/live/zyzlz.xin/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/zyzlz.xin/privkey.pem;
+
+    gzip on;
+    gzip_min_length 1024;
+    gzip_types
+        text/plain
+        text/css
+        application/javascript
+        application/json
+        application/xml
+        application/xml+rss
+        image/svg+xml;
+
+    location = /favicon.ico {
+        access_log off;
+        log_not_found off;
+    }
+
+    location = /robots.txt {
+        access_log off;
+        log_not_found off;
+    }
+
+    location / {
+        try_files $uri $uri/ $uri/index.html =404;
+    }
+
+    location ~* \.(?:css|js|mjs|svg|ttf|otf|woff|woff2)$ {
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000, immutable";
+        try_files $uri =404;
+    }
+
+    location ~* \.(?:jpg|jpeg|gif|png|webp|ico|avif)$ {
+        expires 7d;
+        add_header Cache-Control "public, max-age=604800";
+        try_files $uri =404;
+    }
+}

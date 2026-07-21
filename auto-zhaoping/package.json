@@ -1,0 +1,15 @@
+{
+  "name": "zhaoping",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm --workspaces --if-present test",
+    "test:extractor": "npm --workspace @zhaoping/tencent-docs-recruiting-extractor test",
+    "test:local-results": "npm --workspace @zhaoping/local-recruiting-results test",
+    "test:writeback": "npm --workspace @zhaoping/tencent-docs-writeback test",
+    "generate:local-results": "npm --workspace @zhaoping/local-recruiting-results run generate",
+    "writeback:tencent-docs": "npm --workspace @zhaoping/tencent-docs-writeback run writeback"
+  }
+}

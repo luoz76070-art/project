@@ -1,0 +1,35 @@
+name: Codex To Phone CI
+
+on:
+  push:
+    paths:
+      - "codex-to-phone/**"
+      - ".github/workflows/codex-to-phone-ci.yml"
+  pull_request:
+    paths:
+      - "codex-to-phone/**"
+      - ".github/workflows/codex-to-phone-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: codex-to-phone
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: codex-to-phone/pnpm-lock.yaml
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm test:messages
+      - run: corepack pnpm typecheck
+      - run: corepack pnpm build

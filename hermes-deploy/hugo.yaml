@@ -1,0 +1,85 @@
+baseURL: "https://zyzlz.xin/"
+languageCode: "zh-cn"
+title: "Rorance"
+theme: ["PaperMod"]
+
+enableInlineShortcodes: true
+enableRobotsTXT: true
+enableEmoji: true
+pygmentsUseClasses: true
+
+pagination:
+  pagerSize: 8
+
+outputs:
+  home:
+    - HTML
+    - RSS
+    - JSON
+
+params:
+  env: production
+  description: "Rorance 的个人博客，记录技术、产品与生活。"
+  author: "Rorance"
+  keywords: ["Rorance", "博客", "技术", "生活", "Hugo"]
+  defaultTheme: auto
+  ShowReadingTime: true
+  ShowShareButtons: true
+  ShowPostNavLinks: true
+  ShowBreadCrumbs: true
+  ShowCodeCopyButtons: true
+  ShowAllPagesInArchive: true
+  ShowPageNums: true
+  ShowToc: true
+  mainSections: ["posts"]
+  disableSpecial1stPost: true
+
+  label:
+    text: "Home"
+    icon: ""
+    iconHeight:
+
+  profileMode:
+    enabled: true
+    # 把你的头像图片放到 assets/images/ 目录，再把下面文件名改成对应图片名即可。
+    # 例如：assets/images/avatar.jpg -> imageUrl: "images/avatar.jpg"
+    title: ""
+    subtitle: ""
+    imageUrl: "images/personal.png"
+    imageTitle: "Avatar placeholder"
+    imageWidth: 250
+    imageHeight: 250
+    buttons:
+      - name: 动态
+        url: "/posts/"
+      - name: 分类
+        url: "/tags/"
+
+  homeInfoParams:
+    Title: "你好，我是 Rorance"
+    Content: >
+      这是一个按 `macOS + Hugo + 阿里云` 路线搭起来的个人博客脚手架。
+      你可以直接在 `content/posts/` 里写文章，然后构建 `public/` 上传到阿里云服务器。
+
+  socialIcons:
+    - name: github
+      url: "https://github.com/luoz76070-art"
+    - name: wechat
+      url: "/index.xml"
+    - name: email
+      url: "/index.xml"
+
+  assets:
+    disableHLJS: true
+
+markup:
+  goldmark:
+    renderer:
+      unsafe: true
+  highlight:
+    noClasses: false
+
+taxonomies:
+  category: categories
+  tag: tags
+  series: series

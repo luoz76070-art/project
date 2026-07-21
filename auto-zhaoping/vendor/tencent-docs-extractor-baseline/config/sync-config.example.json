@@ -1,0 +1,18 @@
+{
+  "sourceUrl": "https://docs.qq.com/sheet/REPLACE_ME",
+  "targetUrl": "",
+  "targetSheetIndex": 0,
+  "targetStartCell": "A1",
+  "schedule": {
+    "timezone": "Asia/Shanghai",
+    "main": "18:00",
+    "retry": "18:10"
+  },
+  "cleanup": {
+    "deleteTempExportsOnSuccess": true
+  },
+  "verification": {
+    "detectEncodingIssues": true,
+    "keepDiffSamples": 50
+  }
+}

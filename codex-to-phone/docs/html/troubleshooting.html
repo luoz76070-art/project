@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Mobile Codex 排错</title>
+  <style>
+    body { font-family: "Segoe UI", sans-serif; margin: 32px; line-height: 1.65; color: #172033; }
+    code, pre { background: #f3f6f8; padding: 2px 5px; border-radius: 4px; }
+    pre { padding: 12px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>常见故障</h1>
+  <h2>无法连接</h2>
+  <p>先测试 <code>/health</code>。不通表示 Relay 未启动、端口不通或防火墙拦截。</p>
+  <h2>401</h2>
+  <p>Token 不一致。检查手机和电脑配置。</p>
+  <h2>IPv6 域名能解析但超时</h2>
+  <p>DDNSGo 正常，问题在入站路径。检查 Windows 防火墙、光猫/路由器 IPv6 防火墙、运营商入站限制。</p>
+  <h2>APK 卡顿或发热</h2>
+  <p>优先安装最新 APK。新版已降低消息窗口、轮询频率和移动端毛玻璃成本。</p>
+</body>
+</html>

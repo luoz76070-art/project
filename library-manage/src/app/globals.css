@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #fafaf7;
+    --foreground: #2c3e2e;
+    --card: #ffffff;
+    --card-foreground: #2c3e2e;
+    --primary: #02ff73;
+    --primary-foreground: #1a2e1f;
+    --secondary: #09adaa;
+    --secondary-foreground: #ffffff;
+    --muted: #f0ede5;
+    --muted-foreground: #6b7268;
+    --accent: #e8f5e9;
+    --accent-foreground: #1a2e1f;
+    --destructive: #d97757;
+    --destructive-foreground: #ffffff;
+    --border: #e8e4d9;
+    --input: #e8e4d9;
+    --ring: #02ff73;
+    --radius: 0.75rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family:
+      "Inter",
+      -apple-system,
+      BlinkMacSystemFont,
+      "PingFang SC",
+      "Microsoft YaHei",
+      sans-serif;
+  }
+
+  body {
+    min-height: 100vh;
+  }
+}
+
+@layer utilities {
+  .soft-shadow {
+    box-shadow:
+      0 1px 2px rgba(44, 62, 46, 0.04),
+      0 4px 16px rgba(44, 62, 46, 0.06);
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+  }
+}

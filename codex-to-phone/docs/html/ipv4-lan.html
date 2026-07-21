@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Mobile Codex IPv4 局域网配置</title>
+  <style>
+    body { font-family: "Segoe UI", sans-serif; margin: 32px; line-height: 1.65; color: #172033; }
+    code, pre { background: #f3f6f8; padding: 2px 5px; border-radius: 4px; }
+    pre { padding: 12px; overflow: auto; }
+    h1 { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <h1>IPv4 局域网配置</h1>
+  <p>适合手机和电脑在同一个 Wi-Fi/局域网内使用。</p>
+  <ol>
+    <li>Relay Host 填 <code>0.0.0.0</code>。</li>
+    <li>Relay Port 默认 <code>8787</code>。</li>
+    <li>点击“启动 Relay”。</li>
+    <li>点击“测试 IPv4”。</li>
+    <li>手机 APK Endpoint 填管理器显示的局域网地址，例如：</li>
+  </ol>
+  <pre>http://192.168.1.50:8787</pre>
+  <p>如果浏览器能打开 <code>/health</code>，但 APK 不通，优先检查 APK 里的 Endpoint 和 Token 是否保存正确。</p>
+</body>
+</html>

@@ -1,0 +1,37 @@
+{
+  "name": "@mobile-codex/relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "broker:dev": "tsx src/brokerServer.ts",
+    "broker:start": "node dist/brokerServer.js",
+    "tunnel:start": "node dist/remoteTunnelClient.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "smoke": "tsx src/smoke.ts",
+    "appserver:smoke": "tsx src/appserverSmoke.ts",
+    "appserver:read-smoke": "tsx src/appserverReadSmoke.ts",
+    "appserver:turn-smoke": "tsx src/appserverTurnSmoke.ts",
+    "live-control:smoke": "tsx src/liveControlSmoke.ts",
+    "live-control:complete-smoke": "tsx src/liveControlCompleteSmoke.ts",
+    "live-control:sse-smoke": "tsx src/liveControlSseSmoke.ts",
+    "live-control:approval-smoke": "tsx src/liveControlApprovalSmoke.ts",
+    "desktop-ipc:probe": "tsx src/desktopIpcProbe.ts",
+    "desktop-control:smoke": "tsx src/desktopControlSmoke.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "11.1.0",
+    "fastify": "5.6.2",
+    "ws": "^8.20.0",
+    "zod": "4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/ws": "^8.18.1",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}

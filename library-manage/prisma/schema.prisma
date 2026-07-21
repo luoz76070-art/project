@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// NOTE: SQLite does not support native enums in Prisma.
+// Role and BorrowStatus are stored as strings; valid values are enforced
+// in application code (see src/lib/enums.ts).
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  displayName  String
+  role         String   @default("STUDENT")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  borrows      Borrow[]
+  reservations Reservation[]
+
+  @@map("users")
+}
+
+model Book {
+  id              String   @id @default(cuid())
+  title           String
+  author          String
+  isbn            String?  @unique
+  category        String?
+  description     String?
+  coverUrl        String?
+  totalCopies     Int      @default(1)
+  availableCopies Int      @default(1)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  borrows      Borrow[]
+  reservations Reservation[]
+
+  @@map("books")
+}
+
+model Borrow {
+  id            String    @id @default(cuid())
+  userId        String
+  bookId        String
+  status        String    @default("PENDING")
+  requestedDays Int       @default(30)
+  requestedAt   DateTime  @default(now())
+  approvedAt    DateTime?
+  borrowedAt    DateTime?
+  dueAt         DateTime?
+  returnedAt    DateTime?
+  rejectReason  String?
+
+  user User @relation(fields: [userId], references: [id])
+  book Book @relation(fields: [bookId], references: [id])
+
+  @@index([userId, status])
+  @@index([bookId, status])
+  @@map("borrows")
+}
+
+model Reservation {
+  id            String    @id @default(cuid())
+  userId        String
+  bookId        String
+  queuePosition Int
+  createdAt     DateTime  @default(now())
+  fulfilledAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+  book Book @relation(fields: [bookId], references: [id])
+
+  @@unique([bookId, queuePosition])
+  @@index([bookId, createdAt])
+  @@map("reservations")
+}

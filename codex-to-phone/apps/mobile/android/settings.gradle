@@ -1,0 +1,25 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+        flatDir {
+            dirs 'app/libs', 'capacitor-cordova-android-plugins/src/main/libs'
+        }
+    }
+}
+
+rootProject.name = 'Mobile Codex'
+
+include ':app'
+include ':capacitor-cordova-android-plugins'
+
+apply from: 'capacitor.settings.gradle'

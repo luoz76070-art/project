@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+apps/*/node_modules/
+
+# Environment and local state
+.env
+.env.*
+!.env.example
+.mobile-codex-relay.pid
+*.log
+logs/
+data/
+mobile-uploads/
+.playwright-cli/
+output/
+config.json
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+google-services.json
+
+# Build outputs
+dist/
+dist-*/
+apps/*/dist/
+apps/mobile/android/.gradle/
+apps/mobile/android/build/
+apps/mobile/android/**/build/
+apps/mobile/android/app/src/main/assets/public/
+*.apk
+*.exe
+*.app/
+*.zip
+*.rar
+
+# Local tools and packaged installs
+.tools/
+backups/
+安装文件*/
+备份/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

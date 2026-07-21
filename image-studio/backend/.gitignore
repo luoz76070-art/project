@@ -1,0 +1,26 @@
+# env / secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# build
+/bin/
+/dist/
+/.build/
+
+# logs
+/logs/
+*.log
+
+# coverage
+*.out
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# misc
+*.exe

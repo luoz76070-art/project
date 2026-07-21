@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Mobile Codex IPv6 + DDNSGo 配置</title>
+  <style>
+    body { font-family: "Segoe UI", sans-serif; margin: 32px; line-height: 1.65; color: #172033; }
+    code, pre { background: #f3f6f8; padding: 2px 5px; border-radius: 4px; }
+    pre { padding: 12px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>IPv6 + DDNSGo 配置</h1>
+  <p>适合电脑有公网 IPv6，且 DDNSGo 已能自动更新域名 AAAA 记录。</p>
+  <ol>
+    <li>DDNSGo 中配置域名 AAAA，例如 <code>example.your-domain.com</code>。</li>
+    <li>Relay Host 填 <code>::</code>。</li>
+    <li>点击“启动 Relay”。</li>
+    <li>点击“测试 IPv6 本机”。</li>
+    <li>点击“测试 DDNS 域名”。</li>
+    <li>手机关闭 Wi-Fi，仅用流量访问：</li>
+  </ol>
+  <pre>http://你的域名:8787/health</pre>
+  <p>如果电脑本机测试成功但手机流量超时，通常是 Windows 防火墙、光猫/路由器 IPv6 防火墙或运营商入站策略拦截。</p>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "name": "@mobile-codex/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5178",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4178",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@capacitor/android": "7.4.4",
+    "@capacitor/cli": "7.4.4",
+    "@capacitor/core": "7.4.4",
+    "@vitejs/plugin-react": "5.1.1",
+    "lucide-react": "0.554.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "typescript": "5.9.3",
+    "vite": "7.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3"
+  }
+}

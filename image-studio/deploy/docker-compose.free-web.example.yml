@@ -1,0 +1,25 @@
+services:
+  api: &backend-overrides
+    environment:
+      KLEIN_PROVIDER_GPT: ${KLEIN_PROVIDER_GPT:-real}
+      KLEIN_PROVIDER_GROK: ${KLEIN_PROVIDER_GROK:-mock}
+      KLEIN_GPT_BASE_URL: ${KLEIN_GPT_BASE_URL:-http://host.docker.internal:13000/free}
+      KLEIN_GROK_BASE_URL: ${KLEIN_GROK_BASE_URL:-https://grok.com}
+      KLEIN_STORAGE_ROOT: /app/storage/public
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      ALL_PROXY: ${ALL_PROXY:-}
+      http_proxy: ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      all_proxy: ${all_proxy:-}
+      NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost}
+      no_proxy: ${no_proxy:-127.0.0.1,localhost}
+    volumes:
+      - klein-logs:/app/logs
+      - klein-storage:/app/storage
+
+  openai:
+    <<: *backend-overrides
+
+volumes:
+  klein-storage:

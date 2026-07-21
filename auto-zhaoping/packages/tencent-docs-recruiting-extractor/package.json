@@ -1,0 +1,15 @@
+{
+  "name": "@zhaoping/tencent-docs-recruiting-extractor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "extract": "node scripts/extract-once.js",
+    "healthcheck": "node scripts/login-healthcheck.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "playwright": "^1.58.2",
+    "xlsx": "^0.18.5"
+  }
+}
