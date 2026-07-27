@@ -19,6 +19,7 @@
 - 🤖 **AI 助理（预留）**：管理员侧 AI 对话面板，工具定义已就绪，待接入 MiniMax-M2
 - 💾 **零依赖部署**：SQLite 单文件数据库，无需额外服务
 - 🐳 **Docker 一键部署**：`docker compose up -d` 拉起完整系统（含可选 cloudflared 公网隧道），专为 AI 辅助自部署设计
+- 📦 **预构建镜像分发**：[GitHub Releases](https://github.com/luoz76070-art/project/releases) 提供 256 MB 压缩镜像，`docker load` 即可使用
 
 ---
 
@@ -37,6 +38,8 @@
 
 适合"让 AI 帮我部署"的场景，或在自己 NAS / 服务器 / VPS 上运行。
 
+#### D1：源码构建（如有 Docker 与源码）
+
 ```bash
 git clone https://github.com/luoz76070-art/project.git
 cd project/library-manage
@@ -48,11 +51,24 @@ bash scripts/docker-setup.sh
 docker compose up -d --build
 ```
 
-启动后访问 **http://localhost:3000**
+#### D2：直接加载预构建镜像（最快，无需源码）
 
-需要公网访问？编辑 `docker-compose.yml` 取消 `cloudflared` 服务注释即可获得 trycloudflare.com 临时域名。
+👉 **下载预构建镜像：[GitHub Releases v2.1](https://github.com/luoz76070-art/project/releases/tag/v2.1)**
 
-详细说明见 [docs/DOCKER.md](./docs/DOCKER.md)。
+```bash
+# 1. 下载（约 256 MB）
+wget https://github.com/luoz76070-art/project/releases/download/v2.1/library-manage.tar.gz
+
+# 2. 加载镜像
+docker load -i library-manage.tar.gz
+
+# 3. 启动
+docker run -d --name library-manage -p 3000:3000 \
+  -v library-data:/app/data --restart unless-stopped \
+  library-manage:latest
+```
+
+详细说明见 [docs/IMAGE.md](./docs/IMAGE.md) 和 [docs/DOCKER.md](./docs/DOCKER.md)。
 
 ### 🎯 方案 A：Git 克隆（最推荐）
 
@@ -322,8 +338,10 @@ MIT © 2026
 |---|---|
 | **v1.0 (MVP)** | 三页面 + 角色 + 库存 + 排队 + AI mock |
 | **v2.0** | 数据看板（6 KPI + 5 图表，Recharts） |
-| **v2.1** | Docker 一键部署（Dockerfile + compose + cloudflared） |
+| **v2.1** | Docker 一键部署（Dockerfile + compose + cloudflared + GitHub Release 镜像分发） |
 | v2.2 (计划) | 逾期提醒 / 深色模式 / 批量导入 |
 | v2.3 (计划) | E2E 测试 / 单元测试 / CI |
+
+预构建镜像见 [Releases](https://github.com/luoz76070-art/project/releases)。
 
 详见 [SPEC.md](./SPEC.md)。
