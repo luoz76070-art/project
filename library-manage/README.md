@@ -70,6 +70,8 @@ docker run -d --name library-manage -p 3000:3000 \
 
 详细说明见 [docs/IMAGE.md](./docs/IMAGE.md) 和 [docs/DOCKER.md](./docs/DOCKER.md)。
 
+MySQL 连接详见 [docs/MYSQL.md](./docs/MYSQL.md)。
+
 ### 🎯 方案 A：Git 克隆（最推荐）
 
 仓库地址：https://github.com/luoz76070-art/project
