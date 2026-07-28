@@ -1,7 +1,7 @@
 # SPEC — 图书借阅管理系统
 
-> 版本: 2.1 · 状态: MVP + v2.0 数据看板 + v2.1 Docker 一键部署
-> 最后更新: 2026-07-21
+> 版本: 2.2 · 状态: MVP + v2.0 + v2.1 + v2.2 MySQL 迁移
+> 最后更新: 2026-07-28
 > 适用范围: `/home/circleci/project/library-manage/`
 
 ---
@@ -107,7 +107,7 @@ PENDING（学生提交后初始）→ APPROVED（管理员批准）→ BORROWED�
 | 语言 | TypeScript | 5+ |
 | 样式 | TailwindCSS | 4+ |
 | 组件 | shadcn/ui（Radix UI 底层） | latest |
-| 数据库 | SQLite（本地文件） | — |
+| 数据库 | MySQL 8.0（v2.2+，外部 luozhe-mysql 容器） | — |
 | ORM | Prisma | 5+ |
 | 认证 | NextAuth.js (Auth.js v5) | 5+ |
 | 密码哈希 | bcryptjs | latest |
@@ -456,6 +456,7 @@ export const tools = [
 | 2026-07-21 | 1.0 | 初始冻结版本，作为 MVP 实施依据 |
 | 2026-07-21 | 2.0 | 新增 v2.0 数据看板（Phase 2.2），其他模块不变 |
 | 2026-07-21 | 2.1 | 新增 Docker 一键部署（Phase 2.3），含 Dockerfile / compose / cloudflared 可选服务 |
+| 2026-07-28 | 2.2 | 数据库从 SQLite 迁移到外部 MySQL 容器（luozhe-mysql），新增 §18 迁移规格 |
 
 ---
 
@@ -549,3 +550,84 @@ export const tools = [
 - 提供 `docs/DOCKER.md` 含"AI Agent 部署提示词模板"
 - 错误信息明确（如缺 NEXTAUTH_SECRET 会给出生成命令）
 - `cloudflared` 服务内置（无需手动启动隧道）
+---
+
+## 18. v2.2 MySQL 迁移规格（Phase 3 完整迁移）
+
+### 18.1 目标
+
+将数据存储从 SQLite 迁移到外部 MySQL 容器 `luozhe-mysql`（同主机 `10.175.221.6`，端口 3306），数据库名 `library-data`。
+
+### 18.2 网络方案
+
+由于 MySQL 只绑定 `127.0.0.1`，Docker 容器通过 `network_mode: host` 共享宿主网络：
+
+```yaml
+services:
+  library-manage:
+    network_mode: host
+    environment:
+      DATABASE_URL: "mysql://root:MyRoot@2024@127.0.0.1:3306/library-data"
+```
+
+### 18.3 Prisma schema 变化
+
+| 项 | v2.1 (SQLite) | v2.2 (MySQL) |
+|---|---|---|
+| provider | sqlite | mysql |
+| role 字段 | `String @default("STUDENT")` | `Role` enum |
+| status 字段 | `String @default("PENDING")` | `BorrowStatus` enum |
+| cuid() | 支持 | 支持 |
+
+新增 enum：
+
+```prisma
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+enum BorrowStatus {
+  PENDING
+  APPROVED
+  BORROWED
+  RETURNED
+  OVERDUE
+  REJECTED
+}
+```
+
+### 18.4 迁移脚本
+
+`scripts/migrate-to-mysql.js`：
+1. 读 SQLite 导出 JSON（`/mnt/luozhe/mysql/backups/sqlite-export.json`）
+2. 用 mysql2 直连 MySQL `library-data`
+3. 按依赖顺序插入：users → books → borrows → reservations
+4. 报告每张表导入数量
+
+### 18.5 回滚方案
+
+`/mnt/luozhe/mysql/rollback.sh` 一键回滚：
+
+```bash
+bash /mnt/luozhe/mysql/rollback.sh
+# 停止 MySQL 版本容器
+# 加载 library-manage:2.1-sqlite（旧镜像，保留 tag）
+# 启动 SQLite 版本容器
+# 从 /mnt/luozhe/mysql/backups/library.db.bak.* 恢复数据库文件
+```
+
+备份位置：
+- 镜像 tag：`library-manage:2.1-sqlite`
+- 镜像 tar.gz：`/mnt/luozhe/mysql/library-manage-sqlite.tar.gz`
+- SQLite DB：`/mnt/luozhe/mysql/backups/library.db.bak.<ts>`
+- JSON 数据：`/mnt/luozhe/mysql/backups/sqlite-export.json`
+- 回滚脚本：`/mnt/luozhe/mysql/rollback.sh`
+
+### 18.6 验证清单
+
+- [x] admin / admin1234 登录 ✅
+- [x] student1 / pass1234 登录 ✅
+- [x] /admin/books HTTP 200 ✅
+- [x] /admin/stats HTTP 200 ✅
+- [x] MySQL 数据：6 用户 / 10 图书 / 1 借阅 / 2 排队 ✅

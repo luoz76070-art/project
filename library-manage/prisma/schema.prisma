@@ -3,20 +3,31 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
-// NOTE: SQLite does not support native enums in Prisma.
-// Role and BorrowStatus are stored as strings; valid values are enforced
-// in application code (see src/lib/enums.ts).
+// MySQL 原生 enum 支持（SQLite 不支持，所以 v1 用了 String）
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+enum BorrowStatus {
+  PENDING
+  APPROVED
+  BORROWED
+  RETURNED
+  OVERDUE
+  REJECTED
+}
 
 model User {
   id           String   @id @default(cuid())
   username     String   @unique
   passwordHash String
   displayName  String
-  role         String   @default("STUDENT")
+  role         Role     @default(STUDENT)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -33,7 +44,7 @@ model Book {
   author          String
   isbn            String?  @unique
   category        String?
-  description     String?
+  description     String?  @db.Text
   coverUrl        String?
   totalCopies     Int      @default(1)
   availableCopies Int      @default(1)
@@ -48,12 +59,12 @@ model Book {
 }
 
 model Borrow {
-  id            String    @id @default(cuid())
+  id            String        @id @default(cuid())
   userId        String
   bookId        String
-  status        String    @default("PENDING")
-  requestedDays Int       @default(30)
-  requestedAt   DateTime  @default(now())
+  status        BorrowStatus  @default(PENDING)
+  requestedDays Int           @default(30)
+  requestedAt   DateTime      @default(now())
   approvedAt    DateTime?
   borrowedAt    DateTime?
   dueAt         DateTime?

@@ -17,9 +17,9 @@
 - 🔁 **归还晋升**：归还时自动晋升队列首位，无需手动干预
 - 📊 **数据看板（v2.0）**：管理员侧 6 个 KPI + 5 张图表（Recharts），实时统计借阅运营数据
 - 🤖 **AI 助理（预留）**：管理员侧 AI 对话面板，工具定义已就绪，待接入 MiniMax-M2
-- 💾 **零依赖部署**：SQLite 单文件数据库，无需额外服务
-- 🐳 **Docker 一键部署**：`docker compose up -d` 拉起完整系统（含可选 cloudflared 公网隧道），专为 AI 辅助自部署设计
-- 📦 **预构建镜像分发**：[GitHub Releases](https://github.com/luoz76070-art/project/releases) 提供 256 MB 压缩镜像，`docker load` 即可使用
+- 💾 **数据持久化**：使用 MySQL 8.0 容器（v2.2+），数据持久稳定，支持多容器访问
+- 🐳 **Docker 一键部署**：`docker compose up -d` 拉起完整系统（network_mode: host 访问 MySQL），专为 AI 辅助自部署设计
+- 📦 **预构建镜像分发**：[GitHub Releases](https://github.com/luoz76070-art/project/releases) 提供压缩镜像，`docker load` 即可使用
 
 ---
 
@@ -244,7 +244,7 @@ PORT=8080 HOSTNAME=0.0.0.0 pm2 start npm --name library-manage -- start
 | 框架 | Next.js 15 (App Router) |
 | UI | React 19 + shadcn/ui (Radix UI) |
 | 样式 | TailwindCSS 3 |
-| 数据库 | SQLite (Prisma ORM) |
+| 数据库 | MySQL 8.0 (Prisma ORM) — v2.2+ |
 | 认证 | NextAuth.js v5 (Credentials + JWT) |
 | 图表 | Recharts 3 (数据看板，v2.0) |
 | 日期 | date-fns 4 |
@@ -339,8 +339,9 @@ MIT © 2026
 | **v1.0 (MVP)** | 三页面 + 角色 + 库存 + 排队 + AI mock |
 | **v2.0** | 数据看板（6 KPI + 5 图表，Recharts） |
 | **v2.1** | Docker 一键部署（Dockerfile + compose + cloudflared + GitHub Release 镜像分发） |
-| v2.2 (计划) | 逾期提醒 / 深色模式 / 批量导入 |
-| v2.3 (计划) | E2E 测试 / 单元测试 / CI |
+| **v2.2** | 数据库迁移 SQLite → MySQL（外部 luozhe-mysql 容器） |
+| v2.3 (计划) | 逾期提醒 / 深色模式 / 批量导入 |
+| v2.4 (计划) | E2E 测试 / 单元测试 / CI |
 
 预构建镜像见 [Releases](https://github.com/luoz76070-art/project/releases)。
 

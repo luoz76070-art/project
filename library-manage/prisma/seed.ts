@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Role, BorrowStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const db = new PrismaClient();
@@ -6,6 +6,7 @@ const db = new PrismaClient();
 async function main() {
   console.log("🌱 开始写入种子数据...");
 
+  // 清理所有表（MySQL 版本）
   await db.reservation.deleteMany();
   await db.borrow.deleteMany();
   await db.book.deleteMany();
@@ -16,12 +17,12 @@ async function main() {
 
   await db.user.createMany({
     data: [
-      { username: "admin", passwordHash: adminHash, displayName: "系统管理员", role: "ADMIN" },
-      { username: "student1", passwordHash, displayName: "张同学", role: "STUDENT" },
-      { username: "student2", passwordHash, displayName: "李同学", role: "STUDENT" },
-      { username: "student3", passwordHash, displayName: "王同学", role: "STUDENT" },
-      { username: "student4", passwordHash, displayName: "陈同学", role: "STUDENT" },
-      { username: "student5", passwordHash, displayName: "刘同学", role: "STUDENT" },
+      { username: "admin", passwordHash: adminHash, displayName: "系统管理员", role: Role.ADMIN },
+      { username: "student1", passwordHash, displayName: "张同学", role: Role.STUDENT },
+      { username: "student2", passwordHash, displayName: "李同学", role: Role.STUDENT },
+      { username: "student3", passwordHash, displayName: "王同学", role: Role.STUDENT },
+      { username: "student4", passwordHash, displayName: "陈同学", role: Role.STUDENT },
+      { username: "student5", passwordHash, displayName: "刘同学", role: Role.STUDENT },
     ],
   });
 
@@ -52,9 +53,9 @@ async function main() {
   }
 
   const allBooks = await db.book.findMany();
-  const students = await db.user.findMany({ where: { role: "STUDENT" } });
+  const students = await db.user.findMany({ where: { role: Role.STUDENT } });
 
-  // 让所有书初始可借（演示标准状态）
+  // 让所有书初始可借
   for (const b of allBooks) {
     await db.book.update({
       where: { id: b.id },
@@ -62,13 +63,13 @@ async function main() {
     });
   }
 
-  // 让 2 本书变成库存为 0，用于演示排队
-  const noStock1 = allBooks[5]; // 万历十五年
-  const noStock2 = allBooks[7]; // 中国哲学简史
+  // 让 2 本书变成库存为 0
+  const noStock1 = allBooks[5];
+  const noStock2 = allBooks[7];
   await db.book.update({ where: { id: noStock1.id }, data: { availableCopies: 0 } });
   await db.book.update({ where: { id: noStock2.id }, data: { availableCopies: 0 } });
 
-  // 让 student2、student3 对这两本书进行排队
+  // 排队
   await db.reservation.create({
     data: {
       userId: students[1].id,
@@ -84,12 +85,12 @@ async function main() {
     },
   });
 
-  // 给 student1 一个进行中的借阅（PENDING 状态）
+  // 待审批借阅
   await db.borrow.create({
     data: {
       userId: students[0].id,
-      bookId: allBooks[0].id, // 三体
-      status: "PENDING",
+      bookId: allBooks[0].id,
+      status: BorrowStatus.PENDING,
       requestedDays: 30,
     },
   });
