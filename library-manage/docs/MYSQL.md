@@ -131,7 +131,7 @@ docker exec luozhe-mysql mysql -uroot -p'MyRoot@2024' -e "SELECT User, Host FROM
 docker exec luozhe-mysql mysqldump -uroot -p'MyRoot@2024' `library-data` > library-data_$(date +%F).sql
 
 # 恢复
-cat library-data_2026-07-28.sql | docker exec -i luozhe-mysql mysql -uroot -p'MyRoot@2024' shop
+cat library-data_2026-07-28.sql | docker exec -i luozhe-mysql mysql -uroot -p'MyRoot@2024' `library-data`
 
 # 查看错误日志（排错最先看）
 docker exec luozhe-mysql tail -50 /var/log/mysql/error.log
