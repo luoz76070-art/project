@@ -10,7 +10,7 @@
 | MySQL 版本 | `8.0.46` |
 | 监听端口 | `3306`（所有网卡）、`33060`（X Protocol） |
 | root 密码 | `MyRoot@2024` |
-| 业务库 | `shop`（utf8mb4） |
+| 业务库 | `library-data`（utf8mb4） |
 | 业务用户 | `appuser` / `AppUser@2024` |
 
 ## 🔍 网络信息查询
@@ -40,13 +40,13 @@ docker exec luozhe-mysql ss -lntp | grep 3306
 docker run -it --rm \
   --network bridge \
   mysql:8.0 \
-  sh -c "mysql -h 172.17.0.2 -P 3306 -uappuser -p'AppUser@2024' shop -e 'SHOW TABLES;'"
+  sh -c "mysql -h 172.17.0.2 -P 3306 -uappuser -p'AppUser@2024' `library-data` -e 'SHOW TABLES;'"
 ```
 
 期望输出：
 
 ```
-Tables_in_shop
+Tables_in_library-data
 orders
 products
 ```
@@ -61,7 +61,7 @@ docker run -d \
   -e DB_PORT=3306 \
   -e DB_USER=appuser \
   -e DB_PASS='AppUser@2024' \
-  -e DB_NAME=shop \
+  -e DB_NAME='library-data' \
   my-app:latest
 ```
 
@@ -77,7 +77,7 @@ services:
       DB_PORT: 3306
       DB_USER: appuser
       DB_PASS: 'AppUser@2024'
-      DB_NAME: shop
+      DB_NAME: 'library-data'
     networks:
       - app-net
 
@@ -127,11 +127,11 @@ docker exec luozhe-mysql mysql -uroot -p'MyRoot@2024' -e "SHOW DATABASES;"
 # 查看所有用户
 docker exec luozhe-mysql mysql -uroot -p'MyRoot@2024' -e "SELECT User, Host FROM mysql.user;"
 
-# 备份整个 shop 库
-docker exec luozhe-mysql mysqldump -uroot -p'MyRoot@2024' shop > shop_$(date +%F).sql
+# 备份整个 library-data 库
+docker exec luozhe-mysql mysqldump -uroot -p'MyRoot@2024' `library-data` > library-data_$(date +%F).sql
 
 # 恢复
-cat shop_2026-07-28.sql | docker exec -i luozhe-mysql mysql -uroot -p'MyRoot@2024' shop
+cat library-data_2026-07-28.sql | docker exec -i luozhe-mysql mysql -uroot -p'MyRoot@2024' `library-data`
 
 # 查看错误日志（排错最先看）
 docker exec luozhe-mysql tail -50 /var/log/mysql/error.log
@@ -146,7 +146,7 @@ docker exec luozhe-mysql tail -f /var/log/mysql/error.log
 # 创建新用户（任意 IP 可连）
 docker exec luozhe-mysql mysql -uroot -p'MyRoot@2024' -e "
 CREATE USER 'appuser2'@'%' IDENTIFIED BY 'NewPass@2024';
-GRANT ALL PRIVILEGES ON shop.* TO 'appuser2'@'%';
+GRANT ALL PRIVILEGES ON `library-data`.* TO 'appuser2'@'%';
 FLUSH PRIVILEGES;"
 
 # 修改密码
@@ -156,7 +156,7 @@ ALTER USER 'appuser'@'localhost' IDENTIFIED BY 'NewPass@2024';"
 # 限网段访问（生产推荐）
 docker exec luozhe-mysql mysql -uroot -p'MyRoot@2024' -e "
 CREATE USER 'appuser'@'10.0.%' IDENTIFIED BY 'AppUser@2024';
-GRANT ALL ON shop.* TO 'appuser'@'10.0.%';
+GRANT ALL ON `library-data`.* TO 'appuser'@'10.0.%';
 FLUSH PRIVILEGES;"
 
 # 删除用户
@@ -187,7 +187,7 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: 'MyRoot@2024'
-      MYSQL_DATABASE: shop
+      MYSQL_DATABASE: library-data
       MYSQL_USER: appuser
       MYSQL_PASSWORD: 'AppUser@2024'
     volumes:
@@ -207,5 +207,5 @@ volumes:
 然后把应用的环境变量从 SQLite 切到 MySQL：
 
 ```env
-DATABASE_URL="mysql://appuser:AppUser@2024@library-mysql:3306/shop"
+DATABASE_URL="mysql://appuser:AppUser@2024@library-mysql:3306/library-data"
 ```
