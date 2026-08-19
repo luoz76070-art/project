@@ -1,0 +1,41 @@
+services:
+  library-manage:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: library-manage:latest
+    container_name: library-manage
+    restart: unless-stopped
+    # 关键：使用宿主网络访问 luozhe-mysql
+    network_mode: host
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      # MySQL 连接（与 luozhe-mysql 容器通信）
+      # 格式：mysql://<user>:<password>@<host>:<port>/<database>
+      DATABASE_URL: ${DATABASE_URL:-mysql://root:MyRoot@2024@127.0.0.1:3306/library-data}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-please-change-this-secret-in-production-environment-xyz}
+      AUTH_SECRET: ${AUTH_SECRET:-please-change-this-secret-in-production-environment-xyz}
+      AUTH_TRUST_HOST: "true"
+      AI_PROVIDER_API_KEY: ${AI_PROVIDER_API_KEY:-}
+      AI_PROVIDER_BASE_URL: ${AI_PROVIDER_BASE_URL:-https://api.MiniMax.com/v1}
+      AI_MODEL: ${AI_MODEL:-MiniMax-M2}
+    # 注意：MySQL 数据由 luozhe-mysql 容器持久化，不再需要本地 volume
+    # 保留一个可选 volume 用于未来 SQLite 备份或日志
+    volumes: []
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # luozhe-mysql 容器（假设已存在，library-manage 通过 host 网络访问 127.0.0.1:3306）
+  # 如果你需要 library-manage 启动时确保 MySQL 可用，可以加 depends_on + healthcheck
+  # 但因为 MySQL 是外部服务，这里不声明
+
+volumes: {}
