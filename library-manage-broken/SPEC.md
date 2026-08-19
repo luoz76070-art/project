@@ -8,7 +8,7 @@
 
 ## 1. 背景与目标
 
-打造一个**用于展示与用户研修**的图书借阅管理系统。MVP 阶段聚焦核心三页面与角色权限闭环，UI 走柔和奶油白 + 鼠尾草绿路线，整体观感清晰易懂、柔和简约。后续迭代逐步引入 AI Agent 等智能化能力。
+打造一个**用于展示与用户研修**的图书借阅管理系统。MVP 阶段聚焦核心三页面与角色权限闭环，UI 走柔和奶油白 + 鼠尾草绿路线，整体观感清晰易懂、柔和简约。
 
 ---
 
@@ -17,7 +17,7 @@
 | 角色 | 关键能力 | 默认账号（演示用） |
 |---|---|---|
 | **Student（学生）** | 图书查询、申请借阅、查看我的借阅、归还、查看排队进度 | `student1` / `pass1234` |
-| **Admin（管理员）** | Student 全部 + 图书 CRUD、用户管理、借阅审批、补货、AI 助理（接口预留） | `admin` / `admin1234` |
+| **Admin（管理员）** | Student 全部 + 图书 CRUD、用户管理、借阅审批、补货 | `admin` / `admin1234` |
 
 > 角色扩展性：所有权限判断走集中式 `hasPermission(role, action)` 函数，新角色只需扩展枚举与权限表，**无需改动业务代码**。
 
@@ -53,7 +53,7 @@
 | `/admin/books` | 图书 CRUD、补货（增加 `totalCopies`）、上下架 |
 | `/admin/borrows` | 待审批借阅列表（按 `requestedAt` 升序），批准/拒绝 |
 | `/admin/users` | 用户列表、新增用户、调整角色、停用 |
-| `/admin/ai-assistant` | AI Agent 对话面板（**MVP 阶段为接口预留**，显示 mock 回复） |
+| `/admin/ai-assistant` | ~~（已移除）~~ |
 
 ### 3.3 认证 `/login`
 - 用户名 + 密码登录
@@ -94,7 +94,7 @@ PENDING（学生提交后初始）→ APPROVED（管理员批准）→ BORROWED�
 | 补货/下架 | ❌ | ✅ |
 | 用户管理 | ❌ | ✅ |
 | 查看所有借阅 | ❌ | ✅ |
-| AI 助理 | ❌ | ✅ |
+| AI 助理 | ❌ | ~~（已移除）~~ |
 
 ---
 
@@ -112,8 +112,8 @@ PENDING（学生提交后初始）→ APPROVED（管理员批准）→ BORROWED�
 | 认证 | NextAuth.js (Auth.js v5) | 5+ |
 | 密码哈希 | bcryptjs | latest |
 | 表单校验 | Zod | 3+ |
-| AI SDK | Vercel AI SDK（OpenAI 兼容） | latest |
-| LLM 提供方 | MiniMax（OpenAI 兼容接口） | — |
+| AI SDK | — | — |
+| LLM 提供方 | — | — |
 | License | MIT | — |
 
 ---
@@ -284,10 +284,9 @@ library-manage/
 │   │   │       ├── books/page.tsx
 │   │   │       ├── borrows/page.tsx
 │   │   │       ├── users/page.tsx
-│   │   │       └── ai-assistant/page.tsx
+│   │   │       └── ~~ai-assistant/~~（已移除）
 │   │   └── api/
-│   │       ├── auth/[...nextauth]/route.ts
-│   │       └── ai/chat/route.ts        # 接口预留
+│   │       └── auth/[...nextauth]/route.ts
 │   ├── components/
 │   │   ├── ui/                 # shadcn 生成
 │   │   ├── book-card.tsx
@@ -298,14 +297,11 @@ library-manage/
 │   │   ├── db.ts               # PrismaClient 单例
 │   │   ├── auth.ts             # NextAuth 配置
 │   │   ├── permissions.ts      # hasPermission(role, action)
-│   │   ├── actions/            # Server Actions
-│   │   │   ├── books.ts
-│   │   │   ├── borrows.ts
-│   │   │   ├── reservations.ts
-│   │   │   └── users.ts
-│   │   └── ai/
-│   │       ├── tools.ts        # 工具定义（供后续接入）
-│   │       └── mock.ts         # MVP 阶段 mock 回复
+│   │   └── actions/            # Server Actions
+│   │       ├── books.ts
+│   │       ├── borrows.ts
+│   │       ├── reservations.ts
+│   │       └── users.ts
 │   ├── middleware.ts           # 路由角色守卫
 │   └── types/
 │       └── next-auth.d.ts      # Session 类型扩展 role
@@ -343,14 +339,12 @@ library-manage/
 
 ### 9.2 `.env.example`
 ```env
-DATABASE_URL="file:./data/library.db"
+DATABASE_URL="mysql://YOUR_USER:YOUR_PASSWORD@127.0.0.1:3306/library-data"
 NEXTAUTH_SECRET="please-generate-with-openssl-rand-base64-32"
 NEXTAUTH_URL="http://localhost:3000"
-# MVP 阶段未启用，留空即可
-AI_PROVIDER_API_KEY=""
-AI_PROVIDER_BASE_URL="https://api.MiniMax.com/v1"
-AI_MODEL="MiniMax-M2"
 ```
+
+> 默认 root 凭据已移除，详见 [docs/DATABASE.md](./docs/DATABASE.md)。
 
 ### 9.3 演示账号（seed.ts 写入）
 - `admin / admin1234`（displayName: 管理员）
@@ -385,28 +379,6 @@ AI_MODEL="MiniMax-M2"
 
 ---
 
-## 11. AI Agent 接口预留（MVP）
-
-### 11.1 路由
-`POST /api/ai/chat`
-- 请求体：`{ messages: { role, content }[] }`
-- 响应：流式（SSE）或普通 JSON（MVP 用普通 JSON 即可）
-- MVP 行为：识别关键词（"逾期"/"补货"/"审批"等）返回 mock 文案 + 提示"AI 能力即将上线"
-
-### 11.2 工具定义文件 `src/lib/ai/tools.ts`
-即使 MVP 不接入，也必须**预先定义**以下工具（方便后续接入）：
-```ts
-export const tools = [
-  { name: 'get_overdue_books', description: '查询所有逾期借阅', parameters: {} },
-  { name: 'get_pending_borrows', description: '查询待审批借阅数量', parameters: {} },
-  { name: 'approve_borrow', description: '批准指定借阅', parameters: { borrowId: 'string' } },
-  { name: 'reject_borrow', description: '拒绝指定借阅', parameters: { borrowId: 'string', reason: 'string' } },
-  { name: 'restock_book', description: '为指定图书补货', parameters: { bookId: 'string', delta: 'number' } },
-  { name: 'get_book_stats', description: '查询图书借阅统计', parameters: { bookId: 'string' } },
-  { name: 'get_user_history', description: '查询用户借阅历史', parameters: { userId: 'string' } },
-];
-```
-
 ---
 
 ## 12. 交付物清单（MVP 必交付）
@@ -417,7 +389,6 @@ export const tools = [
 - [x] 多用户排队逻辑可演示（造数据使一本书 `availableCopies=0`）
 - [x] 角色守卫：Student 访问 `/admin/*` 被重定向
 - [x] 主题：奶油白 + 鼠尾草绿，圆角柔和
-- [x] AI 助理页可访问，显示 mock 回复 + "功能即将上线"占位
 - [x] README 含演示账号、启动步骤、技术栈说明
 - [x] LICENSE（MIT）
 
@@ -425,7 +396,6 @@ export const tools = [
 
 ## 13. 显式不在 MVP 范围
 
-- ❌ AI Agent 真实调用 MiniMax-M2（仅接口预留）
 - ❌ 邮件 / 站内信通知
 - ❌ 逾期定时扫描脚本（手动标记演示即可）
 - ❌ 单元测试 / E2E 测试
@@ -511,7 +481,7 @@ export const tools = [
 ## 17. v2.1 Docker 一键部署规格（Phase 2.3）
 
 ### 17.1 目标
-让任何用户（含 AI Agent）能在任何装 Docker 的环境（本地 / NAS / VPS）通过 `docker compose up -d` 拉起完整系统，无需懂 Node.js / pnpm / Prisma。
+让任何用户能在任何装 Docker 的环境（本地 / NAS / VPS）通过 `docker compose up -d` 拉起完整系统，无需懂 Node.js / pnpm / Prisma。
 
 ### 17.2 文件清单
 - `Dockerfile` — 多阶段构建（deps → builder → runner）
@@ -540,14 +510,12 @@ export const tools = [
 - interval 30s，timeout 5s，retries 3
 
 ### 17.6 环境变量（与 .env.example 一致）
-- `DATABASE_URL` — `file:/app/data/library.db`
+- `DATABASE_URL` — MySQL 连接串（详见 [docs/DATABASE.md](./docs/DATABASE.md)）
 - `NEXTAUTH_SECRET` / `AUTH_SECRET` — 必改
 - `NEXTAUTH_URL` — 部署域名
-- `AI_PROVIDER_*` — MiniMax-M2 接入（可选）
 
-### 17.7 AI 部署友好度
+### 17.7 部署友好度
 - 提供 `bash scripts/docker-setup.sh` 一行命令
-- 提供 `docs/DOCKER.md` 含"AI Agent 部署提示词模板"
 - 错误信息明确（如缺 NEXTAUTH_SECRET 会给出生成命令）
 - `cloudflared` 服务内置（无需手动启动隧道）
 ---
