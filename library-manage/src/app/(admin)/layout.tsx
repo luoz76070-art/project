@@ -8,7 +8,6 @@ const ADMIN_NAV = [
   { href: "/admin/borrows", label: "借阅审批" },
   { href: "/admin/stats", label: "数据看板" },
   { href: "/admin/users", label: "用户管理" },
-  { href: "/admin/ai-assistant", label: "AI 助理" },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

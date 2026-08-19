@@ -16,14 +16,11 @@ services:
       HOSTNAME: 0.0.0.0
       # MySQL 连接（与 luozhe-mysql 容器通信）
       # 格式：mysql://<user>:<password>@<host>:<port>/<database>
-      DATABASE_URL: ${DATABASE_URL:-mysql://root:MyRoot@2024@127.0.0.1:3306/library-data}
+      DATABASE_URL: ${DATABASE_URL:-mysql://YOUR_USER:YOUR_PASSWORD@127.0.0.1:3306/library-data}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-please-change-this-secret-in-production-environment-xyz}
       AUTH_SECRET: ${AUTH_SECRET:-please-change-this-secret-in-production-environment-xyz}
       AUTH_TRUST_HOST: "true"
-      AI_PROVIDER_API_KEY: ${AI_PROVIDER_API_KEY:-}
-      AI_PROVIDER_BASE_URL: ${AI_PROVIDER_BASE_URL:-https://api.MiniMax.com/v1}
-      AI_MODEL: ${AI_MODEL:-MiniMax-M2}
     # 注意：MySQL 数据由 luozhe-mysql 容器持久化，不再需要本地 volume
     # 保留一个可选 volume 用于未来 SQLite 备份或日志
     volumes: []

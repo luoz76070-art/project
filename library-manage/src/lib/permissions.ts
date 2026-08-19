@@ -16,8 +16,7 @@ export type Permission =
   | "user:view"
   | "user:create"
   | "user:update_role"
-  | "user:deactivate"
-  | "ai:use";
+  | "user:deactivate";
 
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   STUDENT: ["book:view", "borrow:request", "borrow:return_own"],
@@ -38,7 +37,6 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "user:create",
     "user:update_role",
     "user:deactivate",
-    "ai:use",
   ],
 };
 
