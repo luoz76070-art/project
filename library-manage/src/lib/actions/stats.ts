@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { BorrowStatus } from "@/lib/enums";
+import { format } from "date-fns";
 
 export type StatsOverview = {
   totalBooks: number;
@@ -92,11 +93,11 @@ export async function getStats(): Promise<StatsData> {
   for (let i = 0; i < 30; i++) {
     const d = new Date(thirtyDaysAgo);
     d.setDate(thirtyDaysAgo.getDate() + i);
-    const key = d.toISOString().slice(0, 10);
+    const key = format(d, "yyyy-MM-dd");
     dailyMap.set(key, 0);
   }
   for (const b of recentBorrows) {
-    const key = b.requestedAt.toISOString().slice(0, 10);
+    const key = format(b.requestedAt, "yyyy-MM-dd");
     if (dailyMap.has(key)) dailyMap.set(key, (dailyMap.get(key) ?? 0) + 1);
   }
   const dailyTrend: DailyBorrowPoint[] = Array.from(dailyMap.entries()).map(([date, count]) => ({

@@ -132,7 +132,7 @@ export default async function BooksPage({
               className="h-10 rounded-lg border border-input bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="ALL">全部分类</option>
-              {["文学", "计算机", "历史", "哲学", "艺术", "科学"].map((c) => (
+              {categoryList.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
