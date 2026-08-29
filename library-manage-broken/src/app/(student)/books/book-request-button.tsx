@@ -50,7 +50,7 @@ export function BookRequestButton({
 
   if (!showDays) {
     return (
-      <Button size="sm" className="w-full" onClick={() => setShowDays(true)}>
+      <Button size="sm" className="w-full">
         申请借阅
       </Button>
     );
