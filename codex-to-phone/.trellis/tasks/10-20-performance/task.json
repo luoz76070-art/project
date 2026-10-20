@@ -1,0 +1,30 @@
+{
+  "id": "performance",
+  "name": "performance",
+  "title": "B 降低持续开销",
+  "description": "F12–F17、F19、F24：推送、索引、缓存、分页、有界队列",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": "mobile",
+  "priority": "P2",
+  "creator": "rorance",
+  "assignee": "rorance",
+  "createdAt": "2026-10-20",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "10-20-optimization",
+  "relatedFiles": [],
+  "notes": "2026-10-20 本轮源码实施与隔离检查完成；Android/真实 Desktop/唤醒/Windows/长期运行待统一实测。见 docs/audits/2026-10-20/delivery.md。未提交或部署。",
+  "meta": {
+    "sourceImplementation": "complete_for_planned_iteration",
+    "platformAcceptance": "pending",
+    "evidence": "docs/audits/2026-10-20/optimized-evidence.json"
+  }
+}

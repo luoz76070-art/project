@@ -1,0 +1,165 @@
+{
+  "date": "2026-10-20",
+  "timezone": "Asia/Shanghai",
+  "environment": {
+    "node": "22.22.1",
+    "pnpm": "10.20.0",
+    "platform": "macOS arm64"
+  },
+  "baseline": {
+    "typecheck": "passed",
+    "messageReconciliation": "passed",
+    "codexExecutableResolver": "passed",
+    "build": "passed",
+    "swiftTypecheck": "passed with one deprecated activation API warning"
+  },
+  "bundle": {
+    "jsBytesApprox": 275660,
+    "jsGzipBytesApprox": 87920,
+    "cssBytesApprox": 29350,
+    "cssGzipBytesApprox": 6180,
+    "htmlBytesApprox": 470
+  },
+  "isolatedChecks": [
+    {
+      "name": "partial-line-after-latest",
+      "reproducedLoss": true,
+      "cursor": 240,
+      "deltaCursor": 302
+    },
+    {
+      "name": "oversized-jsonl-record",
+      "stalled": true,
+      "messages": 0,
+      "fileBytes": 600284,
+      "truncated": true
+    },
+    {
+      "name": "broker-json-forward",
+      "status": 200,
+      "body": {
+        "ok": true
+      }
+    },
+    {
+      "name": "broker-sse-forward",
+      "directFirstFrame": true,
+      "brokerStatus": 502,
+      "firstResponseMs": 1208,
+      "body": {
+        "error": "local_relay_failed",
+        "message": "This operation was aborted"
+      },
+      "testTunnelDeadlineMs": 1200,
+      "productionDefaultMs": 180000
+    },
+    {
+      "name": "cancel-propagation",
+      "localRequestStillOpenAfterPhoneAbort": true
+    },
+    {
+      "name": "relay-disconnect-pending",
+      "status": 500,
+      "elapsedMs": 1805,
+      "body": {
+        "statusCode": 500,
+        "error": "Internal Server Error",
+        "message": "broker-request-timeout"
+      },
+      "testBrokerDeadlineMs": 1800,
+      "productionDefaultMs": 180000
+    },
+    {
+      "name": "cross-relay-response-binding",
+      "status": 200,
+      "acceptedWrongRelay": true,
+      "note": "synthetic second relay given request UUID by test harness"
+    }
+  ],
+  "additionalChecks": [
+    {
+      "name": "local-sse-cors",
+      "normalApiCors": "https://localhost",
+      "sseCors": null,
+      "sseStatus": 200,
+      "firstFrameBytes": 93,
+      "method": "Actual compiled Relay with synthetic DesktopControl methods; no real Desktop IPC connected."
+    },
+    {
+      "name": "synthetic-thread-list-1000",
+      "cold": {
+        "elapsedMs": 33,
+        "fsCalls": {
+          "readFile": 1,
+          "readdir": 25,
+          "open": 72,
+          "stat": 1000
+        }
+      },
+      "warm": {
+        "elapsedMs": 11,
+        "fsCalls": {
+          "readFile": 1,
+          "readdir": 1,
+          "open": 72,
+          "stat": 1024
+        }
+      },
+      "returned": 12,
+      "note": "Tiny synthetic rollout files on this Mac; not a production latency benchmark."
+    },
+    {
+      "name": "concurrent-client-initialization",
+      "firstStillStarting": true,
+      "secondReportedReady": true,
+      "method": "AppServerClient.start replaced with a deferred promise; no Codex subprocess launched."
+    },
+    {
+      "name": "hot-update-version-validation",
+      "dotDotAccepted": true,
+      "dotAccepted": true,
+      "note": "Evaluated equivalent regex and path resolution, without deleting files or executing native installer."
+    },
+    {
+      "name": "ipc-malformed-json",
+      "throwsOutsideHandler": true,
+      "error": "SyntaxError",
+      "note": "Called parser in isolation; not sent to running Desktop."
+    }
+  ],
+  "browser": {
+    "backend": "synthetic two-profile server, no real Codex requests",
+    "viewports": [
+      {
+        "width": 360,
+        "height": 800,
+        "documentWidth": 360
+      },
+      {
+        "width": 430,
+        "height": 932,
+        "documentWidth": 430
+      }
+    ],
+    "afterProfileSwitch": {
+      "selectedProfile": "b",
+      "heading": "审核测试项目 A",
+      "aDeltaBefore": 70,
+      "aDeltaAfter": 116,
+      "bDelta": 0,
+      "aSseConnectionCount": 1,
+      "bSseConnectionCount": 1
+    },
+    "console": "Only mock server favicon.ico 404; no app runtime errors observed.",
+    "screenshots": [
+      "../../../output/audit/2026-10-20/mobile-360.png",
+      "../../../output/audit/2026-10-20/mobile-430.png"
+    ]
+  },
+  "limits": [
+    "No Android device or emulator testing.",
+    "No live Desktop message injection or model turns executed.",
+    "No production server inspection or load benchmark.",
+    "Windows support reviewed only at selected source points."
+  ]
+}

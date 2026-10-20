@@ -9,29 +9,30 @@
     "broker:dev": "tsx src/brokerServer.ts",
     "broker:start": "node dist/brokerServer.js",
     "tunnel:start": "node dist/remoteTunnelClient.js",
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "smoke": "tsx src/smoke.ts",
-    "appserver:smoke": "tsx src/appserverSmoke.ts",
-    "appserver:read-smoke": "tsx src/appserverReadSmoke.ts",
-    "appserver:turn-smoke": "tsx src/appserverTurnSmoke.ts",
-    "live-control:smoke": "tsx src/liveControlSmoke.ts",
-    "live-control:complete-smoke": "tsx src/liveControlCompleteSmoke.ts",
-    "live-control:sse-smoke": "tsx src/liveControlSseSmoke.ts",
-    "live-control:approval-smoke": "tsx src/liveControlApprovalSmoke.ts",
-    "desktop-ipc:probe": "tsx src/desktopIpcProbe.ts",
-    "desktop-control:smoke": "tsx src/desktopControlSmoke.ts"
+    "smoke": "tsx src/smoke/smoke.ts",
+    "appserver:smoke": "tsx src/smoke/appserverSmoke.ts",
+    "appserver:read-smoke": "tsx src/smoke/appserverReadSmoke.ts",
+    "appserver:turn-smoke": "tsx src/smoke/appserverTurnSmoke.ts",
+    "live-control:smoke": "tsx src/smoke/liveControlSmoke.ts",
+    "live-control:complete-smoke": "tsx src/smoke/liveControlCompleteSmoke.ts",
+    "live-control:sse-smoke": "tsx src/smoke/liveControlSseSmoke.ts",
+    "live-control:approval-smoke": "tsx src/smoke/liveControlApprovalSmoke.ts",
+    "desktop-ipc:probe": "tsx src/smoke/desktopIpcProbe.ts",
+    "desktop-control:smoke": "tsx src/smoke/desktopControlSmoke.ts",
+    "codex-executable:smoke": "tsx src/smoke/codexExecutableSmoke.ts"
   },
   "dependencies": {
     "@fastify/cors": "11.1.0",
-    "fastify": "5.6.2",
-    "ws": "^8.20.0",
+    "fastify": "5.12.7",
+    "ws": "8.22.0",
     "zod": "4.1.12"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
-    "@types/ws": "^8.18.1",
-    "tsx": "4.21.0",
+    "@types/ws": "^8.18.2",
+    "tsx": "4.23.15",
     "typescript": "5.9.3"
   }
 }

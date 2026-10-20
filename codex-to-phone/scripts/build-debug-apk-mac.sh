@@ -17,7 +17,7 @@ if [[ -z "${JAVA_HOME:-}" ]]; then
   if [[ -x "$(brew --prefix openjdk 2>/dev/null)/bin/java" ]]; then
     export JAVA_HOME="$(brew --prefix openjdk)/libexec/openjdk.jdk/Contents/Home"
   else
-    export JAVA_HOME="$(brew --prefix openjdk@17 2>/dev/null)/libexec/openjdk.jdk/Contents/Home"
+    export JAVA_HOME="$(brew --prefix openjdk@21 2>/dev/null)/libexec/openjdk.jdk/Contents/Home"
   fi
 fi
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
@@ -26,7 +26,12 @@ cmdline_tools_bin="$(dirname "$(command -v sdkmanager 2>/dev/null || true)")"
 export PATH="$cmdline_tools_bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/35.0.0:$JAVA_HOME/bin:$PATH"
 
 if [[ ! -x "$JAVA_HOME/bin/java" ]]; then
-  echo "Java 17 not found. Run scripts/setup-android-tools-mac.sh first."
+  echo "Java 21 or newer not found. Run scripts/setup-android-tools-mac.sh first."
+  exit 1
+fi
+java_major="$("$JAVA_HOME/bin/java" -version 2>&1 | awk -F '"' '/version/ { split($2, parts, "."); print parts[1]; exit }')"
+if [[ ! "$java_major" =~ ^[0-9]+$ || "$java_major" -lt 21 ]]; then
+  echo "Capacitor Android requires JDK 21 or newer; JAVA_HOME currently selects $java_major."
   exit 1
 fi
 if ! command -v sdkmanager >/dev/null 2>&1 || ! command -v gradle >/dev/null 2>&1; then
@@ -34,6 +39,11 @@ if ! command -v sdkmanager >/dev/null 2>&1 || ! command -v gradle >/dev/null 2>&
   exit 1
 fi
 
+if [[ "$version" == "mac-local" ]]; then
+  corepack pnpm --filter @mobile-codex/mobile exec node scripts/check-update-sources.mjs --allow-empty
+else
+  corepack pnpm --filter @mobile-codex/mobile exec node scripts/check-update-sources.mjs
+fi
 corepack pnpm --filter @mobile-codex/mobile build
 corepack pnpm --filter @mobile-codex/mobile exec cap sync android
 node scripts/normalize-capacitor-config.mjs

@@ -30,10 +30,11 @@ ssh_key="${MOBILE_CODEX_RELEASE_SSH_KEY:-}"
 remote_dir="$MOBILE_CODEX_RELEASE_DIR"
 base_url="${MOBILE_CODEX_RELEASE_BASE_URL%/}"
 
-safe_version="$(printf '%s' "$version_name" | tr -c 'A-Za-z0-9._-' '-')"
-apk_name="mobile-codex-${safe_version}.apk"
+[[ "$version_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$ && "$version_name" != *..* && "$version_code" =~ ^[0-9]+$ ]] || { echo "Invalid Android version"; exit 2; }
+[[ "$base_url" == https://* ]] || { echo "Release URL must use HTTPS"; exit 2; }
 sha256="$(shasum -a 256 "$apk" | awk '{print $1}')"
 size="$(wc -c < "$apk" | tr -d ' ')"
+apk_name="mobile-codex-${version_name}-${sha256:0:12}.apk"
 published_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 tmp_manifest="$(mktemp)"
 trap 'rm -f "$tmp_manifest"' EXIT
@@ -60,15 +61,7 @@ const manifest = {
 process.stdout.write(`${JSON.stringify(manifest, null, 2)}\n`);
 NODE
 
-ssh_args=(-o BatchMode=yes)
-if [[ -n "$ssh_key" ]]; then
-  ssh_args+=(-i "$ssh_key")
-fi
-
-ssh "${ssh_args[@]}" "$release_host" "mkdir -p '$remote_dir'"
-scp "${ssh_args[@]}" "$apk" "$release_host:$remote_dir/$apk_name"
-scp "${ssh_args[@]}" "$tmp_manifest" "$release_host:$remote_dir/latest.json"
-ssh "${ssh_args[@]}" "$release_host" "chmod 644 '$remote_dir/$apk_name' '$remote_dir/latest.json'"
+bash scripts/upload-release-atomically.sh "$apk" "$tmp_manifest" "$release_host" "$remote_dir" "$apk_name" "$ssh_key"
 
 echo "Update manifest: $base_url/latest.json"
 echo "APK: $base_url/$apk_name"

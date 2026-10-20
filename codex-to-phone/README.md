@@ -30,9 +30,15 @@ Mac Relay App  ->  Codex Desktop
 - 低延迟同步 Codex 文本结果，并在手机端平滑显示。
 - 支持 Light、Dark、System 三种主题。
 - 通过自建 Broker 跨网络使用，不要求手机和电脑连接同一 Wi-Fi。
-- 支持自托管 APK 更新源，不依赖应用商店。
+- 支持带 SHA-256 校验和自动回滚的前端热更新，以及自托管 APK 版本更新。
 
 默认界面只展示用户输入和 Codex 文本结果。工具日志、补丁内容、环境上下文和桥接内部消息不会占据聊天区。
+
+## 源码结构与优化进度
+
+项目已接入 Trellis；源码布局与任务入口见 [工程布局](docs/project-layout.md)，原始问题见 [源码审核](docs/audits/2026-10-20/README.md)。本轮已实施公网流、自动恢复、缓存/档案隔离、索引分页、设备配对和 Codex 手机版 UI；[优化交付与统一实测](docs/audits/2026-10-20/delivery.md) 记录当前 APK、验证结果及真机待办。
+
+本地隔离回归使用 `corepack pnpm test:transport`；该命令不会提交模型任务。
 
 ## 当前实现
 
@@ -45,7 +51,9 @@ Mac Relay App  ->  Codex Desktop
 | Input Helper | Swift、macOS Accessibility | 聚焦目标线程并把手机输入提交到 Codex Desktop |
 | Protocol Types | Codex app-server generated types | 解析线程、turn、审批和增量事件 |
 
-当前源码版本为 `1.1.13-message-order-fix`。主验证环境是 **macOS + Codex Desktop + Android**。Windows 相关代码仍保留，但不是当前重点支持路径。
+当前源码版本为 `1.2.2-update-restore` / versionCode 18，已恢复手机更新源，包含工作状态修复与前序优化，等待统一真机实测。原更新通道交付与安装说明见 [手机更新恢复](docs/audits/2026-10-20/update-restore.md)。主验证环境是 **macOS + Codex Desktop + Android**。Windows 相关代码仍保留，但不是当前重点支持路径。
+
+本次版本的功能、修复、验证范围和已知限制见 [更新说明](CHANGELOG.md)。公开仓库包含源码和构建说明；APK、Mac App、部署凭证及本地验收日志不随源码提交。更新说明中的插件化与多 Agent 接入属于后续开发方向，当前版本仍使用上表中的 Relay 和 Input Helper。
 
 ## 快速开始
 
@@ -55,7 +63,7 @@ Mac Relay App  ->  Codex Desktop
 - 已安装并登录 Codex Desktop
 - Node.js 20 或更高版本
 - Android 8 或更高版本
-- 构建 APK 时需要 JDK 17 和 Android SDK
+- 构建 APK 时需要 JDK 21 或更高版本和 Android SDK；本轮使用 JDK 25 + Gradle 9.4.1
 
 ### 1. 获取源码
 
@@ -91,7 +99,7 @@ Mobile Codex Input.app
 ~/Library/Application Support/Mobile Codex Relay/config.json
 ```
 
-局域网测试时，在 Android App 中填写 Mac App 显示的 `LAN Endpoint` 和 `Token`。
+优先在 Mac App 点击 `Pair phone`，把复制的配对信息粘贴到手机设置中。配对码 5 分钟内有效且仅用一次，手机取得独立、可撤销的设备凭证；Endpoint/管理员 Token 保留为手工恢复入口。
 
 ### 4. 授予输入权限
 
@@ -101,7 +109,7 @@ Mobile Codex Input.app
 系统设置 -> 隐私与安全性 -> 辅助功能
 ```
 
-允许 `Mobile Codex Input.app`。该权限只用于把手机消息提交到可见的 Codex Desktop 输入框。
+为当前工程中的 `Mobile Codex Relay.app` 与 `Mobile Codex Input.app` 开启辅助功能权限，用于把手机消息提交到可见的 Codex Desktop 输入框。当前 Relay 直接启动输入助手，系统可能将控制权限归属到 Relay；只授权 Input 仍可能失败。若迁移或重建后开关已开却报未授权，移除旧副本的授权项，再手动添加当前工程中的两个 App。不要授权旧工程路径，也不要在输入结果未知时反复发送。排查步骤见 [公网连接维护](docs/ops/remote-connection-repair.md#mac-输入权限)。
 
 ### 5. 构建 Android APK
 
@@ -111,16 +119,16 @@ Mobile Codex Input.app
 corepack pnpm android:setup:mac
 ```
 
-构建 APK：
+先按下文“在线更新”保存本地生产更新源，再构建 APK：
 
 ```bash
-corepack pnpm android:apk:mac -- 1.1.13-local
+corepack pnpm android:apk:mac -- 1.2.2-update-restore
 ```
 
 产物位于：
 
 ```text
-dist-apk/mobile-codex-1.1.13-local-debug.apk
+dist-apk/mobile-codex-1.2.2-update-restore-debug.apk
 ```
 
 在 Android 上安装后，打开设置，填写 Relay Endpoint 和 Token，然后执行“测试连接”。
@@ -184,14 +192,19 @@ Token: replace-with-a-separate-phone-access-token
 
 ## 在线更新
 
-在线更新地址不再写死在源码中。构建 APK 时通过环境变量注入：
+手机入口为“设置 → 版本与更新”。更新地址使用构建配置。将双通道地址保存到被 Git 忽略的 `apps/mobile/.env.production.local`，避免下次打包遗漏；也支持环境变量覆盖：
 
 ```bash
-export VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL=https://downloads.example.com/mobile-codex/android/latest.json
-corepack pnpm android:apk:mac -- 1.1.13-self-hosted
+cat > apps/mobile/.env.production.local <<'EOF'
+VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL=https://downloads.example.com/mobile-codex/android/latest.json
+VITE_MOBILE_CODEX_HOT_MANIFEST_URL=https://downloads.example.com/mobile-codex/hot/latest.json
+EOF
+corepack pnpm android:apk:mac -- 1.2.2-update-restore
 ```
 
-不设置该变量时，App 会禁用在线更新检查，其他功能不受影响。
+请替换示例域名。具名 APK 构建要求两个地址齐全且有效，缺失时立即失败；仅本地 `mac-local` 调试包允许两个地址都为空。未带更新源的旧 APK 16/17 需要先从手机浏览器下载修复 APK 并覆盖安装一次，之后可在 App 内继续检查更新，无需卸载或清除数据。
+
+生产环境的热更新 Manifest 和 bundle 地址必须使用 HTTPS。仅本机开发调试允许使用 `http://localhost`、`http://127.0.0.1` 或 `http://[::1]`；更新下载不跟随 HTTP 重定向。
 
 发布脚本同样不包含服务器、账号或 SSH 私钥默认值：
 
@@ -202,11 +215,25 @@ export MOBILE_CODEX_RELEASE_DIR=/var/www/mobile-codex/releases/android
 export MOBILE_CODEX_RELEASE_BASE_URL=https://downloads.example.com/mobile-codex/android
 
 scripts/publish-android-update.sh \
-  dist-apk/mobile-codex-1.1.13-self-hosted-debug.apk \
-  1.1.13-self-hosted \
-  14 \
+  dist-apk/mobile-codex-1.2.2-update-restore-debug.apk \
+  1.2.2-update-restore \
+  18 \
   "Your release notes"
 ```
+
+仅修改 React UI、样式或前端状态逻辑时，可以构建并发布热更新：
+
+```bash
+corepack pnpm android:hot-bundle -- 1.2.2-web.1
+
+scripts/publish-hot-update.sh \
+  dist-hot/mobile-codex-1.2.2-web.1.html \
+  1.2.2-web.1 \
+  18 \
+  "UI update"
+```
+
+热更新会先校验 SHA-256，再切换到应用私有目录中的单文件 bundle；未成功确认加载时，下次启动自动回滚。原生代码、权限、Capacitor 插件和不兼容协议变化必须发布 APK。
 
 详情见 [Android 在线更新](docs/online-update.md)。
 
@@ -218,6 +245,9 @@ corepack pnpm typecheck
 
 # 消息顺序和重复消息回归测试
 corepack pnpm test:messages
+
+# Codex CLI 路径解析回归测试
+corepack pnpm test:codex-executable
 
 # 构建 Relay 和移动端 Web
 corepack pnpm build
@@ -266,6 +296,7 @@ marketing            项目介绍素材和演示 HTML
 - `Phase 4`：增加线程分组、最近记录、平滑输出、状态标签、附件缩略图和在线更新。
 - `1.1.12`：保留连接后的记录，过滤环境上下文卡片，补充 Codex 运行状态。
 - `1.1.13`：按桌面事件顺序同步消息，保留连续相同输入，并只合并同一事件的双来源副本。
+- `1.1.14`：修复 macOS GUI 环境找不到 Codex CLI 的 `spawn codex ENOENT`，增加可校验、可回滚的热更新和 APK 双通道更新。
 
 早期方案的完成内容和限制记录在 [legacy-notes.md](docs/legacy-notes.md)。
 

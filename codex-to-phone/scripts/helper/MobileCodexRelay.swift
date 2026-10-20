@@ -21,6 +21,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var relayProcess: Process?
   private var tunnelProcess: Process?
   private var config: RelayConfig!
+  private var wantsRunning = true
+  private var relayFailures = 0
+  private var tunnelFailures = 0
+  private var relayRestart: DispatchWorkItem?
+  private var tunnelRestart: DispatchWorkItem?
+  private var healthTimer: Timer?
+  private var checkingHealth = false
+  private var healthFailures = 0
+  private var localHealthy = false
+  private var remoteHealthy = false
+  private let logQueue = DispatchQueue(label: "mobile-codex.log")
   private let appSupportDir = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent("Library/Application Support/Mobile Codex Relay", isDirectory: true)
 
@@ -51,16 +62,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     config = loadConfig()
     buildWindow()
     updateLabels()
+    NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
+    healthTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.checkHealth() }
     startRelay()
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    healthTimer?.invalidate()
     stopRelay()
   }
 
   private func buildWindow() {
     window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 620, height: 380),
+      contentRect: NSRect(x: 0, y: 0, width: 620, height: 420),
       styleMask: [.titled, .closable, .miniaturizable],
       backing: .buffered,
       defer: false
@@ -102,9 +116,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     buttonRow.spacing = 10
     startButton = NSButton(title: "Start Relay", target: self, action: #selector(startClicked))
     stopButton = NSButton(title: "Stop Relay", target: self, action: #selector(stopClicked))
+    let pairButton = NSButton(title: "Pair phone", target: self, action: #selector(pairPhone))
     let accessButton = NSButton(title: "Open Accessibility Settings", target: self, action: #selector(openAccessibilitySettings))
     buttonRow.addArrangedSubview(startButton)
     buttonRow.addArrangedSubview(stopButton)
+    buttonRow.addArrangedSubview(pairButton)
     buttonRow.addArrangedSubview(accessButton)
     stack.addArrangedSubview(buttonRow)
 
@@ -155,14 +171,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func updateLabels() {
     endpointLabel.stringValue = relayEndpoint
     remoteEndpointLabel.stringValue = remoteEndpoint ?? "Not configured"
-    tokenLabel.stringValue = config.token
+    tokenLabel.stringValue = "•••••••• (Copy to reveal)"
     let running = relayProcess?.isRunning == true
-    statusLabel.stringValue = running ? "Status: running" : "Status: stopped"
+    statusLabel.stringValue = !wantsRunning ? "Status: stopped" : "Process: \(running ? "running" : "recovering") · Relay: \(localHealthy ? "reachable" : "checking") · Remote: \(remoteEndpoint == nil ? "not configured" : remoteHealthy ? "reachable" : "checking")"
     startButton?.isEnabled = !running
     stopButton?.isEnabled = running
   }
 
   @objc private func startClicked() {
+    wantsRunning = true
+    relayFailures = 0
     startRelay()
   }
 
@@ -213,49 +231,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     process.currentDirectoryURL = URL(fileURLWithPath: projectRoot)
 
     var environment = ProcessInfo.processInfo.environment
-    let pathPrefix = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    let pathPrefix = [
+      home + "/.npm-global/bin",
+      home + "/.local/bin",
+      home + "/.local/node/bin",
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      "/usr/bin",
+      "/bin",
+      "/usr/sbin",
+      "/sbin"
+    ].joined(separator: ":")
     environment["PATH"] = pathPrefix + ":" + (environment["PATH"] ?? "")
     environment["MOBILE_CODEX_HOST"] = "0.0.0.0"
     environment["MOBILE_CODEX_PORT"] = String(config.port)
     environment["MOBILE_CODEX_TOKEN"] = config.token
     environment["CODEX_HOME"] = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
     environment["MOBILE_CODEX_DEFAULT_CWD"] = projectRoot
-    let appBundleCodex = "/Applications/Codex.app/Contents/Resources/codex"
-    if FileManager.default.isExecutableFile(atPath: appBundleCodex) {
-      environment["MOBILE_CODEX_CODEX_EXE"] = appBundleCodex
+    if let codexExecutable = findCodexExecutable() {
+      environment["MOBILE_CODEX_EXECUTABLE"] = codexExecutable
     }
     process.environment = environment
 
     let logURL = appSupportDir.appendingPathComponent("relay.log")
-    try? FileManager.default.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
-    if !FileManager.default.fileExists(atPath: logURL.path) {
-      FileManager.default.createFile(atPath: logURL.path, contents: nil)
-    }
-    let logHandle = try? FileHandle(forWritingTo: logURL)
-    logHandle?.seekToEndOfFile()
-    process.standardOutput = logHandle
-    process.standardError = logHandle
-
+    attachLog(to: process)
+    let startedAt = Date()
     process.terminationHandler = { [weak self] terminated in
       DispatchQueue.main.async {
-        self?.relayProcess = nil
-        self?.logLabel.stringValue = "Relay stopped with status \(terminated.terminationStatus). Log: \(logURL.path)"
-        self?.updateLabels()
+        guard let self, self.relayProcess === terminated else { return }
+        self.relayProcess = nil
+        self.localHealthy = false
+        if Date().timeIntervalSince(startedAt) > 30 { self.relayFailures = 0 }
+        self.logLabel.stringValue = "Relay exited (\(terminated.terminationStatus)); recovering. Log: \(logURL.path)"
+        self.scheduleRelayRestart()
+        self.updateLabels()
       }
     }
 
     do {
       try process.run()
       relayProcess = process
+      checkHealth()
       startTunnelIfConfigured(logURL: logURL)
       logLabel.stringValue = [networkHint(), "Log: \(logURL.path)"].compactMap { $0 }.joined(separator: "\n")
     } catch {
       logLabel.stringValue = "Could not start relay: \(error.localizedDescription)"
+      scheduleRelayRestart()
     }
     updateLabels()
   }
 
   private func stopRelay() {
+    wantsRunning = false
+    relayRestart?.cancel()
+    tunnelRestart?.cancel()
+    localHealthy = false
+    remoteHealthy = false
     if let tunnel = tunnelProcess, tunnel.isRunning {
       tunnel.terminate()
     }
@@ -267,6 +299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func startTunnelIfConfigured(logURL: URL) {
+    guard wantsRunning, tunnelProcess?.isRunning != true else { return }
     guard let brokerUrl = normalizedBrokerUrl(),
           let relayId = config.relayId,
           let relaySecret = config.relaySecret,
@@ -299,14 +332,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     environment["MOBILE_CODEX_LOCAL_RELAY"] = "http://127.0.0.1:\(config.port)"
     process.environment = environment
 
-    let logHandle = try? FileHandle(forWritingTo: logURL)
-    logHandle?.seekToEndOfFile()
-    process.standardOutput = logHandle
-    process.standardError = logHandle
-    process.terminationHandler = { [weak self] _ in
+    attachLog(to: process)
+    let startedAt = Date()
+    process.terminationHandler = { [weak self] terminated in
       DispatchQueue.main.async {
-        self?.tunnelProcess = nil
-        self?.updateLabels()
+        guard let self, self.tunnelProcess === terminated else { return }
+        self.tunnelProcess = nil
+        self.remoteHealthy = false
+        if Date().timeIntervalSince(startedAt) > 30 { self.tunnelFailures = 0 }
+        self.scheduleTunnelRestart()
+        self.updateLabels()
       }
     }
 
@@ -315,11 +350,128 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       tunnelProcess = process
     } catch {
       logLabel.stringValue = "Could not start remote tunnel: \(error.localizedDescription)"
+      scheduleTunnelRestart()
+    }
+  }
+
+  private func scheduleRelayRestart() {
+    guard wantsRunning else { return }
+    relayRestart?.cancel()
+    let delay = min(60.0, pow(2.0, Double(min(relayFailures, 6))))
+    relayFailures += 1
+    let work = DispatchWorkItem { [weak self] in self?.startRelay() }
+    relayRestart = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+  }
+
+  private func scheduleTunnelRestart() {
+    guard wantsRunning else { return }
+    tunnelRestart?.cancel()
+    let delay = min(60.0, pow(2.0, Double(min(tunnelFailures, 6))))
+    tunnelFailures += 1
+    let work = DispatchWorkItem { [weak self] in
+      guard let self else { return }
+      self.startTunnelIfConfigured(logURL: self.appSupportDir.appendingPathComponent("relay.log"))
+    }
+    tunnelRestart = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+  }
+
+  @objc private func didWake() {
+    checkHealth()
+    if wantsRunning && relayProcess?.isRunning != true { scheduleRelayRestart() }
+    if wantsRunning && tunnelProcess?.isRunning != true { scheduleTunnelRestart() }
+  }
+
+  private func checkHealth() {
+    guard wantsRunning, !checkingHealth else { return }
+    checkingHealth = true
+    probe("http://127.0.0.1:\(config.port)/health") { [weak self] healthy in
+      guard let self else { return }
+      guard self.wantsRunning else { self.checkingHealth = false; return }
+      self.localHealthy = healthy
+      self.healthFailures = healthy ? 0 : self.healthFailures + 1
+      if self.healthFailures >= 3, let process = self.relayProcess, process.isRunning {
+        self.healthFailures = 0
+        process.terminate()
+      }
+      if let remote = self.remoteEndpoint {
+        self.probe(remote + "/health") { [weak self] remoteOK in
+          self?.remoteHealthy = remoteOK
+          self?.checkingHealth = false
+          self?.updateLabels()
+        }
+      } else { self.checkingHealth = false; self.updateLabels() }
+    }
+  }
+
+  private func probe(_ endpoint: String, completion: @escaping (Bool) -> Void) {
+    guard let url = URL(string: endpoint) else { completion(false); return }
+    var request = URLRequest(url: url)
+    request.timeoutInterval = 5
+    request.cachePolicy = .reloadIgnoringLocalCacheData
+    URLSession.shared.dataTask(with: request) { data, response, _ in
+      let object = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+      let ok = (response as? HTTPURLResponse)?.statusCode == 200 && object?["mode"] as? String == "mobile-codex-relay"
+      DispatchQueue.main.async { completion(ok) }
+    }.resume()
+  }
+
+  @objc private func pairPhone() {
+    guard let url = URL(string: "http://127.0.0.1:\(config.port)/api/pairing") else { return }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 8
+    request.setValue("Bearer " + config.token, forHTTPHeaderField: "Authorization")
+    URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
+      guard let data, (response as? HTTPURLResponse)?.statusCode == 200,
+            var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        DispatchQueue.main.async { self?.logLabel.stringValue = "Pairing unavailable; check Relay health." }
+        return
+      }
+      DispatchQueue.main.async {
+        guard let self else { return }
+        object["endpoint"] = self.remoteEndpoint ?? self.relayEndpoint
+        if let json = try? JSONSerialization.data(withJSONObject: object), let text = String(data: json, encoding: .utf8) {
+          self.copy(text)
+          self.logLabel.stringValue = "Pairing copied. Paste into phone Settings → Pair. Valid for 5 minutes, once."
+        }
+      }
+    }.resume()
+  }
+
+  private func attachLog(to process: Process) {
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+    pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+      let data = handle.availableData
+      if data.isEmpty { handle.readabilityHandler = nil; return }
+      self?.logQueue.async { [weak self] in
+        guard let self else { return }
+        let fm = FileManager.default
+        let url = self.appSupportDir.appendingPathComponent("relay.log")
+        if let size = (try? fm.attributesOfItem(atPath: url.path)[.size]) as? NSNumber, size.intValue >= 4 * 1024 * 1024 {
+          let previous = self.appSupportDir.appendingPathComponent("relay.log.1")
+          try? fm.removeItem(at: previous)
+          try? fm.moveItem(at: url, to: previous)
+        }
+        if !fm.fileExists(atPath: url.path) { fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600]) }
+        if let output = try? FileHandle(forWritingTo: url) {
+          defer { try? output.close() }
+          output.seekToEndOfFile()
+          output.write(data)
+        }
+      }
     }
   }
 
   private func loadConfig() -> RelayConfig {
     try? FileManager.default.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
+    try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: appSupportDir.path)
+    for name in ["relay.log", "relay.log.1"] {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: appSupportDir.appendingPathComponent(name).path)
+    }
     let configURL = appSupportDir.appendingPathComponent("config.json")
     if let data = try? Data(contentsOf: configURL),
        let decoded = try? JSONDecoder().decode(RelayConfig.self, from: data) {
@@ -345,6 +497,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func saveConfig(_ value: RelayConfig, to url: URL) {
     if let data = try? JSONEncoder().encode(value) {
       try? data.write(to: url, options: .atomic)
+      try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
   }
 
@@ -404,6 +557,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func randomToken() -> String {
     let alphabet = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
     return String((0..<24).compactMap { _ in alphabet.randomElement() })
+  }
+
+  private func findCodexExecutable() -> String? {
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    let candidates = [
+      home + "/.npm-global/bin/codex",
+      home + "/.local/bin/codex",
+      home + "/.local/node/bin/codex",
+      "/opt/homebrew/bin/codex",
+      "/usr/local/bin/codex",
+      "/Applications/ChatGPT.app/Contents/Resources/codex",
+      "/Applications/Codex.app/Contents/Resources/codex"
+    ]
+    return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
   }
 
   private func runAndCapture(_ executable: String, _ arguments: [String]) -> String {

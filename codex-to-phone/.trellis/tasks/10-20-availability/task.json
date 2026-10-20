@@ -1,0 +1,46 @@
+{
+  "id": "availability",
+  "name": "availability",
+  "title": "C 随时接入与维护",
+  "description": "F10、F18、F20、F22–F23、F25：发送、监督、配对、更新和日志",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": "mobile",
+  "priority": "P2",
+  "creator": "rorance",
+  "assignee": "rorance",
+  "createdAt": "2026-10-20",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "10-20-optimization",
+  "relatedFiles": [],
+  "notes": "2026-10-20 源码/隔离检查完成；用户另行授权的 TLS/续期、Broker/Mac 运行版本切换已执行并通过公网鉴权。手机重试、真实 Desktop/唤醒/Windows/长期运行仍待验收。见 docs/audits/2026-10-20/connection-repair.md。未提交或发布 APK。",
+  "meta": {
+    "sourceImplementation": "complete_for_planned_iteration",
+    "platformAcceptance": "pending",
+    "evidence": "docs/audits/2026-10-20/optimized-evidence.json",
+    "publicConnectionRepair": "executed_computer_side_verified_phone_pending",
+    "inputPermissionReview": {
+      "actualResponsibleApp": "local.mobile-codex.relay",
+      "sourceChanged": false,
+      "userInputReadded": true,
+      "userRelayReadded": true,
+      "currentAppGrants": "TCC Allowed observed for Relay 21:48:24 and Input 21:48:45 Asia/Shanghai; cdhash matches current project Apps",
+      "realPhoneAcceptance": "pending manual phone send after reauthorization; local/public connection checks passed",
+      "evidence": "output/audit/2026-10-20/input-permission-evidence.json"
+    },
+    "longConnectionReview": {
+      "mechanismReviewed": true,
+      "isolatedRegressionPassed": 11,
+      "longRun": "deferred_by_user",
+      "runbook": "docs/ops/remote-connection-repair.md"
+    }
+  }
+}

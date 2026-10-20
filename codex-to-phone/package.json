@@ -13,11 +13,19 @@
     "mac:package": "pnpm build && pnpm mac:helper && pnpm mac:relay-app",
     "android:setup:mac": "bash scripts/setup-android-tools-mac.sh",
     "android:apk:mac": "bash scripts/build-debug-apk-mac.sh",
+    "android:hot-bundle": "pnpm --filter @mobile-codex/mobile build && node scripts/build-hot-bundle.mjs",
     "test:messages": "node scripts/test-message-reconciliation.mjs",
+    "test:codex-executable": "pnpm --filter @mobile-codex/relay codex-executable:smoke",
     "dev:relay:mac": "pnpm mac:helper && MOBILE_CODEX_HOST=${MOBILE_CODEX_HOST:-0.0.0.0} MOBILE_CODEX_PORT=${MOBILE_CODEX_PORT:-8787} MOBILE_CODEX_TOKEN=${MOBILE_CODEX_TOKEN:?Set MOBILE_CODEX_TOKEN to a strong random value} pnpm dev:relay",
     "build": "pnpm --filter @mobile-codex/relay build && pnpm --filter @mobile-codex/mobile build",
     "smoke": "pnpm --filter @mobile-codex/relay smoke",
-    "typecheck": "pnpm --filter @mobile-codex/relay typecheck && pnpm --filter @mobile-codex/mobile typecheck"
+    "typecheck": "pnpm --filter @mobile-codex/relay typecheck && pnpm --filter @mobile-codex/mobile typecheck",
+    "test:transport": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/transport.test.mjs",
+    "test:correctness": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/correctness.test.mjs",
+    "test:mobile": "node --test scripts/test-mobile-connection.mjs scripts/test-mobile-profiles.mjs",
+    "test:hot-update": "node scripts/test-hot-update-paths.mjs",
+    "test:performance": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/performance.test.mjs",
+    "test:availability": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/availability.test.mjs"
   },
   "devDependencies": {
     "typescript": "5.9.3"

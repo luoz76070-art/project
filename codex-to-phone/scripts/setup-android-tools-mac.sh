@@ -12,12 +12,12 @@ if ! command -v brew >/dev/null 2>&1; then
 fi
 
 export HOMEBREW_NO_AUTO_UPDATE=1
-brew install openjdk@17 gradle
+brew install openjdk gradle
 if ! brew list --cask android-commandlinetools >/dev/null 2>&1; then
   brew install --cask android-commandlinetools
 fi
 
-export JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
+export JAVA_HOME="$(brew --prefix openjdk)/libexec/openjdk.jdk/Contents/Home"
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 cmdline_tools_bin="$(dirname "$(command -v sdkmanager)")"

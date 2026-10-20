@@ -1,0 +1,47 @@
+{
+  "id": "mobile-ui",
+  "name": "mobile-ui",
+  "title": "D Codex 手机版 UI",
+  "description": "真实参考基线、线程/聊天/输入栏、浅深主题与真机验收",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": "mobile",
+  "priority": "P2",
+  "creator": "rorance",
+  "assignee": "rorance",
+  "createdAt": "2026-10-20",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "10-20-optimization",
+  "relatedFiles": [],
+  "notes": "2026-10-20 源码优化与隔离验证完成；后续已修复公网连接、工作状态及手机更新源，APK 18/HTML 已通过原静态通道发布。Android/真实 Desktop/唤醒/Windows/长期运行仍待验收。未暂存、提交、推送、建分支或 PR。",
+  "meta": {
+    "sourceImplementation": "complete_for_planned_iteration",
+    "platformAcceptance": "pending",
+    "evidence": "docs/audits/2026-10-20/optimized-evidence.json",
+    "workStatusFix": {
+      "source": "complete",
+      "apkVersionCode": 17,
+      "localRelaySwitched": true,
+      "publicReadonly": "passed",
+      "phoneAcceptance": "pending",
+      "evidence": "docs/audits/2026-10-20/work-status.md"
+    },
+    "updateRestore": {
+      "source": "complete",
+      "apkVersionCode": 18,
+      "published": true,
+      "publicIntegrity": "passed",
+      "browserUpdateCheck": "passed",
+      "phoneAcceptance": "pending",
+      "evidence": "docs/audits/2026-10-20/update-restore.md"
+    }
+  }
+}

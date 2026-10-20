@@ -129,10 +129,12 @@ Token: replace-with-a-separate-phone-access-token
 ```bash
 curl https://broker.example.com/health
 curl -H 'Authorization: Bearer replace-with-a-separate-phone-access-token' \
-  https://broker.example.com/r/my-mac/api/threads?limit=1
+  https://broker.example.com/r/my-mac/api/connection
 ```
 
-健康检查只返回连接数量，不公开 Relay ID。
+健康检查只返回连接数量，不公开 Relay ID。鉴权连接检查应返回 `{ "ok": true, "authenticated": true }`，无 Token 应为 401；无需读取线程或发送模型任务。实际维护时从配置加载 Token，避免将真实凭证放入命令参数或日志。
+
+证书续期、旧进程识别、Broker → Mac 切换和回退流程见 [公网连接维护与回退](ops/remote-connection-repair.md)。源码优化后需同时核对运行版本；新 Tunnel 使用 Authorization header，不能先连接只认识 query secret 的旧 Broker。
 
 ## 7. 本机开发模式
 

@@ -1,0 +1,37 @@
+{
+  "id": "optimization",
+  "name": "optimization",
+  "title": "轻量、实时、随时连接与手机版 UI 优化",
+  "description": "执行 2026-10-20 审核计划，先完成 Trellis 与模块布局",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": "mobile",
+  "priority": "P2",
+  "creator": "rorance",
+  "assignee": "rorance",
+  "createdAt": "2026-10-20",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "10-20-layout",
+    "10-20-transport",
+    "10-20-correctness",
+    "10-20-performance",
+    "10-20-availability",
+    "10-20-mobile-ui"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "2026-10-20 本轮源码实施与隔离检查完成；Android/真实 Desktop/唤醒/Windows/长期运行待统一实测。见 docs/audits/2026-10-20/delivery.md。未提交或部署。",
+  "meta": {
+    "sourceImplementation": "complete_for_planned_iteration",
+    "platformAcceptance": "pending",
+    "evidence": "docs/audits/2026-10-20/optimized-evidence.json"
+  }
+}

@@ -1,6 +1,6 @@
 # Mobile Codex 工程档案入口
 
-更新时间：2026-07-11
+更新时间：2026-10-20
 
 ## 作用
 
@@ -14,14 +14,21 @@
 
 当前主入口：
 
-- Android APK：`1.1.13-message-order-fix` 或本地 `dist-apk/` 构建产物
+- Android APK：`dist-apk/mobile-codex-1.2.2-update-restore-debug.apk`（versionCode 18，已恢复原手机更新通道并发布，待真机验收）
 - Mac Relay App：`Mobile Codex Relay.app`
 - Mac 输入 helper：`Mobile Codex Input.app`
 - Relay/Broker：`apps/relay`
 - 手机客户端：`apps/mobile`
 - 协议类型：`generated-protocol`
 
+## Trellis 与当前优化
+
+先读 [工程布局](project-layout.md)，再按 `.trellis/spec/mobile/frontend/` 或 `.trellis/spec/relay/backend/` 进入对应模块规范。任务与验收记录保存在 `.trellis/tasks/` 和 `.trellis/workspace/rorance/`；优化优先级以 [2026-10-20 审核计划](audits/2026-10-20/README.md) 为准。A–D 本轮源码实施与隔离验证已完成，统一实测步骤、当前包和限制见 [优化交付](audits/2026-10-20/delivery.md)。
+
 ## 工程文件目录
+
+- `CHANGELOG.md`：当前版本功能描述、修复内容、提交前检查和已知限制。
+- `docs/project-layout.md`：工程布局、Trellis 工作入口和验证命令。
 
 - `docs/project-index.md`：施工入口和文件索引。
 - `docs/legacy-notes.md`：旧扫码 bridge / skill / tunnel 方案的完成内容和局限。
@@ -29,6 +36,9 @@
 - `docs/architecture-feasibility.md`：可行性、架构方案、已实测证据、风险边界。
 - `docs/network-plan.md`：本地局域网路线和公网远程方案。
 - `docs/remote-broker.md`：公网 Broker 部署和 Mac/Android 配置。
+- `docs/ops/remote-connection-repair.md`：公网 TLS、Broker/Mac 切换、连接验证和回退流程。
+- `docs/audits/2026-10-20/work-status.md`：手机工作状态修复、APK 17 与只读验证结果。
+- `docs/audits/2026-10-20/update-restore.md`：APK 18、手机更新渠道恢复、覆盖安装与公网发布验证。
 - `docs/online-update.md`：Android 自托管在线更新流程。
 - `docs/usage.md`：部署、启动、APK 构建和换电脑使用说明。
 - `docs/ui-interaction-spec.md`：手机版 Codex 工作台 UI 和交互规范。
@@ -42,6 +52,7 @@
 
 ## 当前已验证事实
 
+- 2026-10-20 已按用户授权修复过期公网证书并升级运行中的 Broker/Mac Relay，公网鉴权健康检查通过；手机重试及真实控制验收仍待用户完成，见 [连接修复记录](audits/2026-10-20/connection-repair.md)。
 - Mac Relay App 可以本地启动 Relay 并读取 Codex Desktop 会话。
 - Mac 输入 helper 通过辅助功能把手机文本提交到 Codex Desktop 当前线程。
 - 公网 Broker 模型已落地，Android Endpoint 可以使用 `https://broker.example.com/r/my-mac` 这类稳定入口。

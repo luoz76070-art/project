@@ -1,0 +1,700 @@
+{
+  "checkedDate": "2026-10-20",
+  "command": "corepack pnpm audit --prod --json",
+  "exitCode": 1,
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 3,
+      "moderate": 15,
+      "high": 48,
+      "critical": 2
+    },
+    "dependencies": 293,
+    "devDependencies": 0,
+    "optionalDependencies": 0,
+    "totalDependencies": 293
+  },
+  "advisories": [
+    {
+      "module_name": "tar",
+      "severity": "high",
+      "title": "node-tar Vulnerable to Arbitrary File Creation/Overwrite via Hardlink Path Traversal",
+      "github_advisory_id": "GHSA-34x7-hfp2-rc4v",
+      "vulnerable_versions": "<7.5.7",
+      "patched_versions": ">=7.5.7",
+      "url": "https://github.com/advisories/GHSA-34x7-hfp2-rc4v",
+      "updated": "2026-01-28T16:35:31.000Z"
+    },
+    {
+      "module_name": "fastify",
+      "severity": "low",
+      "title": "Fastify Vulnerable to DoS via Unbounded Memory Allocation in sendWebStream",
+      "github_advisory_id": "GHSA-mrq3-vjjr-p77c",
+      "vulnerable_versions": "<=5.7.2",
+      "patched_versions": ">=5.7.3",
+      "url": "https://github.com/advisories/GHSA-mrq3-vjjr-p77c",
+      "updated": "2026-02-04T17:46:09.000Z"
+    },
+    {
+      "module_name": "fastify",
+      "severity": "high",
+      "title": "Fastify's Content-Type header tab character allows body validation bypass",
+      "github_advisory_id": "GHSA-jx2c-rxcm-jvmq",
+      "vulnerable_versions": "<5.7.2",
+      "patched_versions": ">=5.7.2",
+      "url": "https://github.com/advisories/GHSA-jx2c-rxcm-jvmq",
+      "updated": "2026-02-04T17:46:03.000Z"
+    },
+    {
+      "module_name": "tar",
+      "severity": "high",
+      "title": "node-tar is Vulnerable to Arbitrary File Overwrite and Symlink Poisoning via Insufficient Path Sanitization",
+      "github_advisory_id": "GHSA-8qq5-rm4j-mr97",
+      "vulnerable_versions": "<=7.5.2",
+      "patched_versions": ">=7.5.3",
+      "url": "https://github.com/advisories/GHSA-8qq5-rm4j-mr97",
+      "updated": "2026-02-18T23:43:47.000Z"
+    },
+    {
+      "module_name": "tar",
+      "severity": "high",
+      "title": "Arbitrary File Read/Write via Hardlink Target Escape Through Symlink Chain in node-tar Extraction",
+      "github_advisory_id": "GHSA-83g3-92jg-28cx",
+      "vulnerable_versions": "<7.5.8",
+      "patched_versions": ">=7.5.8",
+      "url": "https://github.com/advisories/GHSA-83g3-92jg-28cx",
+      "updated": "2026-02-20T16:47:50.000Z"
+    },
+    {
+      "module_name": "tar",
+      "severity": "high",
+      "title": "tar has Hardlink Path Traversal via Drive-Relative Linkpath",
+      "github_advisory_id": "GHSA-qffp-2rhf-9h96",
+      "vulnerable_versions": "<=7.5.9",
+      "patched_versions": ">=7.5.10",
+      "url": "https://github.com/advisories/GHSA-qffp-2rhf-9h96",
+      "updated": "2026-03-09T15:49:59.000Z"
+    },
+    {
+      "module_name": "tar",
+      "severity": "high",
+      "title": "node-tar Symlink Path Traversal via Drive-Relative Linkpath",
+      "github_advisory_id": "GHSA-9ppj-qmqm-q256",
+      "vulnerable_versions": "<=7.5.10",
+      "patched_versions": ">=7.5.11",
+      "url": "https://github.com/advisories/GHSA-9ppj-qmqm-q256",
+      "updated": "2026-03-10T23:44:59.000Z"
+    },
+    {
+      "module_name": "tar",
+      "severity": "high",
+      "title": "Race Condition in node-tar Path Reservations via Unicode Ligature Collisions on macOS APFS",
+      "github_advisory_id": "GHSA-r6q2-hw4h-h46w",
+      "vulnerable_versions": "<=7.5.3",
+      "patched_versions": ">=7.5.4",
+      "url": "https://github.com/advisories/GHSA-r6q2-hw4h-h46w",
+      "updated": "2026-03-16T14:23:27.000Z"
+    },
+    {
+      "module_name": "fastify",
+      "severity": "moderate",
+      "title": "fastify: request.protocol and request.host Spoofable via X-Forwarded-Proto/Host from Untrusted Connections",
+      "github_advisory_id": "GHSA-444r-cwp2-x5xf",
+      "vulnerable_versions": "<=5.8.2",
+      "patched_versions": ">=5.8.3",
+      "url": "https://github.com/advisories/GHSA-444r-cwp2-x5xf",
+      "updated": "2026-03-25T19:32:29.000Z"
+    },
+    {
+      "module_name": "vite",
+      "severity": "moderate",
+      "title": "Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling",
+      "github_advisory_id": "GHSA-4w7w-66w2-5vf9",
+      "vulnerable_versions": ">=7.0.0 <=7.3.1",
+      "patched_versions": ">=7.3.2",
+      "url": "https://github.com/advisories/GHSA-4w7w-66w2-5vf9",
+      "updated": "2026-04-07T22:16:29.000Z"
+    },
+    {
+      "module_name": "vite",
+      "severity": "high",
+      "title": "Vite: `server.fs.deny` bypassed with queries",
+      "github_advisory_id": "GHSA-v2wj-q39q-566r",
+      "vulnerable_versions": ">=7.1.0 <=7.3.1",
+      "patched_versions": ">=7.3.2",
+      "url": "https://github.com/advisories/GHSA-v2wj-q39q-566r",
+      "updated": "2026-04-07T22:16:19.000Z"
+    },
+    {
+      "module_name": "vite",
+      "severity": "high",
+      "title": "Vite Vulnerable to Arbitrary File Read via Vite Dev Server WebSocket",
+      "github_advisory_id": "GHSA-p9ff-h696-f583",
+      "vulnerable_versions": ">=7.0.0 <=7.3.1",
+      "patched_versions": ">=7.3.2",
+      "url": "https://github.com/advisories/GHSA-p9ff-h696-f583",
+      "updated": "2026-04-07T22:16:11.000Z"
+    },
+    {
+      "module_name": "fastify",
+      "severity": "high",
+      "title": "Fastify has a Body Schema Validation Bypass via Leading Space in Content-Type Header",
+      "github_advisory_id": "GHSA-247c-9743-5963",
+      "vulnerable_versions": ">=5.3.2 <=5.8.4",
+      "patched_versions": ">=5.8.5",
+      "url": "https://github.com/advisories/GHSA-247c-9743-5963",
+      "updated": "2026-04-24T20:42:06.000Z"
+    },
+    {
+      "module_name": "ws",
+      "severity": "moderate",
+      "title": "ws: Uninitialized memory disclosure",
+      "github_advisory_id": "GHSA-58qx-3vcg-4xpx",
+      "vulnerable_versions": ">=8.0.0 <8.20.1",
+      "patched_versions": ">=8.20.1",
+      "url": "https://github.com/advisories/GHSA-58qx-3vcg-4xpx",
+      "updated": "2026-05-18T19:02:42.000Z"
+    },
+    {
+      "module_name": "esbuild",
+      "severity": "low",
+      "title": "esbuild allows arbitrary file read when running the development server on Windows",
+      "github_advisory_id": "GHSA-g7r4-m6w7-qqqr",
+      "vulnerable_versions": ">=0.27.3 <0.28.1",
+      "patched_versions": ">=0.28.1",
+      "url": "https://github.com/advisories/GHSA-g7r4-m6w7-qqqr",
+      "updated": "2026-06-12T20:08:54.000Z"
+    },
+    {
+      "module_name": "tar",
+      "severity": "moderate",
+      "title": "node-tar applies PAX size override to intermediary GNU long-name/long-link headers, causing tar parser interpretation differential (file smuggling)",
+      "github_advisory_id": "GHSA-vmf3-w455-68vh",
+      "vulnerable_versions": "<=7.5.15",
+      "patched_versions": ">=7.5.16",
+      "url": "https://github.com/advisories/GHSA-vmf3-w455-68vh",
+      "updated": "2026-06-15T17:19:44.000Z"
+    },
+    {
+      "module_name": "vite",
+      "severity": "moderate",
+      "title": "launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows",
+      "github_advisory_id": "GHSA-v6wh-96g9-6wx3",
+      "vulnerable_versions": ">=7.0.0 <=7.3.4",
+      "patched_versions": ">=7.3.5",
+      "url": "https://github.com/advisories/GHSA-v6wh-96g9-6wx3",
+      "updated": "2026-06-15T17:18:32.000Z"
+    },
+    {
+      "module_name": "ws",
+      "severity": "high",
+      "title": "ws: Memory exhaustion DoS from tiny fragments and data chunks",
+      "github_advisory_id": "GHSA-96hv-2xvq-fx4p",
+      "vulnerable_versions": ">=8.0.0 <8.21.0",
+      "patched_versions": ">=8.21.0",
+      "url": "https://github.com/advisories/GHSA-96hv-2xvq-fx4p",
+      "updated": "2026-07-13T15:31:39.000Z"
+    },
+    {
+      "module_name": "vite",
+      "severity": "high",
+      "title": "vite: `server.fs.deny` bypass on Windows alternate paths",
+      "github_advisory_id": "GHSA-fx2h-pf6j-xcff",
+      "vulnerable_versions": ">=7.0.0 <=7.3.4",
+      "patched_versions": ">=7.3.5",
+      "url": "https://github.com/advisories/GHSA-fx2h-pf6j-xcff",
+      "updated": "2026-07-15T22:05:54.000Z"
+    },
+    {
+      "module_name": "@babel/core",
+      "severity": "low",
+      "title": "@babel/core: Arbitrary File Read via sourceMappingURL Comment",
+      "github_advisory_id": "GHSA-4x5r-pxfx-6jf8",
+      "vulnerable_versions": "<=7.29.0",
+      "patched_versions": ">=7.29.6",
+      "url": "https://github.com/advisories/GHSA-4x5r-pxfx-6jf8",
+      "updated": "2026-07-15T22:05:27.000Z"
+    },
+    {
+      "module_name": "brace-expansion",
+      "severity": "high",
+      "title": "brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups",
+      "github_advisory_id": "GHSA-3jxr-9vmj-r5cp",
+      "vulnerable_versions": ">=3.0.0 <5.0.7",
+      "patched_versions": ">=5.0.7",
+      "url": "https://github.com/advisories/GHSA-3jxr-9vmj-r5cp",
+      "updated": "2026-07-20T20:51:11.000Z"
+    },
+    {
+      "module_name": "tar",
+      "severity": "moderate",
+      "title": "node-tar: Process crash via PAX numeric path type confusion",
+      "github_advisory_id": "GHSA-w8wr-v893-vjvp",
+      "vulnerable_versions": "<=7.5.17",
+      "patched_versions": ">=7.5.18",
+      "url": "https://github.com/advisories/GHSA-w8wr-v893-vjvp",
+      "updated": "2026-07-20T21:53:15.000Z"
+    },
+    {
+      "module_name": "tar",
+      "severity": "critical",
+      "title": "node-tar: Decompression/parse DoS via unlimited input",
+      "github_advisory_id": "GHSA-23hp-3jrh-7fpw",
+      "vulnerable_versions": "<=7.5.18",
+      "patched_versions": ">=7.5.19",
+      "url": "https://github.com/advisories/GHSA-23hp-3jrh-7fpw",
+      "updated": "2026-07-20T21:52:04.000Z"
+    },
+    {
+      "module_name": "tar",
+      "severity": "high",
+      "title": "node-tar: Negative tar entry size causes infinite loop in archive replace",
+      "github_advisory_id": "GHSA-8x88-c5mf-7j5w",
+      "vulnerable_versions": "<=7.5.17",
+      "patched_versions": ">=7.5.18",
+      "url": "https://github.com/advisories/GHSA-8x88-c5mf-7j5w",
+      "updated": "2026-07-20T21:51:39.000Z"
+    },
+    {
+      "module_name": "tar",
+      "severity": "moderate",
+      "title": "node-tar: Uncaught Exception DoS via NUL byte in PAX path/linkpath records",
+      "github_advisory_id": "GHSA-gvwx-54wh-qm9j",
+      "vulnerable_versions": "<=7.5.16",
+      "patched_versions": ">=7.5.17",
+      "url": "https://github.com/advisories/GHSA-gvwx-54wh-qm9j",
+      "updated": "2026-07-20T21:51:12.000Z"
+    },
+    {
+      "module_name": "fast-uri",
+      "severity": "high",
+      "title": "fast-uri vulnerable to host confusion via literal backslash authority delimiter",
+      "github_advisory_id": "GHSA-v2hh-gcrm-f6hx",
+      "vulnerable_versions": ">=3.0.0 <=3.1.3",
+      "patched_versions": ">=3.1.4",
+      "url": "https://github.com/advisories/GHSA-v2hh-gcrm-f6hx",
+      "updated": "2026-07-21T22:08:29.000Z"
+    },
+    {
+      "module_name": "find-my-way",
+      "severity": "high",
+      "title": "find-my-way: DDoS with HTTP2",
+      "github_advisory_id": "GHSA-c96f-x56v-gq3h",
+      "vulnerable_versions": "<=9.6.0",
+      "patched_versions": ">=9.7.0",
+      "url": "https://github.com/advisories/GHSA-c96f-x56v-gq3h",
+      "updated": "2026-07-23T19:33:15.000Z"
+    },
+    {
+      "module_name": "brace-expansion",
+      "severity": "high",
+      "title": "brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash",
+      "github_advisory_id": "GHSA-mh99-v99m-4gvg",
+      "vulnerable_versions": ">=4.0.0 <5.0.8",
+      "patched_versions": ">=5.0.8",
+      "url": "https://github.com/advisories/GHSA-mh99-v99m-4gvg",
+      "updated": "2026-07-31T19:37:57.000Z"
+    },
+    {
+      "module_name": "postcss",
+      "severity": "moderate",
+      "title": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q — attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset",
+      "github_advisory_id": "GHSA-fxqj-rqcc-2cmp",
+      "vulnerable_versions": "<=8.5.22",
+      "patched_versions": ">=8.5.23",
+      "url": "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp",
+      "updated": "2026-08-03T17:11:40.000Z"
+    },
+    {
+      "module_name": "fast-uri",
+      "severity": "high",
+      "title": "fast-uri vulnerable to host confusion via backslash authority introducer",
+      "github_advisory_id": "GHSA-7p8r-x3mc-p8w7",
+      "vulnerable_versions": ">=3.0.0 <3.1.5",
+      "patched_versions": ">=3.1.5",
+      "url": "https://github.com/advisories/GHSA-7p8r-x3mc-p8w7",
+      "updated": "2026-08-03T19:16:43.000Z"
+    },
+    {
+      "module_name": "brace-expansion",
+      "severity": "high",
+      "title": "brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation",
+      "github_advisory_id": "GHSA-rgw5-rvv9-x895",
+      "vulnerable_versions": ">=4.0.0 <5.0.9",
+      "patched_versions": ">=5.0.9",
+      "url": "https://github.com/advisories/GHSA-rgw5-rvv9-x895",
+      "updated": "2026-08-03T20:17:20.000Z"
+    },
+    {
+      "module_name": "nanoid",
+      "severity": "high",
+      "title": "nanoid: non-secure generators can loop indefinitely with negative size",
+      "github_advisory_id": "GHSA-28wg-ghj8-5hjv",
+      "vulnerable_versions": "<3.3.16",
+      "patched_versions": ">=3.3.16",
+      "url": "https://github.com/advisories/GHSA-28wg-ghj8-5hjv",
+      "updated": "2026-08-07T20:53:01.000Z"
+    },
+    {
+      "module_name": "nanoid",
+      "severity": "high",
+      "title": "nanoid: custom generators can loop indefinitely when size is zero",
+      "github_advisory_id": "GHSA-2v37-7h3g-55p8",
+      "vulnerable_versions": "<3.3.18",
+      "patched_versions": ">=3.3.18",
+      "url": "https://github.com/advisories/GHSA-2v37-7h3g-55p8",
+      "updated": "2026-08-13T15:43:02.000Z"
+    },
+    {
+      "module_name": "postcss",
+      "severity": "high",
+      "title": "PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure",
+      "github_advisory_id": "GHSA-r28c-9q8g-f849",
+      "vulnerable_versions": "<=8.5.17",
+      "patched_versions": ">=8.5.18",
+      "url": "https://github.com/advisories/GHSA-r28c-9q8g-f849",
+      "updated": "2026-08-13T17:55:56.000Z"
+    },
+    {
+      "module_name": "tar",
+      "severity": "high",
+      "title": "node-tar: Uncontrolled recursion in mapHas/filesFilter allows uncatchable stack-overflow DoS via crafted long-path tar with member selection",
+      "github_advisory_id": "GHSA-r292-9mhp-454m",
+      "vulnerable_versions": "<=7.5.20",
+      "patched_versions": ">=7.5.21",
+      "url": "https://github.com/advisories/GHSA-r292-9mhp-454m",
+      "updated": "2026-08-21T19:08:23.000Z"
+    },
+    {
+      "module_name": "browserslist",
+      "severity": "high",
+      "title": "Browserslist: Unbounded memory growth (no cache eviction) via distinct query results, leading to eventual OOM",
+      "github_advisory_id": "GHSA-c83g-rgw3-j3cx",
+      "vulnerable_versions": "<=4.28.6",
+      "patched_versions": ">=4.28.7",
+      "url": "https://github.com/advisories/GHSA-c83g-rgw3-j3cx",
+      "updated": "2026-09-01T16:42:15.000Z"
+    },
+    {
+      "module_name": "browserslist",
+      "severity": "high",
+      "title": "Browserslist: Uncaught crash / prototype write via untrusted browserslist-stats.json custom stats (normalizeStats)",
+      "github_advisory_id": "GHSA-73wf-gq98-2v4g",
+      "vulnerable_versions": "<=4.28.6",
+      "patched_versions": ">=4.28.7",
+      "url": "https://github.com/advisories/GHSA-73wf-gq98-2v4g",
+      "updated": "2026-09-01T16:41:55.000Z"
+    },
+    {
+      "module_name": "fastify",
+      "severity": "moderate",
+      "title": "fastify vulnerable to schema validation bypass via root primitive coercion mismatch",
+      "github_advisory_id": "GHSA-w2qp-rph6-63g4",
+      "vulnerable_versions": "<5.12.1",
+      "patched_versions": ">=5.12.1",
+      "url": "https://github.com/advisories/GHSA-w2qp-rph6-63g4",
+      "updated": "2026-09-02T15:13:24.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "moderate",
+      "title": "xmldom: XML fragment injection via invalid EntityReference.nodeName during requireWellFormed serialization",
+      "github_advisory_id": "GHSA-6gmq-8vp8-gcm6",
+      "vulnerable_versions": ">=0.9.0 <=0.9.11",
+      "patched_versions": ">=0.9.12",
+      "url": "https://github.com/advisories/GHSA-6gmq-8vp8-gcm6",
+      "updated": "2026-09-02T15:18:21.000Z"
+    },
+    {
+      "module_name": "fast-uri",
+      "severity": "high",
+      "title": "fast-uri vulnerable to server-side request forgery via malformed IPv6 normalization",
+      "github_advisory_id": "GHSA-f65p-4m7j-42xc",
+      "vulnerable_versions": ">=3.0.0 <3.1.6",
+      "patched_versions": ">=3.1.6",
+      "url": "https://github.com/advisories/GHSA-f65p-4m7j-42xc",
+      "updated": "2026-09-02T15:43:32.000Z"
+    },
+    {
+      "module_name": "fast-uri",
+      "severity": "high",
+      "title": "fast-uri vulnerable to server-side request forgery via repeated hostname percent-decoding",
+      "github_advisory_id": "GHSA-fph4-wmhf-6fwf",
+      "vulnerable_versions": ">=3.1.2 <3.1.6",
+      "patched_versions": ">=3.1.6",
+      "url": "https://github.com/advisories/GHSA-fph4-wmhf-6fwf",
+      "updated": "2026-09-02T15:42:41.000Z"
+    },
+    {
+      "module_name": "fast-uri",
+      "severity": "high",
+      "title": "fast-uri vulnerable to host confusion via percent-encoded scheme normalization",
+      "github_advisory_id": "GHSA-jqff-g426-hqxp",
+      "vulnerable_versions": ">=3.0.0 <3.1.6",
+      "patched_versions": ">=3.1.6",
+      "url": "https://github.com/advisories/GHSA-jqff-g426-hqxp",
+      "updated": "2026-09-02T15:41:56.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "high",
+      "title": "xmldom: HTML raw-text closing-tag case mismatch causes output amplification",
+      "github_advisory_id": "GHSA-6mj3-qw4j-hgrw",
+      "vulnerable_versions": ">=0.9.0-beta.1 <=0.9.11",
+      "patched_versions": ">=0.9.12",
+      "url": "https://github.com/advisories/GHSA-6mj3-qw4j-hgrw",
+      "updated": "2026-09-08T20:59:55.000Z"
+    },
+    {
+      "module_name": "baseline-browser-mapping",
+      "severity": "moderate",
+      "title": "baseline-browser-mapping process termination on invalid input causes denial of service",
+      "github_advisory_id": "GHSA-w5vr-8v7q-w6rv",
+      "vulnerable_versions": ">=2.0.0 <2.11.0",
+      "patched_versions": ">=2.11.0",
+      "url": "https://github.com/advisories/GHSA-w5vr-8v7q-w6rv",
+      "updated": "2026-09-08T20:41:23.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "high",
+      "title": "xmldom PI grammar regex ReDoS: quadratic backtracking on unterminated processing instructions",
+      "github_advisory_id": "GHSA-g53g-w8rj-fmg7",
+      "vulnerable_versions": ">=0.9.0-beta.9 <=0.9.10",
+      "patched_versions": ">=0.9.11",
+      "url": "https://github.com/advisories/GHSA-g53g-w8rj-fmg7",
+      "updated": "2026-09-08T20:31:51.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "high",
+      "title": "xmldom: Element name injection via createElement() bypasses requireWellFormed",
+      "github_advisory_id": "GHSA-w2rr-34g9-rvrj",
+      "vulnerable_versions": ">=0.9.0 <=0.9.10",
+      "patched_versions": ">=0.9.11",
+      "url": "https://github.com/advisories/GHSA-w2rr-34g9-rvrj",
+      "updated": "2026-09-08T20:31:09.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "high",
+      "title": "xmldom: Attribute name injection via setAttribute() bypasses requireWellFormed",
+      "github_advisory_id": "GHSA-4w3w-2rp5-g8jm",
+      "vulnerable_versions": ">=0.9.0 <=0.9.10",
+      "patched_versions": ">=0.9.11",
+      "url": "https://github.com/advisories/GHSA-4w3w-2rp5-g8jm",
+      "updated": "2026-09-08T20:30:52.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "high",
+      "title": "xmldom: Processing Instruction Target Injection Bypasses requireWellFormed",
+      "github_advisory_id": "GHSA-c7q8-3ch8-vqpv",
+      "vulnerable_versions": ">=0.9.0 <=0.9.11",
+      "patched_versions": ">=0.9.12",
+      "url": "https://github.com/advisories/GHSA-c7q8-3ch8-vqpv",
+      "updated": "2026-09-08T21:03:31.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "high",
+      "title": "xmldom: DocType `name` Injection Bypasses requireWellFormed",
+      "github_advisory_id": "GHSA-27p8-2357-5qqv",
+      "vulnerable_versions": ">=0.9.0 <=0.9.11",
+      "patched_versions": ">=0.9.12",
+      "url": "https://github.com/advisories/GHSA-27p8-2357-5qqv",
+      "updated": "2026-09-08T21:02:54.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "high",
+      "title": "xmldom: Creation-time XML Name/QName validation is bypassable via an embedded line terminator, allowing injection on the default serialization path",
+      "github_advisory_id": "GHSA-3px3-54cx-rmw9",
+      "vulnerable_versions": ">=0.9.0 <=0.9.11",
+      "patched_versions": ">=0.9.12",
+      "url": "https://github.com/advisories/GHSA-3px3-54cx-rmw9",
+      "updated": "2026-09-08T21:02:34.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "high",
+      "title": "xmldom: requireWellFormed DocType publicId/systemId validation is bypassable via an embedded line terminator",
+      "github_advisory_id": "GHSA-vr34-hp96-76pp",
+      "vulnerable_versions": ">=0.9.10 <=0.9.11",
+      "patched_versions": ">=0.9.12",
+      "url": "https://github.com/advisories/GHSA-vr34-hp96-76pp",
+      "updated": "2026-09-08T21:02:26.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "moderate",
+      "title": "xmldom: Parser silently accepts a not-well-formed end tag whose name is followed by a line break and trailing content",
+      "github_advisory_id": "GHSA-6h8r-xr42-gp59",
+      "vulnerable_versions": ">=0.9.0 <=0.9.11",
+      "patched_versions": ">=0.9.12",
+      "url": "https://github.com/advisories/GHSA-6h8r-xr42-gp59",
+      "updated": "2026-09-08T21:02:13.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "high",
+      "title": "xmldom: Quadratic-time attribute deduplication",
+      "github_advisory_id": "GHSA-8344-3jmq-59r6",
+      "vulnerable_versions": ">=0.9.0 <=0.9.11",
+      "patched_versions": ">=0.9.12",
+      "url": "https://github.com/advisories/GHSA-8344-3jmq-59r6",
+      "updated": "2026-09-08T21:01:33.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "high",
+      "title": "xmldom: Quadratic-memory consumption",
+      "github_advisory_id": "GHSA-965w-775f-mr7g",
+      "vulnerable_versions": ">=0.9.0 <=0.9.11",
+      "patched_versions": ">=0.9.12",
+      "url": "https://github.com/advisories/GHSA-965w-775f-mr7g",
+      "updated": "2026-09-08T21:00:54.000Z"
+    },
+    {
+      "module_name": "@xmldom/xmldom",
+      "severity": "high",
+      "title": "xmldom: Quadratic-time parsing via the malformed-input recovery path — `parseElementStartPart` re-scan and `normalize()` adjacent-text merge",
+      "github_advisory_id": "GHSA-93r5-fhx6-vmg9",
+      "vulnerable_versions": ">=0.9.0 <=0.9.11",
+      "patched_versions": ">=0.9.12",
+      "url": "https://github.com/advisories/GHSA-93r5-fhx6-vmg9",
+      "updated": "2026-09-08T21:00:43.000Z"
+    },
+    {
+      "module_name": "fast-uri",
+      "severity": "high",
+      "title": "fast-uri vulnerable to host confusion via failed IDN canonicalization",
+      "github_advisory_id": "GHSA-4c8g-83qw-93j6",
+      "vulnerable_versions": ">=3.0.0 <3.1.3",
+      "patched_versions": ">=3.1.3",
+      "url": "https://github.com/advisories/GHSA-4c8g-83qw-93j6",
+      "updated": "2026-09-11T15:32:26.000Z"
+    },
+    {
+      "module_name": "fast-uri",
+      "severity": "high",
+      "title": "fast-uri vulnerable to authority injection via an unvalidated port in serialize",
+      "github_advisory_id": "GHSA-qw65-cvwx-89v3",
+      "vulnerable_versions": ">=3.0.0 <3.1.7",
+      "patched_versions": ">=3.1.7",
+      "url": "https://github.com/advisories/GHSA-qw65-cvwx-89v3",
+      "updated": "2026-09-28T21:24:40.000Z"
+    },
+    {
+      "module_name": "fast-uri",
+      "severity": "moderate",
+      "title": "fast-uri vulnerable to inconsistent host case normalization via percent-encoded octets",
+      "github_advisory_id": "GHSA-hrr3-gc8f-f4qj",
+      "vulnerable_versions": ">=3.0.0 <3.1.8",
+      "patched_versions": ">=3.1.8",
+      "url": "https://github.com/advisories/GHSA-hrr3-gc8f-f4qj",
+      "updated": "2026-09-29T23:54:26.000Z"
+    },
+    {
+      "module_name": "brace-expansion",
+      "severity": "moderate",
+      "title": "brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service",
+      "github_advisory_id": "GHSA-q2hr-2g5m-vwhr",
+      "vulnerable_versions": ">=4.0.0 <5.0.12",
+      "patched_versions": ">=5.0.12",
+      "url": "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
+      "updated": "2026-09-29T23:45:39.000Z"
+    },
+    {
+      "module_name": "brace-expansion",
+      "severity": "high",
+      "title": "brace-expansion: DoS via uncontrolled recursion on nested brace groups causing stack exhaustion",
+      "github_advisory_id": "GHSA-qhr7-859c-m2p7",
+      "vulnerable_versions": ">=4.0.0 <5.0.11",
+      "patched_versions": ">=5.0.11",
+      "url": "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+      "updated": "2026-09-29T23:45:19.000Z"
+    },
+    {
+      "module_name": "brace-expansion",
+      "severity": "high",
+      "title": "brace-expansion: DoS via uncontrolled recursion in parseCommaParts causing stack exhaustion",
+      "github_advisory_id": "GHSA-6j4f-fj2g-mc7p",
+      "vulnerable_versions": ">=4.0.0 <5.0.10",
+      "patched_versions": ">=5.0.10",
+      "url": "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
+      "updated": "2026-09-29T23:44:59.000Z"
+    },
+    {
+      "module_name": "fastify",
+      "severity": "moderate",
+      "title": "fastify vulnerable to Denial of Service via unhandled exception on HTTP/2 trailer responses",
+      "github_advisory_id": "GHSA-4mh8-r7rc-xpvc",
+      "vulnerable_versions": "<5.12.5",
+      "patched_versions": ">=5.12.5",
+      "url": "https://github.com/advisories/GHSA-4mh8-r7rc-xpvc",
+      "updated": "2026-09-30T23:53:45.000Z"
+    },
+    {
+      "module_name": "fastify",
+      "severity": "high",
+      "title": "fastify vulnerable to request body replacement via an async validation result collision",
+      "github_advisory_id": "GHSA-667r-xxjv-c9mm",
+      "vulnerable_versions": "<5.12.2",
+      "patched_versions": ">=5.12.2",
+      "url": "https://github.com/advisories/GHSA-667r-xxjv-c9mm",
+      "updated": "2026-09-30T23:45:46.000Z"
+    },
+    {
+      "module_name": "fastify",
+      "severity": "high",
+      "title": "fastify vulnerable to authentication bypass via malformed URLs reaching encapsulated not-found handlers",
+      "github_advisory_id": "GHSA-p68q-wchp-6fh7",
+      "vulnerable_versions": ">=4.0.0 <5.12.2",
+      "patched_versions": ">=5.12.2",
+      "url": "https://github.com/advisories/GHSA-p68q-wchp-6fh7",
+      "updated": "2026-09-30T23:45:35.000Z"
+    },
+    {
+      "module_name": "fastify",
+      "severity": "high",
+      "title": "fastify vulnerable to request validation bypass via skipped boolean false schemas",
+      "github_advisory_id": "GHSA-hwr6-493r-vm6h",
+      "vulnerable_versions": "<5.12.2",
+      "patched_versions": ">=5.12.2",
+      "url": "https://github.com/advisories/GHSA-hwr6-493r-vm6h",
+      "updated": "2026-09-30T23:44:59.000Z"
+    },
+    {
+      "module_name": "fastify",
+      "severity": "high",
+      "title": "fastify vulnerable to header validation bypass via incomplete schema case normalization",
+      "github_advisory_id": "GHSA-9q9j-q6p8-xq58",
+      "vulnerable_versions": "<5.12.2",
+      "patched_versions": ">=5.12.2",
+      "url": "https://github.com/advisories/GHSA-9q9j-q6p8-xq58",
+      "updated": "2026-09-30T23:44:29.000Z"
+    },
+    {
+      "module_name": "source-map-js",
+      "severity": "high",
+      "title": "source-map-js allows event-loop denial of service through indexed source-map section offsets",
+      "github_advisory_id": "GHSA-68fv-2mgg-jv7q",
+      "vulnerable_versions": ">=1.0.0 <1.2.2",
+      "patched_versions": ">=1.2.2",
+      "url": "https://github.com/advisories/GHSA-68fv-2mgg-jv7q",
+      "updated": "2026-10-05T23:31:22.000Z"
+    },
+    {
+      "module_name": "@capacitor/android",
+      "severity": "critical",
+      "title": "Capacitor Android and iOS: remote content can be loaded at the app origin via the internal HTTP proxy path",
+      "github_advisory_id": "GHSA-rvm3-566m-v7fv",
+      "vulnerable_versions": ">=7.0.0 <7.6.9",
+      "patched_versions": ">=7.6.9",
+      "url": "https://github.com/advisories/GHSA-rvm3-566m-v7fv",
+      "updated": "2026-10-05T22:53:12.000Z"
+    }
+  ]
+}

@@ -2,13 +2,22 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-let requestFile = "/tmp/mobile-codex-input-request.json"
-let resultFile = "/tmp/mobile-codex-input-result.json"
-let defaultInputFile = "/tmp/mobile-codex-input.txt"
+let args = CommandLine.arguments
+// Only per-request files are accepted; legacy shared /tmp requests are unsafe.
+guard args.count == 3, args[1] == "--request" else { exit(2) }
+let requestURL = URL(fileURLWithPath: args[2]).standardizedFileURL.resolvingSymlinksInPath()
+let transactionDir = requestURL.deletingLastPathComponent()
+guard transactionDir.lastPathComponent.hasPrefix("mobile-codex-input-"),
+      let data = try? Data(contentsOf: requestURL),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let requestId = object["id"] as? String,
+      let inputFile = object["inputFile"] as? String,
+      let resultFile = object["resultFile"] as? String,
+      let expiresAt = object["expiresAt"] as? Double,
+      URL(fileURLWithPath: inputFile).standardizedFileURL.resolvingSymlinksInPath().deletingLastPathComponent() == transactionDir,
+      URL(fileURLWithPath: resultFile).standardizedFileURL.resolvingSymlinksInPath().deletingLastPathComponent() == transactionDir else { exit(2) }
 let codexBundleIdentifier = "com.openai.codex"
 let codexAppURL = URL(fileURLWithPath: "/Applications/Codex.app")
-var requestId = "unknown"
-var inputFile = defaultInputFile
 
 func writeResult(ok: Bool, message: String, code: Int32) {
   let payload: [String: Any] = [
@@ -79,16 +88,6 @@ func clickCodexInputArea(_ app: NSRunningApplication) {
   up.post(tap: .cghidEventTap)
 }
 
-if let data = FileManager.default.contents(atPath: requestFile),
-   let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-  if let id = object["id"] as? String {
-    requestId = id
-  }
-  if let requestedInputFile = object["inputFile"] as? String, !requestedInputFile.isEmpty {
-    inputFile = requestedInputFile
-  }
-}
-
 let accessibilityOptions = [
   kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
 ] as CFDictionary
@@ -139,6 +138,7 @@ if let codex = NSRunningApplication.runningApplications(withBundleIdentifier: co
 }
 
 usleep(450_000)
+guard Date().timeIntervalSince1970 * 1000 < expiresAt else { fail("Input request expired before submission") }
 postKey(9, flags: .maskCommand) // V
 usleep(80_000)
 postKey(36) // Return

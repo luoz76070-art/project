@@ -1,0 +1,115 @@
+{
+  "date": "2026-10-20",
+  "sourceImplementation": "complete_for_planned_iteration",
+  "platformAcceptance": "pending",
+  "apk": {
+    "path": "dist-apk/mobile-codex-1.2.0-optimization-debug.apk",
+    "versionName": "1.2.0-optimization",
+    "versionCode": 16,
+    "bytes": 4087841,
+    "sha256": "444487014c9c27a91e2af3c38ab36290ded3ab3cc7788c20f095776115e3d23e",
+    "finalWebAssetsVerified": true
+  },
+  "build": {
+    "relay": true,
+    "mobile": true,
+    "typecheck": true,
+    "androidAssembleDebug": true,
+    "androidBuildEntrypoint": true,
+    "macHelperApp": true,
+    "macRelayApp": true,
+    "jdk": "25",
+    "gradle": "9.4.1",
+    "jsKB": 288.97,
+    "jsGzipKB": 92.43,
+    "cssKB": 36.46,
+    "cssGzipKB": 7.38
+  },
+  "tests": {
+    "correctness": 12,
+    "performance": 6,
+    "transport": 14,
+    "availability": 7,
+    "clientConnection": 9,
+    "profiles": 4,
+    "releaseActivation": 2,
+    "messageReconciliation": true,
+    "javaHotUpdatePaths": true
+  },
+  "syntheticIndex": {
+    "sessions": 10000,
+    "coldMs": 88,
+    "warmP95Ms": 7,
+    "warmDirectoryScans": 0,
+    "fullHistoryReads": 0
+  },
+  "idleSSE": {
+    "elapsedSeconds": 69.36,
+    "requests": {
+      "A:/api/connection": 1
+    }
+  },
+  "browser": {
+    "fixtureOnly": true,
+    "widths": [
+      360,
+      390,
+      430
+    ],
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "largeText150Percent": true,
+    "wholePageHorizontalOverflow": false,
+    "offlineCachedMessagesSelectionDraft": true,
+    "pagination145Ordered": true,
+    "searchBeyondFirst120": true,
+    "historyScrollBeforePx": 3062.5,
+    "historyScrollAfterPushPx": 3062.5
+  },
+  "audit": {
+    "full": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0
+    },
+    "production": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0
+    }
+  },
+  "notExecuted": [
+    "real Codex turn or Desktop input",
+    "Android installation/keyboard/network transition",
+    "Mac sleep/wake and autostart installation",
+    "Windows",
+    "30-minute/24-hour resource measurement",
+    "APK/HTML publication or production rollback rehearsal"
+  ],
+  "limits": [
+    "in-process idempotency only",
+    "bounded base64 upload, not streaming",
+    "native Keystore only; browser localStorage"
+  ],
+  "screenshots": "output/audit/2026-10-20/optimized/",
+  "runtimeConnectionRepair": {
+    "authorized": true,
+    "executed": true,
+    "evidence": "docs/audits/2026-10-20/connection-repair.md",
+    "strictTLS": true,
+    "renewalDryRun": true,
+    "brokerAndMacUpdated": true,
+    "publicAuthenticatedConnection": 200,
+    "publicUnauthenticatedConnection": 401,
+    "androidPreflight": 204,
+    "connectedRelayCount": 1,
+    "phoneAcceptance": "pending",
+    "realModelOrDesktopInput": false
+  }
+}

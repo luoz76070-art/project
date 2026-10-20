@@ -15,6 +15,11 @@ if [[ -z "${MOBILE_CODEX_TOKEN:-}" ]]; then
 fi
 export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 export MOBILE_CODEX_DEFAULT_CWD="${MOBILE_CODEX_DEFAULT_CWD:-$PWD}"
+export PATH="$HOME/.npm-global/bin:$HOME/.local/bin:$HOME/.local/node/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+if [[ -z "${MOBILE_CODEX_EXECUTABLE:-}" ]] && command -v codex >/dev/null 2>&1; then
+  export MOBILE_CODEX_EXECUTABLE="$(command -v codex)"
+fi
 
 if ! command -v corepack >/dev/null 2>&1; then
   echo "corepack not found. Install Node.js 20+ first."

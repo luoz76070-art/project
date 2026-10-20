@@ -46,3 +46,6 @@ backups/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local device credential hashes
+.mobile-codex/

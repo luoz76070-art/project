@@ -1,0 +1,67 @@
+{
+  "date": "2026-10-20",
+  "scope": "work status only",
+  "liveReadonly": [
+    {
+      "path": "local",
+      "connectionHttp": 200,
+      "readHttp": 200,
+      "turnStatus": "inProgress",
+      "activity": "working",
+      "messageCount": 4,
+      "elapsedMs": 64
+    },
+    {
+      "path": "public",
+      "connectionHttp": 200,
+      "readHttp": 200,
+      "turnStatus": "inProgress",
+      "activity": "working",
+      "messageCount": 4,
+      "elapsedMs": 674
+    }
+  ],
+  "synthetic": {
+    "relayTests": 43,
+    "mobileTests": 16,
+    "messageRegression": "passed",
+    "typecheck": "passed",
+    "androidBuild": "passed"
+  },
+  "realModelInputSent": false,
+  "apk": {
+    "path": "dist-apk/mobile-codex-1.2.1-live-status-debug.apk",
+    "versionCode": 17,
+    "versionName": "1.2.1-live-status",
+    "bytes": 4020874,
+    "sha256": "8984487649f0c0a1fa0bd0b787b798fed1aa88f87ab6929af090eae9459afce1",
+    "sameSignerAsLocalApk16": true,
+    "webFilesMatchBuild": 3,
+    "published": false,
+    "phoneInstalled": false
+  },
+  "browser": {
+    "data": "synthetic only",
+    "widths": [
+      360,
+      390,
+      430
+    ],
+    "overflow": false,
+    "phases": [
+      "thinking",
+      "working",
+      "outputting",
+      "completed"
+    ],
+    "emptyRunningBaseline": true,
+    "emptyCompletion": true,
+    "reloadRestoresActivity": true,
+    "draftRetained": true,
+    "themeChecks": [
+      "light",
+      "dark"
+    ],
+    "screenshots": "output/ui-status/2026-10-20/"
+  }
+}

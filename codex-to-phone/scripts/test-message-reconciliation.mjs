@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const sourcePath = path.join(rootDir, "apps", "mobile", "src", "messageReconciliation.ts");
+const sourcePath = path.join(rootDir, "apps", "mobile", "src", "features", "chat", "messageReconciliation.ts");
 const temporaryDir = await fs.mkdtemp(path.join(os.tmpdir(), "mobile-codex-message-test-"));
 const outputPath = path.join(temporaryDir, "messageReconciliation.mjs");
 
