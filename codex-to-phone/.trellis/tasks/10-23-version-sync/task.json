@@ -3,7 +3,7 @@
   "name": "version-sync",
   "title": "版本完成后集中同步GitHub",
   "description": "落实用户确认的分步本地提交、完整版本验收后集中推送与版本标签流程；限定codex-to-phone子目录，建立APK30预览源码基线，保留其他工程修改。",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": "mobile",
@@ -11,7 +11,7 @@
   "creator": "rorance",
   "assignee": "rorance",
   "createdAt": "2026-10-23",
-  "completedAt": null,
+  "completedAt": "2026-10-23",
   "branch": "main",
   "base_branch": "main",
   "worktree_path": null,
@@ -20,7 +20,13 @@
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": [],
-  "notes": "",
+  "relatedFiles": [
+    "AGENTS.md",
+    "README.md",
+    "docs/ops/version-sync.md",
+    "docs/audits/2026-10-23/version-sync.md",
+    "docs/project-index.md"
+  ],
+  "notes": "2026-10-23用户接受版本同步建议，覆盖本轮默认禁止Git写入的规则。已落实本地分步提交/完整版本集中push流程；源码基线1ea28a29b1ad4da74457793d6fd99834af71337f已推送并核验origin/main，220文件全在本项目。后端367/367、手机68/68、消息/更新5项/热更新/类型/构建通过，最终资源等于APK30。私有备份与扫描通过，其他工程修改保留。收尾docs及明确preview标签按同流程交付，最终OID与远端核验见ignored output/audit/2026-10-23/version-sync/final-report.json。原语音综合任务仍待验，不归档。",
   "meta": {}
 }

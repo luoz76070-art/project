@@ -1531,3 +1531,40 @@ APK29用户确认语音主流程通过；网关增加有限低权重短语，真
 ### Status
 
 [OK] **Completed**
+
+
+## Session 46: 建立版本集中同步流程并推送APK30源码基线
+<!-- trellis-session: v=2 fp=bde1f056e0d86b07 -->
+
+**Date**: 2026-10-23
+**Task**: 建立版本集中同步流程并推送APK30源码基线
+**Package**: mobile
+**Branch**: `main`
+
+### Summary
+
+落实分步本地提交、完整版本集中push与preview标签；限定子目录并保留其他工程。
+
+### Main Changes
+
+- 新增Git版本同步runbook及项目约定，沿用origin/main，不创建分支/PR或后台push。
+- APK30源码基线220文件全部属于codex-to-phone，已推送并核验远端OID；收尾docs与preview标签最终原子推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1ea28a2` | feat(codex-to-phone): checkpoint APK30 preview and version sync workflow |
+
+### Testing
+
+- [OK] 后端367/367、手机68/68、消息合并、APK更新5/5、热更新、两端类型/生产构建/插件通过。
+- [OK] 源码扫描与私有备份完成，最终Web资源逐字节等于原APK30，其他工程未进入提交。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- APK30真机显示与原语音供应商问题另验，后续独立功能完成后先本地提交，完整版本集中同步。
