@@ -1,8 +1,10 @@
 # 前端验证与轻量约束
 
+APK32紧凑footer需比较同viewport、同运行/草稿状态的前后高度；空草稿不渲染禁用双按钮，有文本或附件才显示原steer/queue直接动作。检查折叠队列数量、暂停/未知摘要、展开全文/取消、快捷键默认queue及停止保留草稿。`/fixture/native?active=1&queueStatus=waiting|paused|sending|uncertain`提供3条合成待发；测量命中时排除关闭的原生details隐藏子项，不能仅凭getBoundingClientRect非零算可见。原生fixture凭证位于sessionStorage，另开tab没有它，不能将其401视为真实手机连接证据。
+
 过程折叠回归覆盖commentary运行展开、明确final_answer流开始自动收起、手动重开后更新稳定、新任务重新展开、中断无终稿仍展开、跨用户边界与已知turn引导、未知phase保持正文和附件/原文不变；从真实messagesForRender入口断言已知工具保留且未知工具不误入组。fixture的`/fixture/process?phase=working|final|completed|next|interrupted|legacy|steering&agent=deepseek`只操作合成消息。DeepSeek在final流仍commentary，completed才提升；同ID更新必须改变分组，不重复最终正文。浏览器核对44px按钮的aria-expanded/aria-controls、终稿始终在过程区外、复制入口、深色/150%字号、三种窄屏及周边按钮命中；DeepSeek未知阶段旧正文和完整权限卡始终独立。麦克风/引导/排队/停止及允许/拒绝须检查中心与四边命中，点击麦克风只打开语音面板。不得把合成显示或复制反馈当Android原生验收。
 
-引导去重回归覆盖native accepted记录与rollout同turn相差33秒、双向到达、同ID旧缓存补齐、HTTP占位迟到、重复快照/重开、附件、同turn重复同文以及不同turn隔离；sourceItemId不同的用户同文/同时间必须保留。原始历史没有客户端提交ID时不能伪造；来源数量不等不猜缺页对应，正文内部空白不同不匹配。缓存0/1迁到身份版本2时保留草稿与待确认本地输入，新缓存继续支持离线。fixture的`/fixture/mirrored-steering?phase=native|history|repeat`只生成合成消息；浏览器核对单次为1、真正两次为2，不作为新版已上线或真机已验的依据。
+引导去重回归覆盖native accepted记录与rollout同turn相差33秒、双向到达、同ID旧缓存补齐、HTTP占位迟到、重复快照/重开、附件、同turn重复同文以及不同turn隔离；sourceItemId不同的用户同文/同时间必须保留。原始历史没有客户端提交ID时不能伪造；来源数量不等不猜缺页对应，正文内部空白不同不匹配。缓存0/1/2迁到身份版本3时保留草稿与待确认本地输入，新缓存继续支持离线。fixture的`/fixture/mirrored-steering?phase=native|history|repeat`只生成合成消息；浏览器核对单次为1、真正两次为2，不作为新版已上线或真机已验的依据。
 
 运行中发送回归须覆盖按钮直接提交steer/queue、箭头与快捷键默认queue、有待发时的新引导不改旧队列、提交锁、仅确认后清空匹配完整草稿/附件、发送期间新编辑、ACK/未知保留与禁重发、先SSE确认后HTTP报错，以及旧回执不清其他提交。fixture可设置native的admissionDelay/replyDelay、ack/confirm-http-error/http-error/reject-refresh及queue=0；它们只操作合成会话。实际Android和原任务是否采纳引导仍须单独验收。
 
@@ -66,3 +68,6 @@ test "$taskLintStatus" -eq 0
 第三方语音配置须覆盖默认/持久化迁移、HTTPS地址归一化、地址变更Key绑定/清除、模型名与官方扩展兼容、错误不透传。消息回归覆盖相同sourceItemId在native turn时间和rollout落盘时间相差17秒、缓存补齐、增量终稿及不同原始ID同文同时间。首次旧缓存刷新必须单测草稿和待确认消息保持；不得仅换缓存key而丢失草稿。合成表单检查保存失败/成功、Key清空、重开保留、窄屏及大字号；不能将此作为第三方真实API验收。
 
 输入区改动须实际点击最新消息、语音、上传、发送、停止及发送方式选择，不能只看矩形。窄屏/150%字号/多行草稿/待发列表下，以elementFromPoint检查中心和四边中点内缩5px命中，避免把圆角透明角误报为遮挡；最新按钮与footer控件矩形不相交。`serve-ui-fixture`提供合成native queue/cancel/上传及计数，断言排队不触发steer、引导才调用原发送、取消不停止任务。`test:mobile`覆盖匹配pending清理且保留新草稿/生命周期及近期列表保留待发线程；真实Android键盘/触摸与原任务续发另验。
+
+
+输入去重另覆盖无clientMessageId的早期/旧投影，中间插入7条不同工具记录，实时与历史时间只差75ms及相差33秒；双向到达、JSON缓存往返、已绑定项收到缺client的native重放均只显示1次。已有native别名不能匹配新的独立native ID，增加第二条历史后仍为2；部分来源数量不等保留，原始ID不同/跨turn/正文内部空白不同不误删。fixture的`/fixture/mirrored-steering?phase=native|history|repeat&client=0`检查缺身份路径，每个控制请求必须HTTP200，不能只因服务端已部分改变状态而忽略404。真实完整字段样本原先通过，必须记录实机缓存/版本未取得的证据边界，不能用附近合成失败直接认定截图根因。

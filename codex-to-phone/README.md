@@ -9,7 +9,7 @@
 
 Codex To Phone 不是远程桌面，也不会把 Codex 账号放到手机上。Codex 仍在电脑上运行，手机通过你自己控制的 Relay 和 Broker 查看最近会话并提交输入。
 
-当前开发预览为APK30 `1.3.9-process-collapse-preview`：Codex与DeepSeek执行过程运行时展开，可靠终稿后折叠，可重新查看；用户输入/最终回复/权限卡独立。配套固定网关与DeepSeek插件0.2.1已更新，preview30/previous29、正式18/hot保持。后端367/367、手机68/68、浏览器19/19及类型/构建通过，Android lint0错误/5警告；85健康、17只读重连、19公网下载核验通过。APK30安装与真实任务显示另验，见[完整交付](docs/audits/2026-10-23/process-collapse.md)。
+当前开发预览为APK32 `1.3.11-compact-composer-preview`：运行状态收进输入框，紧凑引导/排队按需显示，待发默认折叠；390px运行态footer由271.5px缩至125px。手机69项、类型/构建/更新、浏览器19项及公网19项通过，Android lint0错误/8项既有警告。preview32/previous31，正式18/hot保持；手机App内检查更新，真机触摸/键盘待验，见[交付记录](docs/audits/2026-10-23/compact-running-composer.md)。包含APK31的[输入关联与缓存补修](docs/audits/2026-10-23/input-mirror-cache.md)，原重复截图仍待实机复核。
 
 源码采用“分步本地提交，完整版本验收后集中推送GitHub”的流程；本项目位于父仓库`project`的`codex-to-phone/`子目录，提交和推送前必须核对项目范围。预览版本与正式验收分开标记，手机/网关部署仍沿各自发布流程。具体步骤见[版本同步约定](docs/ops/version-sync.md)。
 

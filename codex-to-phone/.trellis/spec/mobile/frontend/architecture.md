@@ -17,6 +17,8 @@
 
 ## 已实施的状态契约
 
+APK32将Codex运行状态/普通发送反馈收进`.composer-toolbar`，空草稿仅显示主停止按钮；有文本或附件才显示紧凑的引导/排队直接发送及独立停止。`hasMessageContent`只表示内容是否存在，能力/提交锁仍使用原`canSubmitMessage`/`canSend`/`canInterrupt`，不能借布局重算控制权限或静默切mode。待发由原生details默认收起并按线程key隔离，数量与uncertain/paused/sending/waiting优先摘要在收起时仍可见；明细与取消仍来自原权威队列。待确认/网络/错误不因紧凑布局被隐藏，旧网关禁用queue时仍显示兼容说明。
+
 - Workspace key 由 profile ID、cacheNamespace 与规范化 Endpoint 组成。保存/切换档案才替换连接；卸载时取消请求、订阅和计时器。原生 HTTP 无法物理取消时，丢弃旧作用域结果。
 - 基线读取结束后才建立订阅；seq/baseSeq 不连续时重建基线。正常 SSE 暂停业务轮询，降级/健康检查 single-flight；后台暂停，回前台重新检查。
 - 桌面基线和 delta 均应用 turnStatus/activity；activity 增量不单独改写生命周期。显式完成/打断/失败必须停止工作提示，即使没有助手正文；空消息页也能显示运行状态。不把已有打字动画当作真实 token 流。
@@ -33,7 +35,7 @@ Codex与DeepSeek列表均默认近30×24小时，range=all按需查看更早；�
 
 DeepSeek历史以Codex相同240条渲染窗口向前移动，持续分页不因窗口已满停止，返回最新使用当前权威snapshot；读历史时新流/卡片不抢滚动位置。旧Agent的历史边界保持。
 
-Codex助手消息的sourceItemId跨rollout response_item与Desktop agentMessage保留，phase保留commentary/final_answer。按原始ID合并实时/历史/缓存，不能依赖turn开始时间与落盘时间的接近；两条不同原始ID的同文同时间助手回复须保留。旧native缓存可从desktop-UUID-item恢复ID；普通相同ID合并须补齐身份/phase。稳定log-offset ID仍用于历史游标，不改为原始ID。首次载入旧缓存时只重拉服务端投影，保留草稿、待确认标识/正文和本地输入，不改配对/凭证；本轮新缓存messageIdentityVersion=2，旧版0/1重拉后恢复正常离线缓存。
+Codex助手消息的sourceItemId跨rollout response_item与Desktop agentMessage保留，phase保留commentary/final_answer。按原始ID合并实时/历史/缓存，不能依赖turn开始时间与落盘时间的接近；两条不同原始ID的同文同时间助手回复须保留。旧native缓存可从desktop-UUID-item恢复ID；普通相同ID合并须补齐身份/phase。稳定log-offset ID仍用于历史游标，不改为原始ID。首次载入旧缓存时只重拉服务端投影，保留草稿、待确认标识/正文和本地输入，不改配对/凭证；当前新缓存messageIdentityVersion=3，旧版0/1/2重拉后恢复正常离线缓存。
 
 Codex用户历史也保留sourceItemId与原metadata.turn_id；Desktop用户投影带turnId及clientUserMessageId/clientId。两来源原始消息ID不一定相同，先以明确提交/原始身份合并，再按同一turnId及完整正文（只trim边缘，不折叠内部空白）的一一对应关联未绑定native/rollout；来源组数量不等或缺少归属时保守保留。多个实际同文输入保留次数，不跨turn匹配。合并采用历史时间并保存提交ID、原始ID、turnId与附件，重放/迟到HTTP不得复活另一副本；不同原始ID同文同时间不得用纯文本去重。已关联的历史用户记录同样可作为权威收到证据，本地占位不能。
 
@@ -44,3 +46,6 @@ APK28语音入口为composer/agent-input内发送旁的44px独立按钮；仅打
 Codex原生运行中“引导发送/排队发送”直接提交当前草稿，不再是方式选择器；箭头与快捷键默认queue。模式和guard在点击时捕获，不能因异步状态变化静默换动作。队列能力缺失时禁用排队及默认箭头，显式steer仍可用。native草稿/附件在HTTP提交前保留，只有匹配的权威接收或入队确认才按完整正文比较后清空；提交期间的新编辑必须保留。ACK/未知保持输入并锁定重复提交，不投影为已接收气泡。HTTP/SSE共用确认合并，迟到回执不能清除另一提交的标识，迟到HTTP错误不能推翻已入队/执行证据。瞬态desktopSendFeedback仅在当前工作区显示，不写缓存。queue-message仅表示网关保存，不插入已执行气泡；待发仅从control.queue渲染，可展开全文，waiting/paused可取消、sending/uncertain不可假撤回。已入队内容不会随新草稿的发送动作转换。队列能力与正文不写手机持久控制缓存；有待发的旧会话保留在近期列表。
 
 语音APK29增加独立百炼Base URL及两种ASR模型选择；修改有效目标须对应Key，默认地域变化同步默认地址，显式业务空间地址保留。decoder缺qwenBaseUrl提示更新网关；保存/关闭清Key，不缓存；阶段错误来自固定映射，整理失败原文仍可采用。原生录音从M4A改为AAC_ADTS，旧M4A不能冒充AAC。
+
+
+APK31消息合并在手机内部保留`nativeMessageId`（原native消息完整ID），与历史`sourceItemId`分开；选择历史时间/ID后仍保存原生别名，用于重放及缓存恢复。未绑定native缺少clientMessageId也可参与原有同turn、完整正文、等数量的一一配对，缺页数量不等继续保守保留；已带nativeMessageId的历史项不得再次参与未绑定配对，防止吃掉新的真实同文输入。HTTP/SSE/渲染仍经同一合并入口，原生别名不是服务端接收证据，不改变发送或控制权限。

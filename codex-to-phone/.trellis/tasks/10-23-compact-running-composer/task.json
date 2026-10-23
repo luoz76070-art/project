@@ -1,0 +1,31 @@
+{
+  "id": "compact-running-composer",
+  "name": "compact-running-composer",
+  "title": "收紧运行中输入区与待发消息布局",
+  "description": "按16:47真机截图收起重复运行状态和大尺寸引导排队区，在输入框内提供紧凑操作及按需待发详情。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": "mobile",
+  "priority": "P2",
+  "creator": "rorance",
+  "assignee": "rorance",
+  "createdAt": "2026-10-23",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "apps/mobile/src/app/App.tsx",
+    "apps/mobile/src/styles.css",
+    "scripts/serve-ui-fixture.mjs",
+    "docs/audits/2026-10-23/compact-running-composer.md"
+  ],
+  "notes": "APK32已发布preview/previous31，正式18/hot保持。390px运行态footer271.5→125px；手机69/69、浏览器19项、公网19项通过，lint0错误/8项既有警告。无网关改动/重启或真实任务调用，ADB无设备；真机触摸/键盘待升级验收，不归档。未进行Git写入。",
+  "meta": {}
+}

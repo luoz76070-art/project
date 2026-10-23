@@ -18,6 +18,7 @@ const { offlineAgent, agentDelivery, agentHistoryWindow, reconcileAgentDraft, ve
 const { groupByProject, projectGroupKey, sessionInRange, retainCodexThread } = await moduleFrom('features/threads/model.ts');
 const { loadProjectGroups, saveProjectGroups } = await moduleFrom('features/threads/projectPreferences.ts');
 const { groupMessageProcesses } = await moduleFrom('features/chat/processGroups.ts');
+const { reconcileMessages } = await moduleFrom('features/chat/messageReconciliation.ts');
 const originalMessageStorage = globalThis.localStorage;
 globalThis.localStorage = { getItem: () => null };
 let messagesForRender;
@@ -521,7 +522,7 @@ test('pre-identity message caches refresh once while drafts and pending local in
   globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
   const local = { id: 'desktop-local-pending', role: 'user', kind: 'local', text: '等待确认', timestamp: '2026-10-22T18:52:02Z' };
   const stale = { id: 'old-log-final', role: 'assistant', kind: 'message', text: '旧重复缓存', timestamp: '2026-10-22T18:52:19Z' };
-  for (const messageIdentityVersion of [undefined, 1]) {
+  for (const messageIdentityVersion of [undefined, 1, 2]) {
     values.set('mobileCodexThreadRuntimeCacheV2:migration-test', JSON.stringify({ thread: { messageIdentityVersion, messages: [local, stale], cursor: 400, generation: 'old-generation', historyBefore: 100, draft: '保留我的草稿', pendingMessageId: 'pending', pendingMessageText: '等待确认' } }));
     const migrated = loadThreadRuntimeCache('migration-test').thread;
     assert.deepEqual(migrated.messages, [local]); assert.equal(migrated.draft, '保留我的草稿');
@@ -530,6 +531,22 @@ test('pre-identity message caches refresh once while drafts and pending local in
     saveThreadRuntimeCache({ thread: { ...migrated, messages: [local, { ...stale, sourceItemId: 'original' }] } }, 'migration-test');
     assert.equal(loadThreadRuntimeCache('migration-test').thread.messages.length, 2, 'new caches remain usable offline after the one-time refresh');
   }
+});
+
+test('current caches retain native aliases for identity-free replay while leaving genuine repeats intact', () => {
+  const values = new Map(), previous = globalThis.localStorage;
+  globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  try {
+    const native = { id: 'desktop-synthetic-turn-first', turnId: 'synthetic-turn', role: 'user', text: '只发一次', kind: 'userMessage', timestamp: '2026-10-23T08:23:30.882Z' };
+    const history = { ...native, id: 'log-synthetic-first', kind: 'message', sourceItemId: 'msg_first', timestamp: '2026-10-23T08:23:30.957Z' };
+    const messages = reconcileMessages([native], [history]);
+    saveThreadRuntimeCache({ thread: { ...defaultRuntime(), messages, cursor: 400, generation: 'generation', draft: '草稿保留' } }, 'alias-test');
+    const restored = loadThreadRuntimeCache('alias-test').thread;
+    assert.equal(restored.cursor, 400); assert.equal(restored.draft, '草稿保留');
+    assert.equal(restored.messages[0].nativeMessageId, native.id);
+    assert.equal(reconcileMessages(restored.messages, [native]).length, 1);
+    assert.equal(reconcileMessages(restored.messages, [{ ...native, id: 'desktop-synthetic-turn-second' }]).length, 2);
+  } finally { globalThis.localStorage = previous; }
 });
 
 test('a persisted user message linked to native input remains confirmation evidence after reconciliation', () => {

@@ -1,0 +1,32 @@
+{
+  "id": "input-mirror-cache",
+  "name": "input-mirror-cache",
+  "title": "修正手机用户输入镜像与缓存重复",
+  "description": "核对16:23真实单次输入，复现缺少提交身份的历史/实时合并边界，保留真实重复输入并交付手机预览修复。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": "mobile",
+  "priority": "P1",
+  "creator": "rorance",
+  "assignee": "rorance",
+  "createdAt": "2026-10-23",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "apps/mobile/src/features/chat/messageReconciliation.ts",
+    "apps/mobile/src/features/chat/runtime.ts",
+    "scripts/test-message-reconciliation.mjs",
+    "scripts/test-mobile-connection.mjs",
+    "docs/audits/2026-10-23/input-mirror-cache.md"
+  ],
+  "notes": "APK31已发布preview/previous30；缺client旧/早期投影复现后补修，手机69/69、浏览器15/15、公网19项通过。完整字段真实样本原先通过，未取得手机版本/缓存；真实重复截图待用户升级复核，不归档。",
+  "meta": {}
+}

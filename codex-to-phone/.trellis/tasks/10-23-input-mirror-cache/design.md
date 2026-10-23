@@ -1,0 +1,5 @@
+# 设计
+
+消息合并发生在features/chat/messageReconciliation。用户原始ID分属native与rollout，不能改为纯正文去重。保留nativeMessageId作为已关联的本地身份元数据，与clientMessageId/sourceItemId并列识别，避免选用历史记录后丢掉native别名。无client的未绑定native也参与原有同turn/完整正文/等数量有序配对；已绑定历史不再进入未绑定组。明确client冲突时保留。
+
+缓存身份版本3重新读取0/1/2正文，保留本地输入、草稿、待确认。元数据随新缓存保存，之后继续离线读取。API与后端不用新字段，不更新控制协议，不重启在线网关。

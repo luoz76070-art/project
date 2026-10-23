@@ -145,7 +145,7 @@ export function loadThreadRuntimeCache(scope = "legacy-disabled"): Record<string
     const result: Record<string, ThreadRuntime> = {};
     for (const [threadId, item] of Object.entries(parsed)) {
       // Re-read pre-identity server caches once; preserve drafts and unconfirmed local input.
-      const refresh = item.messageIdentityVersion !== 2;
+      const refresh = item.messageIdentityVersion !== 3;
       const messages = Array.isArray(item.messages) ? item.messages.filter(message => cacheableMessage(message) && (!refresh || (message.role === "user" && (message.kind === "local" || message.kind === "steeringUserMessage" || /^(local-|desktop-local-|steer-local-)/u.test(message.id))))).slice(-cachedMessagesPerThread) : [];
       if (messages.length === 0 && !item.draft && !item.pendingMessageText) continue;
       result[threadId] = {
@@ -176,7 +176,7 @@ export function saveThreadRuntimeCache(state: Record<string, ThreadRuntime>, sco
       entries.map(([threadId, runtime]) => [
         threadId,
         {
-          messageIdentityVersion: 2,
+          messageIdentityVersion: 3,
           cursor: runtime.cursor,
           draft: runtime.draft,
           generation: runtime.generation,

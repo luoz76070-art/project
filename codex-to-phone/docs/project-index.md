@@ -15,7 +15,7 @@
 当前主入口：
 
 - Android APK：`dist-apk/mobile-codex-1.2.2-update-restore-debug.apk`（versionCode 18，已恢复原手机更新通道并发布，待真机验收）
-- Android独立预览：`dist-apk/mobile-codex-1.3.9-process-collapse-preview-debug.apk`（versionCode30，Codex/DeepSeek过程折叠完整实现并发布，配套网关和DeepSeek插件0.2.1已更新；preview30/previous29、正式18/hot保持。APK30真机安装及真实显示待验。用户此前确认29识别/整理/回填成功；后续第三方DeepSeek生成接口502及后台/来电/弱网问题另验）。
+- Android独立预览：`dist-apk/mobile-codex-1.3.11-compact-composer-preview-debug.apk`（versionCode32，紧凑运行中输入区及按需待发详情；preview32/previous31，正式18/hot保持，网关与DeepSeek插件沿用APK30配套。手机69/69、浏览器19项、公网19项通过；真机触摸/键盘及原重复截图待升级复核。包含APK31输入镜像与旧正文缓存补修；此前用户确认APK29识别/整理/回填成功，语音供应商及异常场景另验）。
 - Mac 原生网关：`~/Library/Application Support/Mobile Codex Gateway/releases/<固定版本>/mobile-codex/lib/gateway.mjs`，当前单Node进程、native IPC；[插件管理入口](../plugins/mobile-codex/README.md)。
 - 旧 Mac Relay/Input App：生成App已压缩归档并移除，源码与构建入口保留；[清理及恢复记录](audits/2026-10-21/legacy-mac-app-cleanup.md)。
 - Relay/Broker：`apps/relay`
@@ -23,6 +23,10 @@
 - 协议类型：`generated-protocol`
 
 ## Trellis 与当前优化
+
+最新[运行中输入区收紧](audits/2026-10-23/compact-running-composer.md)：APK32已发布preview，previous31，正式18/hot保持。运行状态与普通反馈并入底栏，空草稿仅保留停止，有输入才显示紧凑引导/排队；待发默认按数量/状态收起，全文及取消仍可展开。390px footer从271.5px降至125px；手机69/69、浏览器19项及公网19项通过，lint0错误/8项既有警告。未改或重启在线网关；真机触摸/键盘待升级验收。
+
+最新[手机输入镜像与缓存补修](audits/2026-10-23/input-mirror-cache.md)：原会话实际一次，完整字段样本原先不重复；缺client ID的旧/早期投影可复现，已保留native别名并刷新旧正文缓存（草稿/待确认保持）。APK31已发布preview，previous30，正式18/hot保持；消息/手机69项、类型/构建/浏览器15项、公网19项通过，lint0错误/8警告。网关未改未重启，真机显示待升级核对，不将合成复现冒充截图根因确认。
 
 最新[版本同步约定](ops/version-sync.md)及[源码同步记录](audits/2026-10-23/version-sync.md)：用户已确认独立功能/修复完成后分步本地提交，完整版本验收后集中推送现有GitHub并打版本标签。父仓库为project，仅提交codex-to-phone子目录；保留其他工程和用户暂存项，不自动建分支/PR或部署。APK30预览源码基线1ea28a2已推送并核验origin/main，220文件全部属于本项目；收尾docs与preview标签沿同一流程交付。后端367/367、手机68/68、消息/更新/类型/构建再次通过，产品Web资源等于原APK30；真机验收及语音供应商问题仍独立保留。
 

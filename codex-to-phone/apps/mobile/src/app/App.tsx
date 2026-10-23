@@ -20,7 +20,7 @@ import { ApkUpdateProgress } from "../features/updates/ApkUpdateProgress";
 import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mimeTypeFromName, isImageFile, revokeAttachmentPreviews } from "../features/chat/attachments";
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
 import { clamp, applyTheme } from "../shared/preferences";
-import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, Plus, ArrowUp, ChevronLeft } from "lucide-react";
+import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, Plus, ArrowUp, ChevronLeft, ChevronDown } from "lucide-react";
 import { formatDate } from "../shared/format";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { MessageBubble, MessageTimeline, GenerationStatus, ApprovalCard, AttachmentTray } from "../features/chat/components";
@@ -170,6 +170,9 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
   const isLiveTurnActive = activeRuntime.turnStatus === "starting" || activeRuntime.turnStatus === "inProgress";
   const canQueue = Boolean(nativeDesktop && desktopCapability?.queue?.available);
   const desktopQueue = desktopCapability?.queue?.items ?? [];
+  const queueSummary = desktopQueue.some(item => item.status === "uncertain") ? "结果待确认，请勿重发"
+    : desktopQueue.some(item => item.status === "paused") ? "已暂停"
+    : desktopQueue.some(item => item.status === "sending") ? "正在提交" : "任务结束后执行";
   useEffect(() => { setQueueCancelling(null); }, [activeThreadKey]);
   const latestAssistantMessage = [...visibleMessages].reverse().find((message) => message.role === "assistant");
   const latestAssistantMessageId = latestAssistantMessage?.id ?? "";
@@ -193,7 +196,8 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
       !(activeRuntime.turnStatus === "completed" && latestAssistantHasText),
   );
   const canControlSelected = Boolean(isNewThread || selected);
-  const canSubmitMessage = Boolean(draft.trim() || attachments.length > 0) && canControlSelected && !submittingMessage && (!sending || isLiveTurnActive) && (!(selected && isDesktopSource(selected)) || desktopSend.ready);
+  const hasMessageContent = Boolean(draft.trim() || attachments.length > 0);
+  const canSubmitMessage = hasMessageContent && canControlSelected && !submittingMessage && (!sending || isLiveTurnActive) && (!(selected && isDesktopSource(selected)) || desktopSend.ready);
   const canSend = canSubmitMessage && !(isLiveTurnActive && nativeDesktop && !canQueue);
   const controlText = canUseDesktopIpc
     ? activeRuntime.sending
@@ -1849,18 +1853,8 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
           )}
 
             {activeRuntime.desktopSubmission && <div className="connection-notice" role="status">提交结果待确认，草稿已保留；请勿重复发送。</div>}
-            {!activeRuntime.desktopSubmission && activeRuntime.desktopSendFeedback && <div className="connection-notice" role="status">{activeRuntime.desktopSendFeedback}</div>}
             {activeRuntime.desktopInterrupt && <div className="connection-notice" role="status">打断结果待确认，正在同步会话。</div>}
             {(streamState === "recovering" || streamState === "unauthorized" || connectionState === "error") && <div className="connection-notice" role="status"><span className="status-dot error" />{streamState === "unauthorized" ? "凭证已失效，请重新配对" : streamState === "recovering" ? "正在恢复连接，消息与草稿已保留" : "连接暂时不可用，正在检查"}</div>}
-            {isLiveTurnActive && (
-              <div className="control-banner live-control compact" role="status" aria-live="polite">
-                {activeRuntime.userInputs?.length ? <MessageSquare size={15} aria-hidden="true" /> : <Loader2 size={15} className="spin" aria-hidden="true" />}
-                <span>{turnActivity.label}</span>
-                <button onClick={() => void interruptActiveTurn()} disabled={!canInterrupt} aria-label="打断">
-                  <CircleStop size={14} />
-                </button>
-              </div>
-            )}
             {pendingApprovals.length > 0 && (
               <div className="approval-stack">
                 {pendingApprovals.map((approval) => (
@@ -1879,17 +1873,16 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
               <em>{connectionBadge(connectionState, canUseDesktopIpc ? desktopControlStatus : liveStatus)}</em>
             </div>
             {attachments.length > 0 && <AttachmentTray attachments={attachments} onRemove={removeAttachment} />}
-            {desktopQueue.length > 0 && <div className="desktop-queue" aria-label="待发消息" aria-live="polite">
+            {desktopQueue.length > 0 && <details key={activeThreadKey} className="desktop-queue">
+              <summary aria-label={`待发 ${desktopQueue.length} 条，${queueSummary}`}><span role="status" aria-live="polite">待发 {desktopQueue.length} 条 · {queueSummary}</span><ChevronDown size={16} aria-hidden="true" /></summary>
+              <div className="desktop-queue-items" aria-label="待发消息">
               {desktopQueue.map((item, index) => <div key={item.clientMessageId} className="queued-message">
                 <details><summary>{item.status === "waiting" ? `排队 ${index + 1}` : item.status === "paused" ? "任务中断，待发已暂停" : item.status === "sending" ? "正在提交" : "结果待确认，请勿重发"} · {firstLine(item.text)}</summary><p>{item.text}</p></details>
                 <button type="button" className="icon-button" aria-label={`取消待发消息 ${index + 1}`} onClick={() => void cancelQueuedMessage(item.clientMessageId)} disabled={queueCancelling !== null || !["waiting", "paused"].includes(item.status) || connectionState !== "ok"}><X size={18} /></button>
               </div>)}
-            </div>}
-            {isLiveTurnActive && nativeDesktop && <div className="composer-delivery" role="group" aria-label="提交运行中消息">
-              <button type="button" onClick={() => void sendMessage("steer")} disabled={!canSubmitMessage}>引导发送</button>
-              <button type="button" onClick={() => void sendMessage("queue")} disabled={!canSend}>排队发送</button>
-            </div>}
-            {isLiveTurnActive && nativeDesktop && <p className="connection-notice">{canQueue ? "引导加入当前任务；排队在任务结束后执行。" : "排队需要更新网关；可使用引导发送。"}</p>}
+              </div>
+            </details>}
+            {isLiveTurnActive && nativeDesktop && !canQueue && <p className="connection-notice">排队需要更新网关；可使用引导发送。</p>}
             <div className="composer">
               <input
                 ref={uploadInputRef}
@@ -1898,14 +1891,6 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
                 className="hidden-file-input"
                 onChange={(event) => void uploadFiles(event.target.files)}
               />
-              <button
-                className="composer-tool-button"
-                onClick={() => uploadInputRef.current?.click()}
-                disabled={uploading || !token.trim()}
-                aria-label="上传文件"
-              >
-                {uploading ? <Loader2 size={18} className="spin" /> : <Plus size={21} />}
-              </button>
               <textarea
                 aria-label="消息"
                 rows={2}
@@ -1921,12 +1906,24 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
                 placeholder="向 Codex 发送消息"
                 disabled={!canControlSelected}
               />
-              <span className="composer-mode">{isDesktopWatch ? "电脑" : "Relay"} · {isLiveTurnActive ? nativeDesktop ? "箭头默认排队" : "运行中" : isDesktopHistoryOnly ? "历史会话" : "当前会话"}</span>
-            <VoiceInput key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
-              onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }} />
-              {isLiveTurnActive && !draft.trim() && attachments.length === 0 ? <button className="send-button" onClick={() => void interruptActiveTurn()} disabled={!canInterrupt || submittingMessage} aria-label="停止生成"><CircleStop size={22} /></button> : <button className="send-button" onClick={() => void sendMessage()} disabled={!canSend} aria-label={isLiveTurnActive ? nativeDesktop ? "默认排队发送" : "发送引导" : "发送"}>
+              <div className="composer-toolbar">
+                <button className="composer-tool-button" onClick={() => uploadInputRef.current?.click()} disabled={uploading || !token.trim()} aria-label="上传文件">
+                  {uploading ? <Loader2 size={18} className="spin" /> : <Plus size={21} />}
+                </button>
+                <span className="composer-mode" role="status" aria-live="polite" title={activeRuntime.desktopSendFeedback || (isLiveTurnActive ? turnActivity.label : controlText)}>
+                  {isLiveTurnActive && <span className="composer-activity-dot" aria-hidden="true" />}
+                  <span>{!activeRuntime.desktopSubmission && activeRuntime.desktopSendFeedback ? activeRuntime.desktopSendFeedback : isLiveTurnActive ? turnActivity.label : `${isDesktopWatch ? "电脑" : "Relay"} · ${isDesktopHistoryOnly ? "历史会话" : "当前会话"}`}</span>
+                </span>
+                {isLiveTurnActive && hasMessageContent && <button className="composer-tool-button" onClick={() => void interruptActiveTurn()} disabled={!canInterrupt || submittingMessage} aria-label="停止生成"><CircleStop size={20} /></button>}
+                <VoiceInput key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
+                  onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }} />
+                {isLiveTurnActive && nativeDesktop && hasMessageContent ? <div className="composer-delivery" role="group" aria-label="提交运行中消息">
+                  <button type="button" onClick={() => void sendMessage("steer")} disabled={!canSubmitMessage} aria-label="引导发送" title="发送引导，加入当前任务">引导</button>
+                  <button type="button" className="composer-queue-send" onClick={() => void sendMessage("queue")} disabled={!canSend} aria-label="排队发送" title="排队发送，当前任务结束后执行">排队<ArrowUp size={16} aria-hidden="true" /></button>
+                </div> : isLiveTurnActive && !hasMessageContent ? <button className="send-button" onClick={() => void interruptActiveTurn()} disabled={!canInterrupt || submittingMessage} aria-label="停止生成"><CircleStop size={22} /></button> : <button className="send-button" onClick={() => void sendMessage()} disabled={!canSend} aria-label={isLiveTurnActive ? "发送引导" : "发送"}>
                 {submittingMessage || (sending && !isLiveTurnActive) ? <Loader2 size={18} className="spin" /> : <ArrowUp size={21} />}
               </button>}
+              </div>
             </div>
           </footer>
         </section>

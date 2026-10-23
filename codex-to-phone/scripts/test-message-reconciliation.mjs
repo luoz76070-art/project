@@ -36,6 +36,7 @@ try {
     assert.equal(result[0].clientMessageId, acceptedSteer.clientMessageId);
     assert.equal(result[0].sourceItemId, persistedSteer.sourceItemId);
     assert.equal(result[0].turnId, steeringTurn);
+    assert.equal(reconcileMessages(JSON.parse(JSON.stringify(result)), [{ ...acceptedSteer, clientMessageId: undefined }]).length, 1, 'a cached source association also recognizes a replay that lacks its earlier client ID');
     assert.deepEqual(reconcileMessages(result, [acceptedSteer, persistedSteer]), result, 'replayed snapshots cannot restore the second copy');
     assert.equal(reconcileMessages(result, [{ ...acceptedSteer, id: 'desktop-local-synthetic-steering-client', kind: 'local' }]).length, 1, 'late HTTP placeholders still join the accepted input');
   }
@@ -59,6 +60,24 @@ try {
   assert.equal(withEventMirror[0].clientMessageId, acceptedSteer.clientMessageId);
   const { turnId: ignoredOldTurn, sourceItemId: ignoredOldSource, ...oldHistorySteer } = persistedSteer;
   assert.equal(reconcileMessages([acceptedSteer, oldHistorySteer], [persistedSteer]).length, 1, 'same-ID refresh enriches old history before joining the accepted steering copy');
+  // Initial/older native items may lack a submission ID. Progress records also
+  // put the history copy beyond the four-neighbour fallback search.
+  const noClientNative = { ...acceptedSteer, clientMessageId: undefined };
+  const intervening = Array.from({ length: 7 }, (_, i) => ({
+    ...message(`progress-${i}`, acceptedSteer.timestamp, 'tool', `合成执行过程 ${i + 1}`, 'commandExecution'), turnId: steeringTurn,
+  }));
+  for (const [before, arriving] of [[[noClientNative, ...intervening], [persistedSteer]], [[persistedSteer], [noClientNative, ...intervening]]]) {
+    const result = reconcileMessages(before, arriving);
+    assert.equal(result.filter(m => m.role === 'user').length, 1, 'native/history copies with missing client IDs and intervening progress must join by turn and occurrence');
+    assert.equal(result.find(m => m.role === 'user').nativeMessageId, noClientNative.id, 'retain the native alias after choosing the history record');
+    const restored = JSON.parse(JSON.stringify(result));
+    assert.equal(reconcileMessages(restored, [noClientNative, persistedSteer]).filter(m => m.role === 'user').length, 1, 'native replay after a cache roundtrip cannot resurrect an identity-free copy');
+    const secondNative = { ...noClientNative, id: `desktop-${steeringTurn}-genuine-second` };
+    assert.equal(reconcileMessages(restored, [secondNative]).filter(m => m.role === 'user').length, 2, 'a new native occurrence must not consume the alias already assigned to the first input');
+    const two = reconcileMessages([...restored, secondNative], [historyRepeated]);
+    assert.equal(two.filter(m => m.role === 'user').length, 2);
+    assert.equal(reconcileMessages(two, [noClientNative, secondNative, persistedSteer, historyRepeated]).filter(m => m.role === 'user').length, 2);
+  }
   const nativeId = 'desktop-00000000-0000-4000-8000-000000000001-msg_synthetic_final';
   const nativeFinal = { ...message(nativeId, '2026-10-22T18:52:02.622Z', 'assistant', '同一条完整回复', 'agentMessage'), sourceItemId: 'msg_synthetic_final' };
   const historyFinal = { ...message('log-fixture-100', '2026-10-22T18:52:19.963Z', 'assistant', nativeFinal.text, 'message'), sourceItemId: 'msg_synthetic_final', phase: 'final_answer' };

@@ -146,6 +146,8 @@ const server = http.createServer(async (req, res) => {
       state.nativePending = null;
       state.turnStatus = active ? 'inProgress' : 'completed';
       state.control = { transport: 'native', token: randomUUID(), activeTurnId: active ? 'fixture-native-turn' : null, canSend: true, canInterrupt: active, submission: null, queue: { available: url.searchParams.get('queue') !== '0', items: [] } };
+      const queueStatus = url.searchParams.get('queueStatus');
+      if (['waiting', 'paused', 'sending', 'uncertain'].includes(queueStatus)) state.control.queue.items = Array.from({ length: 3 }, (_, index) => ({ clientMessageId: `fixture-queued-${index}`, text: `合成待发 ${index + 1}\n仅用于核对折叠、全文和取消入口，不发送到真实会话。`, status: queueStatus, createdAt: new Date().toISOString() }));
       for (const notify of notifications.values()) notify();
       return json(res, { ok: true });
     }
@@ -242,13 +244,16 @@ const server = http.createServer(async (req, res) => {
       return json(res, { ok: true, phase });
     }
     if (url.pathname === '/fixture/mirrored-steering') {
-      const state = states.get('A'), phase = url.searchParams.get('phase') ?? 'history';
+      const state = states.get('A'), phase = url.searchParams.get('phase') ?? 'history', deepseek = url.searchParams.get('agent') === 'deepseek';
       const turnId = '00000000-0000-4000-8000-000000000010';
       const native = { id: `desktop-${turnId}-accepted-steer`, turnId, clientMessageId: 'fixture-steer-first', role: 'user', text: '合成引导测试：只回复成功', kind: 'userMessage', timestamp: '2026-10-23T05:51:35.517Z' };
       const history = { id: 'log-fixture-steer-first', sourceItemId: 'msg_fixture_steer_first', turnId, role: 'user', text: native.text, kind: 'message', timestamp: '2026-10-23T05:52:09.088Z' };
+      const missingClient = url.searchParams.get('client') === '0';
+      if (missingClient) { delete native.clientMessageId; history.timestamp = '2026-10-23T05:51:35.592Z'; }
       state.messages = phase === 'native' ? [native] : [native, history];
+      if (missingClient) state.messages.push(...Array.from({ length: 7 }, (_, i) => ({ id: `fixture-mirror-progress-${i}`, turnId, role: 'tool', text: `合成执行过程 ${i + 1}`, kind: 'commandExecution', timestamp: native.timestamp })));
       if (phase === 'repeat') state.messages.push(
-        { ...native, id: `desktop-${turnId}-second-steer`, clientMessageId: 'fixture-steer-second' },
+        { ...native, id: `desktop-${turnId}-second-steer`, ...(missingClient ? {} : { clientMessageId: 'fixture-steer-second' }) },
         { ...history, id: 'log-fixture-steer-second', sourceItemId: 'msg_fixture_steer_second', timestamp: '2026-10-23T05:52:10.088Z' });
       state.messages.push({ id: 'fixture-steer-result', role: 'assistant', text: '成功', kind: 'agent_message', timestamp: '2026-10-23T05:52:11Z' });
       if (deepseek) { const agent = agentSnapshot('A', 'deepseek'); agent.messages = state.messages; agent.status = state.turnStatus === 'inProgress' ? 'running' : 'idle'; agent.activity = state.activity ?? 'working'; agent.partialText = true; }

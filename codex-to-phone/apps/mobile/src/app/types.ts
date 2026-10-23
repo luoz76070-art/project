@@ -13,6 +13,7 @@ export type CodexMessage = {
   id: string;
   clientMessageId?: string;
   sourceItemId?: string;
+  nativeMessageId?: string;
   turnId?: string;
   phase?: "commentary" | "final_answer";
   timestamp: string;
