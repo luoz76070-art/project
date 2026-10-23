@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useId, type ReactNode } from "react";
+import { groupMessageProcesses } from "./processGroups";
 import { takeSmoothChunk, roleClass, isToolMessage, roleLabel, summarizeToolMessage, toolRawText } from "./messages";
 import { smoothTextFrameMs } from "../../app/config";
 import { type PendingAttachment, type CodexMessage, type LiveApproval, type LiveApprovalDecision } from "../../app/types";
 import { formatFileSize, isImageAttachment, parseMessageAttachments } from "./attachments";
-import { X, ImageIcon, Paperclip, Copy, AlertCircle, Terminal, CheckCircle2, CircleStop } from "lucide-react";
+import { X, ImageIcon, Paperclip, Copy, AlertCircle, Terminal, CheckCircle2, CircleStop, ChevronRight } from "lucide-react";
 import { MessageContent } from "./MessageContent";
 import { formatTime } from "../../shared/format";
 
@@ -101,12 +102,14 @@ export function MessageBubble({
   smoothPending,
   onSmoothDone,
   onCopy,
+  assistantLabel = "Codex",
 }: {
   message: CodexMessage;
   smooth: boolean;
   smoothPending: boolean;
   onSmoothDone: () => void;
   onCopy: () => void;
+  assistantLabel?: string;
 }) {
   if (isToolMessage(message)) return <ToolMessageBubble message={message} onCopy={onCopy} />;
   const parsed = parseMessageAttachments(message);
@@ -118,11 +121,31 @@ export function MessageBubble({
         : <p className="user-message-text">{parsed.text}</p>)}
       <MessageAttachments attachments={parsed.attachments} />
       <footer className="message-actions">
-        <button className="copy-icon" onClick={onCopy} aria-label={`复制${roleLabel(message.role)}消息`}><Copy size={15} /></button>
+        <button className="copy-icon" onClick={onCopy} aria-label={`复制${message.role === "assistant" ? assistantLabel : roleLabel(message.role)}消息`}><Copy size={15} /></button>
         <time>{formatTime(message.timestamp)}</time>
       </footer>
     </article>
   );
+}
+
+export function MessageTimeline({ messages, renderMessage }: { messages: CodexMessage[]; renderMessage: (message: CodexMessage) => ReactNode }) {
+  return groupMessageProcesses(messages).map(group => group.kind === "message"
+    ? <Fragment key={`message:${group.message.id}`}>{renderMessage(group.message)}</Fragment>
+    : <MessageProcess key={`process:${group.id}`} messages={group.messages} completed={group.completed} renderMessage={renderMessage} />);
+}
+
+function MessageProcess({ messages, completed, renderMessage }: { messages: CodexMessage[]; completed: boolean; renderMessage: (message: CodexMessage) => ReactNode }) {
+  const contentId = useId();
+  const [choice, setChoice] = useState<{ completed: boolean; expanded: boolean } | null>(null);
+  const expanded = choice?.completed === completed ? choice.expanded : !completed;
+  return <section className="message-process" aria-label="执行过程">
+    <button type="button" className="process-toggle" aria-expanded={expanded} aria-controls={contentId} onClick={() => setChoice({ completed, expanded: !expanded })}>
+      <span>执行过程</span><small>{messages.length} 条记录</small><ChevronRight size={16} aria-hidden="true" />
+    </button>
+    <div id={contentId} className="process-content" hidden={!expanded}>
+      {expanded && messages.map(message => <Fragment key={message.id}>{renderMessage(message)}</Fragment>)}
+    </div>
+  </section>;
 }
 
 export function ToolMessageBubble({ message, onCopy }: { message: CodexMessage; onCopy: () => void }) {
@@ -156,6 +179,8 @@ export function ToolMessageBubble({ message, onCopy }: { message: CodexMessage; 
 
 export function ApprovalCard({ approval, onRespond }: { approval: LiveApproval; onRespond: (decision: LiveApprovalDecision) => void }) {
   const allowSession = approval.availableDecisions.includes("acceptForSession");
+  const locked = approval.status !== "pending";
+  const statusText = approval.status === "submitting" ? "正在提交决定…" : approval.status === "submitted" ? "已提交，等待桌面同步；请勿重复操作" : approval.status === "uncertain" ? "提交结果待确认，请查看电脑或等待会话同步" : "";
   return (
     <article className={`approval-card ${approval.kind}`}>
       <header>
@@ -166,29 +191,33 @@ export function ApprovalCard({ approval, onRespond }: { approval: LiveApproval; 
         <em>{formatTime(approval.createdAt)}</em>
       </header>
       <p>{approval.detail}</p>
+      {approval.reason && <p>原因：{approval.reason}</p>}
       {approval.command && <pre>{approval.command}</pre>}
-      {approval.cwd && <small>{approval.cwd}</small>}
+      {approval.cwd && <small>目录：{approval.cwd}</small>}
+      {approval.preview && <details className="approval-preview" open><summary>操作与权限详情</summary><pre>{approval.preview}</pre></details>}
+      {approval.unavailableReason && <p>{approval.unavailableReason}</p>}
+      {statusText && <p role="status" aria-live="polite">{statusText}</p>}
       <div className="approval-actions">
         {approval.availableDecisions.includes("accept") && (
-          <button className="accept" onClick={() => onRespond("accept")}>
+          <button disabled={locked} className="accept" onClick={() => onRespond("accept")}>
             <CheckCircle2 size={14} />
             <span>允许一次</span>
           </button>
         )}
         {allowSession && (
-          <button className="accept" onClick={() => onRespond("acceptForSession")}>
+          <button disabled={locked} className="accept" onClick={() => onRespond("acceptForSession")}>
             <CheckCircle2 size={14} />
             <span>本会话允许</span>
           </button>
         )}
         {approval.availableDecisions.includes("decline") && (
-          <button onClick={() => onRespond("decline")}>
+          <button disabled={locked} onClick={() => onRespond("decline")}>
             <X size={14} />
             <span>拒绝</span>
           </button>
         )}
         {approval.availableDecisions.includes("cancel") && (
-          <button onClick={() => onRespond("cancel")}>
+          <button disabled={locked} onClick={() => onRespond("cancel")}>
             <CircleStop size={14} />
             <span>取消</span>
           </button>

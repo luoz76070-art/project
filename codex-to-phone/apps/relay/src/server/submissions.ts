@@ -26,8 +26,8 @@ export class SubmissionRegistry {
     const receipt: Receipt = { clientMessageId: id, state: "received", updatedAt: new Date().toISOString() };
     const entry: Entry = { fingerprint, receipt, result: Promise.resolve(), expiresAt: Infinity, settled: false };
     entry.result = Promise.resolve().then(action).then((result) => {
-      const outcome = result as { ok?: boolean; warning?: string };
-      receipt.state = outcome.ok === false ? "unknown" : outcome.warning ? "submitted" : "confirmed";
+      const outcome = result as { ok?: boolean; warning?: string; delivery?: "confirmed" | "submitted" | "uncertain" };
+      receipt.state = outcome.delivery === "uncertain" || outcome.ok === false ? "unknown" : outcome.delivery === "submitted" || outcome.warning ? "submitted" : "confirmed";
       return { ...result, submission: { ...receipt, updatedAt: new Date().toISOString() } };
     }).catch((error) => {
       receipt.state = "unknown";

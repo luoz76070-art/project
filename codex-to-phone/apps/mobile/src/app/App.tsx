@@ -1,39 +1,55 @@
 import { loadWorkspaceCache, saveWorkspaceCache } from "../features/threads/cache";
 import { PairingPanel } from "../features/connection/PairingPanel";
 import React, { useState, useRef, useMemo, useEffect } from "react";
-import { type ConnectionProfile, type ThemeMode, type SplitMode, type ApprovalPolicy, type SandboxMode, type ThreadSummary, type ThreadRuntime, type DiagnosticStep, type RelayStatus, type UpdateState, type HotUpdateState, type LoadThreadsOptions, type AndroidUpdateManifest, type HotUpdateManifest, type DesktopActiveResponse, type CodexMessage, type LiveTurnSnapshot, type SendRoute, type PendingAttachment, type DesktopControlResponse, type UploadResponse, type DesktopStreamSnapshot, type LiveApproval, type LiveApprovalDecision } from "./types";
+import { type ConnectionProfile, type ThemeMode, type SplitMode, type ApprovalPolicy, type SandboxMode, type ThreadSummary, type ThreadRuntime, type DiagnosticStep, type RelayStatus, type UpdateState, type HotUpdateState, type LoadThreadsOptions, type HotUpdateManifest, type DesktopActiveResponse, type CodexMessage, type LiveTurnSnapshot, type SendRoute, type PendingAttachment, type DesktopControlResponse, type UploadResponse, type DesktopStreamSnapshot, type LiveApproval, type LiveApprovalDecision, type UserInputRequest } from "./types";
 import { defaultProfileId, defaultTheme, defaultSplitMode, defaultApprovalPolicy, defaultSandboxMode, defaultSidePaneSize, defaultTopPaneSize, newThreadId, updateManifestUrl, appVersionCode, hotUpdateManifestUrl, desktopPollActiveMs, desktopPollIdleMs, liveSnapshotThrottleMs, livePollFallbackMs, statusKeepaliveMs, appVersionLabel } from "./config";
-import { loadThreadRuntimeCache, defaultRuntime, getRuntime, saveThreadRuntimeCache, turnProgressPatch } from "../features/chat/runtime";
-import { messagesForRender, activeTurnActivity, turnInlineIndicator, capMessages, mergeMessages, mergeMessagesById, turnStatusText, desktopActionText, nextSmoothMessageId, approvalDecisionText, canUseEventSource } from "../features/chat/messages";
-import { groupThreadsByProject, mergeThreads, shortPath, isDesktopSource, firstLine, threadListDetail, cleanTitle, sourceClass, sourceLabel } from "../features/threads/model";
+import { loadThreadRuntimeCache, defaultRuntime, getRuntime, saveThreadRuntimeCache, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, desktopApprovalsPatch, approvalResponsePatch } from "../features/chat/runtime";
+import { messagesForRender, activeTurnActivity, turnInlineIndicator, capMessages, mergeMessages, mergeMessagesById, turnStatusText, desktopActionText, nextSmoothMessageId, canUseEventSource } from "../features/chat/messages";
+import { groupThreadsByProject, mergeThreads, shortPath, isDesktopSource, firstLine, threadListDetail, cleanTitle, sourceClass, sourceLabel, retainCodexThread, sessionInRange, sessionListRefreshMs, type SessionRange } from "../features/threads/model";
+import { ProjectGroups } from "../features/threads/ProjectGroups";
+import { SessionRangeControl } from "../features/threads/SessionRangeControl";
 import { loadConnectionProfiles, saveConnectionSettings, profileNameFromEndpoint, upsertConnectionProfile, saveConnectionProfiles } from "../features/connection/profiles";
 import { loadThreadList, loadActiveTurns, threadFromLiveTurn, readThread } from "../features/connection/queries";
 import { assertSecureEndpoint, toFriendlyFetchError, apiGet as requestGet, buildUrl, normalizeEndpoint, apiPost as requestPost } from "../features/connection/http";
 import { makeDiagnosticText, connectionBadge, openHealthUrl } from "../features/connection/diagnostics";
 import { Capacitor } from "@capacitor/core";
 import { NativeHotUpdate } from "../features/updates/native";
+import { useApkUpdate } from "../features/updates/useApkUpdate";
+import { apkBusy, apkCanContinue, apkStatusText, parseAndroidUpdateManifest } from "../features/updates/apk";
+import { ApkUpdateProgress } from "../features/updates/ApkUpdateProgress";
 import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mimeTypeFromName, isImageFile, revokeAttachmentPreviews } from "../features/chat/attachments";
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
 import { clamp, applyTheme } from "../shared/preferences";
 import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, Plus, ArrowUp, ChevronLeft } from "lucide-react";
 import { formatDate } from "../shared/format";
-import { MessageBubble, GenerationStatus, ApprovalCard, AttachmentTray } from "../features/chat/components";
+import { UserInputCard } from "../features/chat/UserInputCard";
+import { MessageBubble, MessageTimeline, GenerationStatus, ApprovalCard, AttachmentTray } from "../features/chat/components";
 import { writeClipboard } from "../shared/clipboard";
+import { VoiceInput } from "../features/voice/VoiceInput";
+import { VoiceSettings } from "../features/voice/VoiceSettings";
 
 import { createSnapshotReducer } from "../features/connection/snapshotPatch";
 import { subscribeEvents, type SubscriptionState } from "../features/connection/subscription";
+const AgentWorkspace = React.lazy(() => import("../features/agents/AgentWorkspace"));
 
 export function App() {
+  const [agentMode, setAgentMode] = useState(false);
   const [connection, setConnection] = useState<ConnectionProfile>(() => {
     const profiles = loadConnectionProfiles();
     return profiles.find((profile) => profile.id === defaultProfileId) ?? profiles[0];
   });
   const scope = `${connection.id}:${connection.cacheNamespace ?? connection.updatedAt}:${normalizeEndpoint(connection.endpoint)}`;
-  return <Workspace key={scope} connection={connection} scope={scope} onApply={setConnection} />;
+  return agentMode
+    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => setAgentMode(false)} /></React.Suspense>
+    : <Workspace key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => setAgentMode(true)} />;
 }
 
-function Workspace({ connection, scope, onApply }: { connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void }) {
+function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void }) {
   const scopeAbortRef = useRef(new AbortController());
+  const threadListRequestRef = useRef<AbortController | null>(null);
+  const userInputSubmissionsRef = useRef(new Set<string>());
+  const approvalSubmissionsRef = useRef(new Set<string>());
+  const desktopInterruptRef = useRef<{ threadId: string; controlToken: string; expectedTurnId: string; clientMessageId: string } | null>(null);
   const endpoint = normalizeEndpoint(connection.endpoint);
   const token = connection.token;
   const apiGet = <T,>(url: string, auth?: string) => requestGet<T>(url, auth, scopeAbortRef.current.signal);
@@ -41,7 +57,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
   useEffect(() => {
     const controller = new AbortController();
     scopeAbortRef.current = controller;
-    return () => controller.abort();
+    return () => { controller.abort(); threadListRequestRef.current?.abort(); };
   }, []);
   const [connectionProfiles, setConnectionProfiles] = useState<ConnectionProfile[]>(() => loadConnectionProfiles());
   const [activeProfileId, setActiveProfileId] = useState(connection.id);
@@ -62,6 +78,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
   const [query, setQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | "desktop" | "relay">("all");
   const [threadPage, setThreadPage] = useState({ offset: 0, hasMore: false, search: "" });
+  const [threadRange, setThreadRange] = useState<SessionRange>("recent");
   const [status, setStatus] = useState("准备连接");
   const [liveStatus, setLiveStatus] = useState("live 未检测");
   const [desktopControlStatus, setDesktopControlStatus] = useState("desktop control 未检测");
@@ -74,6 +91,8 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hasNewMessages, setHasNewMessages] = useState(false);
+  const [submittingMessage, setSubmittingMessage] = useState(false);
+  const [queueCancelling, setQueueCancelling] = useState<string | null>(null);
   const [activeDesktopThreadId, setActiveDesktopThreadId] = useState<string | null>(null);
   const [streamState, setStreamState] = useState<SubscriptionState>("connecting");
   const [liveStreamFallbackTurnId, setLiveStreamFallbackTurnId] = useState<string | null>(null);
@@ -94,10 +113,17 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
     available: false,
     error: "",
   });
+  const apkUpdate = useApkUpdate();
+  const apkUpdating = apkUpdate.pending || apkBusy(apkUpdate.status);
+  const apkDownloading = apkUpdate.status?.phase === "downloading" || apkUpdate.status?.phase === "verifying";
+  const apkReady = apkCanContinue(apkUpdate.status);
+  const updateCheckLock = useRef(false);
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const workspaceGridRef = useRef<HTMLElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const listRefreshReady = useRef(false);
   const scrollPositionsRef = useRef<Record<string, number>>({});
   const selectedRef = useRef<ThreadSummary | null>(null);
   const activeRuntimeRef = useRef<ThreadRuntime>(defaultRuntime());
@@ -106,6 +132,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
   const atBottomRef = useRef(true);
   const activeThreadKey = selected?.id ?? (isNewThread ? newThreadId : "");
   const activeRuntime = getRuntime(threadState, activeThreadKey);
+  const pendingInputId = activeRuntime.userInputs?.[0]?.id;
   const messages = activeRuntime.messages;
   const visibleMessages = useMemo(() => messagesForRender(messages), [messages]);
   const draft = activeRuntime.draft;
@@ -115,7 +142,8 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const candidates = threads.filter(thread => sourceFilter === "all" || (sourceFilter === "desktop" ? isDesktopSource(thread) : !isDesktopSource(thread)));
+    const candidates = threads.filter(thread => (sessionInRange(thread.updatedAt, threadRange) || retainCodexThread(thread.id, selected?.id ?? null, getRuntime(threadState, thread.id)))
+      && (sourceFilter === "all" || (sourceFilter === "desktop" ? isDesktopSource(thread) : !isDesktopSource(thread))));
     if (!needle) return candidates;
     return candidates.filter((thread) =>
       [thread.threadName, thread.cwd, thread.originator, thread.source]
@@ -124,7 +152,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
         .toLowerCase()
         .includes(needle),
     );
-  }, [threads, query, sourceFilter]);
+  }, [threads, query, sourceFilter, threadRange, selected?.id, threadState]);
   const groupedFiltered = useMemo(() => groupThreadsByProject(filtered), [filtered]);
 
   const workspaceTitle = selected?.threadName || (isNewThread ? "新线程" : "Mobile Codex");
@@ -133,15 +161,22 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
     (connectionState === "ok" ? "Relay 已连接" : connectionState === "testing" ? "检测连接中" : "打开设置配置 Endpoint 和 Token");
   const chatSubtitle = selected?.cwd || (isNewThread ? "准备创建新的 Codex 线程" : workspaceSubtitle);
   const isDesktopWatch = activeRuntime.watchMode === "desktop-tail";
-  const canUseDesktopIpc = Boolean(isDesktopWatch && selected?.id && activeDesktopThreadId === selected.id);
+  const desktopCapability = activeRuntime.desktopControl;
+  const desktopSend = desktopSendControl(activeRuntime, relayStatus?.desktopControl?.mode);
+  const nativeDesktop = desktopSend.native;
+  const canUseDesktopIpc = Boolean(isDesktopWatch && selected?.id && (desktopCapability ? desktopCapability.token : !nativeDesktop && activeDesktopThreadId === selected.id));
+  const canInterrupt = isDesktopWatch ? Boolean(desktopCapability?.canInterrupt && desktopCapability.token && desktopCapability.activeTurnId) : Boolean(activeRuntime.activeTurnId);
   const isDesktopHistoryOnly = Boolean(isDesktopWatch && selected?.id && !canUseDesktopIpc);
   const isLiveTurnActive = activeRuntime.turnStatus === "starting" || activeRuntime.turnStatus === "inProgress";
+  const canQueue = Boolean(nativeDesktop && desktopCapability?.queue?.available);
+  const desktopQueue = desktopCapability?.queue?.items ?? [];
+  useEffect(() => { setQueueCancelling(null); }, [activeThreadKey]);
   const latestAssistantMessage = [...visibleMessages].reverse().find((message) => message.role === "assistant");
   const latestAssistantMessageId = latestAssistantMessage?.id ?? "";
   const latestAssistantHasText = Boolean(latestAssistantMessage?.text.trim());
   const smoothLatestAssistant = Boolean(latestAssistantMessageId && activeRuntime.smoothMessageId === latestAssistantMessageId);
   const smoothPending = Boolean(smoothLatestAssistant && (activeRuntime.sending || isLiveTurnActive));
-  const pendingApprovals = activeRuntime.approvals.filter((approval) => approval.status === "pending");
+  const pendingApprovals = activeRuntime.approvals.filter((approval) => ["pending", "submitting", "submitted", "uncertain"].includes(approval.status));
   const turnActivity = activeTurnActivity(activeRuntime, {
     desktop: canUseDesktopIpc,
     hasAssistantOutput: latestAssistantHasText,
@@ -158,13 +193,14 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
       !(activeRuntime.turnStatus === "completed" && latestAssistantHasText),
   );
   const canControlSelected = Boolean(isNewThread || selected);
-  const canSend = Boolean(draft.trim() || attachments.length > 0) && canControlSelected && (!sending || isLiveTurnActive);
+  const canSubmitMessage = Boolean(draft.trim() || attachments.length > 0) && canControlSelected && !submittingMessage && (!sending || isLiveTurnActive) && (!(selected && isDesktopSource(selected)) || desktopSend.ready);
+  const canSend = canSubmitMessage && !(isLiveTurnActive && nativeDesktop && !canQueue);
   const controlText = canUseDesktopIpc
     ? activeRuntime.sending
-      ? "运行中，可继续引导或打断"
-      : "发送到电脑当前线程"
+      ? nativeDesktop ? "运行中，可选择引导或排队" : "运行中，可继续引导或打断"
+      : "发送到所选桌面会话"
     : isDesktopHistoryOnly
-      ? "发送会尝试接管桌面线程"
+      ? "正在同步桌面控制状态"
     : isLiveTurnActive
       ? "运行中，可发送引导或打断"
     : selected
@@ -197,42 +233,62 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
   }
 
   async function loadThreads(options: LoadThreadsOptions = {}) {
-    setLoading(true);
-    setStatus("同步线程中");
+    if (options.silent && threadListRequestRef.current) return;
+    threadListRequestRef.current?.abort();
+    const controller = new AbortController(); threadListRequestRef.current = controller;
+    const parent = scopeAbortRef.current.signal, abort = () => controller.abort();
+    parent.addEventListener("abort", abort, { once: true });
+    if (parent.aborted) controller.abort();
+    if (!options.silent) { setLoading(true); setStatus("同步线程中"); }
     try {
       saveConnectionSettings(endpoint, token);
       const search = options.search ?? threadPage.search;
-      const data = await loadThreadList(endpoint, token, scopeAbortRef.current.signal, options.append ? threadPage.offset : 0, search);
-      setThreadPage({ offset: data.nextOffset ?? 0, hasMore: data.hasMore ?? false, search });
-      const activeTurns = await loadActiveTurns(endpoint, token, scopeAbortRef.current.signal).catch(() => []);
-      const retainedThreads = threads.filter((thread) => {
-        const runtime = getRuntime(threadState, thread.id);
-        return thread.id === selected?.id || runtime.loaded || runtime.messages.length > 0;
-      });
+      const range = options.range ?? threadRange;
+      const data = await loadThreadList(endpoint, token, controller.signal, options.append ? threadPage.offset : 0, search, range);
+      const activeTurns = options.silent ? [] : await loadActiveTurns(endpoint, token, controller.signal).catch(() => []);
+      if (controller.signal.aborted) return;
+      if (!options.silent || threadPage.offset <= 120) setThreadPage({ offset: data.nextOffset ?? 0, hasMore: data.hasMore ?? false, search });
+      const currentWorkspace = workspaceCacheRef.current;
+      const retainedThreads = currentWorkspace.threads.filter(thread => retainCodexThread(thread.id, currentWorkspace.selectedId, getRuntime(cacheStateRef.current, thread.id)));
       const mergedThreads = mergeThreads(
         activeTurns.map((turn) => threadFromLiveTurn(turn)).filter((thread): thread is ThreadSummary => Boolean(thread)),
-        options.append ? threads : data.threads,
-        options.append ? data.threads : retainedThreads,
-      );
+        data.threads,
+        options.append || options.silent ? currentWorkspace.threads : retainedThreads,
+      ).filter(thread => sessionInRange(thread.updatedAt, range) || retainCodexThread(thread.id, currentWorkspace.selectedId, getRuntime(cacheStateRef.current, thread.id)))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
       setThreads(mergedThreads);
       setStatus(`已同步 ${mergedThreads.length} 个线程`);
-      void refreshActiveDesktopThread();
+      if (!options.silent) void refreshActiveDesktopThread();
       for (const turn of activeTurns) {
         applyLiveTurnSnapshot(turn.threadId, turn);
       }
 
-      const current = selected ? mergedThreads.find((thread) => thread.id === selected.id) : null;
-      if (current) setSelected(current);
+      setSelected(current => current ? mergedThreads.find(thread => thread.id === current.id) ?? current : null);
 
-      if (mergedThreads.length > 0 && (options.selectLatest || (!selected && !isNewThread))) {
+      if (!options.silent && mergedThreads.length > 0 && !currentWorkspace.selectedId && !currentWorkspace.isNewThread) {
         await openThread(mergedThreads[0], { closeSidebar: true });
       }
     } catch (error) {
-      setStatus(toFriendlyFetchError(error));
+      if (!controller.signal.aborted) setStatus(toFriendlyFetchError(error));
     } finally {
-      setLoading(false);
+      parent.removeEventListener("abort", abort);
+      if (threadListRequestRef.current === controller) { threadListRequestRef.current = null; if (!controller.signal.aborted) setLoading(false); }
     }
   }
+
+  useEffect(() => {
+    const refresh = () => {
+      const sidebar = sidebarRef.current;
+      if (!document.hidden && sidebar && (sidebar.classList.contains("open") || (getComputedStyle(sidebar).visibility !== "hidden" && sidebar.getBoundingClientRect().right > 0))) void loadThreads({ silent: true });
+    };
+    if (listRefreshReady.current) refresh();
+    listRefreshReady.current = true;
+    const timer = window.setInterval(refresh, sessionListRefreshMs);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refresh); window.removeEventListener("focus", refresh); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sidebarOpen, splitMode, selected?.id, isNewThread, threadRange, threadPage.search, threadPage.offset]);
 
   async function testConnection() {
     if (normalizeEndpoint(draftEndpoint) !== endpoint || draftToken !== token) {
@@ -396,6 +452,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
   }
 
   async function checkForUpdates(manual: boolean) {
+    if (updateCheckLock.current || apkUpdating || hotUpdateState.installing) return;
     if (!updateManifestUrl) {
       const detail = "当前构建未配置在线更新地址";
       setUpdateState((current) => ({
@@ -407,9 +464,12 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
       if (manual) setStatus(detail);
       return;
     }
+    updateCheckLock.current = true;
     setUpdateState((current) => ({ ...current, checking: true, error: "" }));
     try {
-      const manifest = await apiGet<AndroidUpdateManifest>(`${updateManifestUrl}?t=${Date.now()}`);
+      const url = new URL(updateManifestUrl);
+      url.searchParams.set("t", String(Date.now()));
+      const manifest = parseAndroidUpdateManifest(await apiGet<unknown>(url.href));
       const available = Number(manifest.versionCode) > appVersionCode;
       setUpdateState({
         checking: false,
@@ -424,21 +484,30 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
       setUpdateState((current) => ({
         ...current,
         checking: false,
+        available: false,
+        manifest: null,
         error: detail,
         lastCheckedAt: new Date().toISOString(),
       }));
       if (manual) setStatus(`检查更新失败：${detail}`);
+    } finally {
+      updateCheckLock.current = false;
     }
   }
 
-  function openUpdateDownload() {
+  async function installApkUpdate() {
+    if (hotUpdateState.installing || updateState.checking || apkDownloading || apkUpdate.pending) return;
+    if (apkUpdate.supported) {
+      await apkUpdate.start(updateState.manifest);
+      return;
+    }
     const url = updateState.manifest?.apkUrl;
     if (!url) {
       setStatus("没有可下载的更新包");
       return;
     }
     window.open(url, "_blank", "noopener,noreferrer");
-    setStatus("已打开 APK 下载地址");
+    setStatus("请在浏览器下载并覆盖安装；新版 Android App 支持应用内下载与安装");
   }
 
   async function checkHotUpdate(manual: boolean) {
@@ -482,6 +551,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
   }
 
   async function applyHotUpdate() {
+    if (apkUpdating) return;
     const manifest = hotUpdateState.manifest;
     if (!manifest || !hotUpdateState.available) return;
     setHotUpdateState((current) => ({ ...current, installing: true, error: "" }));
@@ -502,6 +572,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
   }
 
   async function rollbackHotUpdate() {
+    if (apkUpdating || hotUpdateState.installing) return;
     if (!Capacitor.isNativePlatform()) return;
     setStatus("正在回退热更新");
     try {
@@ -622,8 +693,15 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
     setStatus("连接档案已删除");
   }
 
-  async function sendMessage() {
-    if (sendLockRef.current) return;
+  async function sendMessage(delivery?: "steer" | "queue") {
+    if (sendLockRef.current || !(delivery === "steer" ? canSubmitMessage : canSend)) return;
+    sendLockRef.current = true;
+    setSubmittingMessage(true);
+    try { await submitMessage(delivery); }
+    finally { sendLockRef.current = false; setSubmittingMessage(false); }
+  }
+
+  async function submitMessage(delivery?: "steer" | "queue") {
     const threadKey = activeThreadKey;
     const runtime = getRuntime(threadState, threadKey);
     const userText = runtime.draft.trim();
@@ -632,25 +710,20 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
     if (!threadKey || !message) return;
     const clientMessageId = runtime.pendingMessageText === message && runtime.pendingMessageId ? runtime.pendingMessageId : crypto.randomUUID();
     patchRuntime(threadKey, { pendingMessageId: clientMessageId, pendingMessageText: message });
-    sendLockRef.current = true;
+    const control = desktopSendControl(runtime, relayStatus?.desktopControl?.mode);
+    const mode = control.native ? delivery ?? (control.guard?.expectedTurnId ? "queue" : "start") : "auto";
     const sendRoute = await resolveSendRoute();
     if (sendRoute === "desktop") {
-      const result = await sendDesktopMessage(threadKey, message, userText, pendingAttachments, clientMessageId);
+      const result = await sendDesktopMessage(threadKey, message, userText, pendingAttachments, clientMessageId, mode, control.guard);
       if (result === "sent") {
-        sendLockRef.current = false;
         return;
       }
     }
     if (sending && activeRuntime.activeTurnId && selected?.id) {
-      try {
-        await steerActiveTurn(threadKey, selected.id, activeRuntime.activeTurnId, message, userText, pendingAttachments, clientMessageId);
-      } finally {
-        sendLockRef.current = false;
-      }
+      await steerActiveTurn(threadKey, selected.id, activeRuntime.activeTurnId, message, userText, pendingAttachments, clientMessageId);
       return;
     }
     if (sending) {
-      sendLockRef.current = false;
       return;
     }
     const targetThread = selected;
@@ -729,13 +802,12 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
         turnStatus: "failed",
         lastTurnError: toFriendlyFetchError(error),
       });
-    } finally {
-      sendLockRef.current = false;
     }
   }
 
   async function resolveSendRoute(): Promise<SendRoute> {
     if (!selected?.id || !isDesktopSource(selected)) return "relay";
+    if (desktopSend.native) return "desktop";
     try {
       const data = await apiGet<DesktopActiveResponse>(buildUrl(endpoint, "/api/desktop/active"), token);
       setActiveDesktopThreadId(data.thread?.id ?? null);
@@ -759,21 +831,31 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
     restoreDraft: string,
     pendingAttachments: PendingAttachment[],
     clientMessageId: string,
+    requestedMode: "auto" | "start" | "steer" | "queue",
+    capturedGuard: ReturnType<typeof desktopSendControl>["guard"],
   ): Promise<"sent" | "fallback"> {
     if (!selected?.id) return "fallback";
     if (sending && !activeRuntime.sending) return "fallback";
-    const mode = "auto";
+    if (selectedRef.current?.id !== threadKey) return "sent";
+    const control = desktopSendControl(activeRuntimeRef.current, relayStatus?.desktopControl?.mode);
+    if (!control.ready) {
+      const detail = "正在同步桌面控制状态，请稍后手动发送；草稿已保留。";
+      patchRuntime(threadKey, { status: detail, desktopSendFeedback: detail });
+      setStatus(detail);
+      return "sent";
+    }
+    const native = control.native;
+    const mode = native ? requestedMode : "auto";
+    const postingText = mode === "queue" ? "正在加入待发队列…" : mode === "steer" ? "正在发送引导…" : "正在发送到桌面 Codex…";
     patchRuntime(threadKey, {
-      sending: true,
-      draft: "",
-      attachments: [],
-      status: "发送到桌面 Codex",
-      turnStatus: "inProgress",
-      activity: "thinking",
+      ...(!native ? { sending: true, turnStatus: "inProgress" as const, activity: "thinking" as const, draft: "", attachments: [] } : {}),
+      desktopSendFeedback: postingText,
+      status: postingText,
       lastTurnError: "",
     });
     forceBottomRef.current = true;
-    setStatus("发送到桌面 Codex");
+    setStatus(postingText);
+    const submittedAt = new Date().toISOString();
 
     try {
       const data = await apiPost<DesktopControlResponse>(
@@ -784,22 +866,35 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
           clientMessageId,
           cwd: selected.cwd,
           mode,
+          ...(native ? capturedGuard : control.guard),
         },
       );
-      if (!data.ok) throw new Error(data.error ?? "Desktop 控制请求失败");
+      if (!data.ok && !data.delivery) throw new Error(data.error ?? "Desktop 控制请求失败");
+      if (data.action === "queue-message") {
+        updateRuntime(threadKey, runtime => ({ ...runtime, ...desktopControlResponsePatch(runtime, data, clientMessageId) }));
+        setStatus("已排队，当前任务结束后执行");
+        return "sent";
+      }
       const optimistic: CodexMessage = {
-        id: `desktop-local-${Date.now()}`,
-        timestamp: new Date().toISOString(),
+        id: `desktop-local-${clientMessageId}`,
+        clientMessageId,
+        timestamp: submittedAt,
         role: "user",
         text: message,
         kind: "local",
         attachments: pendingAttachments,
       };
-      updateRuntime(threadKey, (runtime) => ({ ...runtime, messages: [...runtime.messages, optimistic] }));
+      if (!native || data.delivery === "confirmed") updateRuntime(threadKey, (runtime) => ({ ...runtime, messages: capMessages(mergeMessagesById(runtime.messages, [optimistic]), runtime) }));
+      if (data.delivery) {
+        updateRuntime(threadKey, runtime => ({ ...runtime, ...desktopControlResponsePatch(runtime, data, clientMessageId) }));
+        setStatus(data.delivery === "confirmed" ? "桌面已确认收到消息" : "提交结果待确认，正在同步会话");
+        return "sent";
+      }
       patchRuntime(threadKey, { pendingMessageId: undefined, pendingMessageText: undefined });
       const statusText = data.warning ? "已提交到桌面 Codex，等待同步确认" : desktopActionText(data.action);
       patchRuntime(threadKey, {
         status: statusText,
+        desktopSendFeedback: statusText,
         turnStatus: "inProgress",
         sending: true,
         watching: true,
@@ -814,17 +909,39 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
       return "sent";
     } catch (error) {
       const detail = toFriendlyFetchError(error);
-      patchRuntime(threadKey, {
-        sending: false,
-        draft: restoreDraft,
-        attachments: pendingAttachments,
-        status: detail,
-        turnStatus: "failed",
-        lastTurnError: detail,
+      const rejected = [400, 401, 403, 409, 429].includes((error as { status?: number }).status ?? 0);
+      updateRuntime(threadKey, runtime => {
+        const confirmed = desktopMessageReceived(runtime, clientMessageId);
+        if (native && confirmed) return runtime;
+        return {
+          ...runtime,
+          ...desktopRejectedSendPatch(runtime, (error as { code?: unknown })?.code, clientMessageId),
+          ...(native && !rejected ? desktopControlResponsePatch(runtime, { action: mode === "queue" ? "queue-message" : mode === "steer" ? "steer-turn" : "start-turn", delivery: "uncertain" }, clientMessageId) : {}),
+          ...(!native ? {
+            sending: false, turnStatus: "failed" as const,
+            draft: runtime.draft || restoreDraft,
+            attachments: runtime.attachments.length ? runtime.attachments : pendingAttachments,
+          } : {}),
+          desktopSendFeedback: undefined,
+          status: detail,
+          lastTurnError: detail,
+        };
       });
-      setStatus(detail);
+      if (selectedRef.current?.id === threadKey && !(native && desktopMessageReceived(activeRuntimeRef.current, clientMessageId))) setStatus(detail);
       return "sent";
     }
+  }
+
+  async function cancelQueuedMessage(clientMessageId: string) {
+    if (!selected?.id || queueCancelling) return;
+    const threadId = selected.id;
+    setQueueCancelling(clientMessageId);
+    try {
+      await apiPost(buildUrl(endpoint, `/api/desktop/control/threads/${encodeURIComponent(threadId)}/queue/${encodeURIComponent(clientMessageId)}/cancel`), token, {});
+      patchRuntime(threadId, { desktopSendFeedback: "已取消待发消息" });
+      setStatus("已取消待发消息");
+    } catch (error) { setStatus(toFriendlyFetchError(error)); }
+    finally { setQueueCancelling(null); }
   }
 
   async function steerActiveTurn(
@@ -863,27 +980,34 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
 
   async function interruptActiveTurn() {
     const threadKey = activeThreadKey;
-    if (!threadKey || !selected?.id) return;
+    if (!threadKey || !selected?.id || !canInterrupt) return;
     patchRuntime(threadKey, { status: "发送打断请求" });
     setStatus("发送打断请求");
-    if (canUseDesktopIpc) {
+    if (isDesktopWatch) {
+      let clientMessageId: string | undefined;
       try {
+        const controlToken = desktopCapability!.token!, expectedTurnId = desktopCapability!.activeTurnId!;
+        const previous = desktopInterruptRef.current;
+        const guard = previous?.threadId === selected.id && previous.controlToken === controlToken && previous.expectedTurnId === expectedTurnId
+          ? previous : { threadId: selected.id, controlToken, expectedTurnId, clientMessageId: crypto.randomUUID() };
+        desktopInterruptRef.current = guard;
+        clientMessageId = guard.clientMessageId;
+        patchRuntime(threadKey, { desktopInterrupt: { clientMessageId, delivery: "submitted" } });
         const data = await apiPost<DesktopControlResponse>(
           buildUrl(endpoint, `/api/desktop/control/threads/${encodeURIComponent(selected.id)}/interrupt`),
           token,
-          {},
+          { controlToken: guard.controlToken, expectedTurnId: guard.expectedTurnId, clientMessageId: guard.clientMessageId },
         );
-        if (!data.ok) throw new Error(data.error ?? "Desktop 打断失败");
-        patchRuntime(threadKey, {
-          sending: false,
-          status: "已向桌面 Codex 发送打断",
-          turnStatus: "interrupted",
-          lastTurnError: "",
-        });
-        setStatus("已向桌面 Codex 发送打断");
+        if (!data.ok && !data.delivery) throw new Error(data.error ?? "Desktop 打断失败");
+        const text = data.delivery === "confirmed" ? data.turnStatus === "interrupted" ? "桌面已确认打断" : "桌面任务已结束" : "打断结果待确认，正在同步会话";
+        updateRuntime(threadKey, runtime => ({ ...runtime, ...desktopInterruptResponsePatch(runtime, data, guard.clientMessageId) }));
+        setStatus(text);
       } catch (error) {
         const detail = toFriendlyFetchError(error);
-        patchRuntime(threadKey, { status: detail, lastTurnError: detail });
+        const rejected = [400, 401, 403, 409, 429].includes((error as { status: number }).status);
+        const interruptedId = clientMessageId;
+        if (!rejected && interruptedId) updateRuntime(threadKey, runtime => ({ ...runtime, ...desktopInterruptResponsePatch(runtime, { delivery: "uncertain" }, interruptedId) }));
+        else patchRuntime(threadKey, { desktopInterrupt: undefined, status: detail, lastTurnError: detail });
         setStatus(detail);
       }
       return;
@@ -985,6 +1109,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
         lastEventCount: turn.eventCount,
         lastTurnError: turn.error ?? "",
         approvals: turn.approvals ?? runtime.approvals,
+        userInputs: turn.userInputs ?? [],
         smoothMessageId: nextSmoothMessageId(runtime, messages),
       };
     });
@@ -1003,32 +1128,71 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
         watching: true,
         activeTurnId: null,
         lastEventCount: snapshot.eventCount,
+        userInputs: snapshot.interactionsAvailable ? snapshot.userInputs ?? [] : [],
+        ...desktopApprovalsPatch(runtime, snapshot.approvals, snapshot.interactionsAvailable),
+        ...desktopControlPatch(runtime, snapshot.control),
         lastTurnError: "",
         smoothMessageId: nextSmoothMessageId(runtime, messages),
       };
     });
   }
 
+  async function respondUserInput(request: UserInputRequest, answers: Record<string, string[]>) {
+    if (request.threadId !== activeThreadKey || userInputSubmissionsRef.current.has(request.id)) return;
+    const signal = scopeAbortRef.current.signal;
+    const threadKey = request.threadId;
+    userInputSubmissionsRef.current.add(request.id);
+    const patchInput = (status: UserInputRequest["status"]) => updateRuntime(threadKey, runtime => ({
+      ...runtime, userInputs: runtime.userInputs?.map(item => item.id === request.id ? { ...item, status } : item),
+    }));
+    patchInput("submitting");
+    try {
+      const route = request.kind === "relay"
+        ? `/api/live/turns/${encodeURIComponent(request.turnId)}/user-inputs/${encodeURIComponent(request.id)}/respond`
+        : `/api/desktop/threads/${encodeURIComponent(threadKey)}/user-inputs/${encodeURIComponent(request.id)}/respond`;
+      const result = await apiPost<{ status?: "resolved" | "submitted" | "uncertain"; turn?: LiveTurnSnapshot }>(buildUrl(endpoint, route), token, request.kind === "relay" ? { threadId: threadKey, answers } : { answers });
+      if (signal.aborted) return;
+      if (result.turn) {
+        const input = result.turn.userInputs?.find(item => item.id === request.id);
+        if (input) patchInput(input.status);
+        else updateRuntime(threadKey, runtime => ({ ...runtime, userInputs: runtime.userInputs?.filter(item => item.id !== request.id) }));
+      }
+      else if (result.status === "resolved") updateRuntime(threadKey, runtime => ({ ...runtime, userInputs: runtime.userInputs?.filter(item => item.id !== request.id) }));
+      else patchInput(result.status === "uncertain" ? "uncertain" : "submitted");
+    } catch (error) {
+      if (signal.aborted) return;
+      if ((error as { status?: number }).status === 409) updateRuntime(threadKey, runtime => ({ ...runtime, userInputs: runtime.userInputs?.filter(item => item.id !== request.id), status: "该问题已处理或失效，正在同步" }));
+      else patchInput("uncertain");
+    } finally { userInputSubmissionsRef.current.delete(request.id); }
+  }
+
   async function respondApproval(approval: LiveApproval, decision: LiveApprovalDecision) {
     const threadKey = activeThreadKey;
-    if (!threadKey || !activeRuntime.activeTurnId) return;
-    patchRuntime(threadKey, { status: approvalDecisionText(decision) });
+    const desktop = approval.source === "desktop";
+    const turnId = activeRuntime.activeTurnId;
+    if (!threadKey || (desktop ? approval.threadId !== threadKey : !turnId) || approvalSubmissionsRef.current.has(approval.id)) return;
+    if (activeRuntime.approvals.find(item => item.id === approval.id)?.status !== "pending" || !approval.availableDecisions.includes(decision)) return;
+    const signal = scopeAbortRef.current.signal;
+    approvalSubmissionsRef.current.add(approval.id);
+    const patchApproval = (status: "resolved" | "submitting" | "submitted" | "uncertain") => updateRuntime(threadKey, runtime => ({ ...runtime, ...approvalResponsePatch(runtime, approval.id, status) }));
+    patchApproval("submitting");
     try {
-      const data = await apiPost<{ turn: LiveTurnSnapshot }>(
-        buildUrl(
-          endpoint,
-          `/api/live/turns/${encodeURIComponent(activeRuntime.activeTurnId)}/approvals/${encodeURIComponent(approval.id)}/respond`,
-        ),
-        token,
-        { decision },
-      );
-      applyLiveTurnSnapshot(threadKey, data.turn);
-      setStatus(approvalDecisionText(decision));
+      const route = desktop
+        ? `/api/desktop/threads/${encodeURIComponent(threadKey)}/approvals/${encodeURIComponent(approval.id)}/respond`
+        : `/api/live/turns/${encodeURIComponent(turnId!)}/approvals/${encodeURIComponent(approval.id)}/respond`;
+      const data = await apiPost<{ status?: "resolved" | "submitted" | "uncertain"; turn?: LiveTurnSnapshot }>(buildUrl(endpoint, route), token, { decision });
+      if (signal.aborted) return;
+      if (desktop) patchApproval(data.status ?? "uncertain");
+      else if (data.turn) {
+        // Only update the original card; a late HTTP snapshot must not revive a finished turn.
+        const item = data.turn.approvals.find(item => item.id === approval.id);
+        patchApproval(item?.status === "pending" ? "submitted" : "resolved");
+      }
     } catch (error) {
-      const detail = toFriendlyFetchError(error);
-      patchRuntime(threadKey, { status: detail, lastTurnError: detail });
-      setStatus(detail);
-    }
+      if (signal.aborted) return;
+      if ((error as { status?: number }).status === 409) patchApproval("resolved");
+      else patchApproval("uncertain");
+    } finally { approvalSubmissionsRef.current.delete(approval.id); }
   }
 
   function applyDesktopDelta(threadId: string, data: { messages: CodexMessage[]; cursor: number; generation?: string; reset?: boolean; turnStatus?: ThreadRuntime["turnStatus"]; activity?: ThreadRuntime["activity"] }) {
@@ -1103,6 +1267,14 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
     if (activeRuntime.historyBrowsing && selected) {
       patchRuntime(selected.id, { messages: [], historyBrowsing: false, scrollTop: undefined });
       void openThread(selected);
+    }
+    const viewport = messagesRef.current;
+    const question = viewport?.querySelector<HTMLElement>(".user-input-card");
+    if (viewport && question && !activeRuntime.historyBrowsing) {
+      viewport.scrollTop += question.getBoundingClientRect().top - viewport.getBoundingClientRect().top - 12;
+      atBottomRef.current = false;
+      setHasNewMessages(false);
+      return;
     }
     forceBottomRef.current = true;
     scrollMessagesToBottom(true);
@@ -1217,13 +1389,21 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
     const element = messagesRef.current;
     if (!element) return;
     if (forceBottomRef.current || atBottomRef.current) {
+      const question = pendingInputId ? element.querySelector<HTMLElement>(".user-input-card") : null;
+      if (question && !activeRuntime.historyBrowsing) {
+        element.scrollTop += question.getBoundingClientRect().top - element.getBoundingClientRect().top - 12;
+        atBottomRef.current = false;
+        forceBottomRef.current = false;
+        setHasNewMessages(false);
+        return;
+      }
       scrollMessagesToBottom(!forceBottomRef.current);
       forceBottomRef.current = false;
       setHasNewMessages(false);
       return;
     }
     setHasNewMessages(visibleMessages.length > 0);
-  }, [visibleMessages, selected?.id, isNewThread]);
+  }, [visibleMessages, selected?.id, isNewThread, pendingInputId]);
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -1279,7 +1459,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
     if (!selected?.id || activeRuntime.loading || activeRuntime.watchMode !== "desktop-tail" || !canUseEventSource()) return;
     const threadId = selected.id;
     const reduce = createSnapshotReducer<DesktopStreamSnapshot>();
-    return subscribeEvents({
+    const unsubscribe = subscribeEvents({
       getToken: (signal) => requestPost(buildUrl(endpoint, `/api/desktop/threads/${encodeURIComponent(threadId)}/stream-token`), token, {}, signal),
       url: (streamToken) => {
         const runtime = activeRuntimeRef.current;
@@ -1293,10 +1473,12 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
       },
       onState: (state) => {
         setStreamState(state);
+        if (state !== "online") updateRuntime(threadId, runtime => ({ ...runtime, ...desktopControlOfflinePatch(runtime) }));
         if (state === "unauthorized") { patchRuntime(threadId, { status: "连接凭证已失效，请在设置中更新", watching: false }); setConnectionState("error"); }
         else if (state === "recovering") patchRuntime(threadId, { status: "正在恢复连接，已有内容已保留" });
       },
     });
+    return () => { unsubscribe(); updateRuntime(threadId, runtime => ({ ...runtime, ...desktopControlOfflinePatch(runtime) })); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, activeRuntime.loading, activeRuntime.watchMode, endpoint, token]);
 
@@ -1344,6 +1526,12 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
       onState: (state) => {
         setStreamState(state);
         setLiveStreamFallbackTurnId(state === "online" || state === "unauthorized" || state === "paused" ? null : turnId);
+        if (state !== "online") {
+          pendingSnapshot = null;
+          if (snapshotTimer !== null) window.clearTimeout(snapshotTimer);
+          snapshotTimer = null;
+          patchRuntime(threadKey, { userInputs: [] });
+        }
         if (state === "recovering") patchRuntime(threadKey, { status: "正在恢复连接" });
         if (state === "unauthorized") { patchRuntime(threadKey, { status: "连接凭证已失效，请在设置中更新" }); setConnectionState("error"); }
       },
@@ -1352,6 +1540,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
       cancelled = true;
       if (snapshotTimer !== null) window.clearTimeout(snapshotTimer);
       unsubscribe();
+      patchRuntime(threadKey, { userInputs: [] });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThreadKey, activeRuntime.activeTurnId, activeRuntime.watchMode, endpoint, token]);
@@ -1430,6 +1619,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
   }, [endpoint, token]);
 
   useEffect(() => {
+    void refreshRelayStatus().catch(() => undefined);
     if (selected) void openThread(selected);
     void loadThreads({ selectLatest: !selected && !isNewThread });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1466,6 +1656,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
           </div>
         </div>
         <div className="top-actions">
+          <button className="icon-button" onClick={onOpenAgents} aria-label="切换 Agent"><Server size={18} /></button>
           <button className="icon-button" onClick={() => void loadThreads()} aria-label="刷新线程">
             <RefreshCcw size={18} className={loading ? "spin" : ""} />
           </button>
@@ -1476,7 +1667,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
       </header>
 
       <section className="workspace-grid" ref={workspaceGridRef}>
-        <aside className={`thread-sidebar glass-surface ${sidebarOpen || (!selected && !isNewThread) ? "open" : ""}`}>
+        <aside ref={sidebarRef} className={`thread-sidebar glass-surface ${sidebarOpen || (!selected && !isNewThread) ? "open" : ""}`}>
           <div className="sidebar-top">
             <div className="sidebar-title">
               <PanelLeft size={18} />
@@ -1493,7 +1684,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
           <label className="search-field">
             <Search size={16} />
             <input aria-label="搜索全部会话" value={query} onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter") void loadThreads({ search: query }); }} placeholder="搜索会话标题，回车搜索全部" />
+              onKeyDown={(event) => { if (event.key === "Enter") void loadThreads({ search: query }); }} placeholder="搜索当前范围，回车查询" />
           </label>
 
           <div className="sidebar-tools">
@@ -1536,13 +1727,9 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
           </div>
 
           <div className="thread-list" aria-label="Codex 线程列表">
-            {groupedFiltered.map((group) => (
-              <section className="thread-group" key={group.key}>
-                <div className="thread-group-label">
-                  <span>{group.label}</span>
-                  <em>{group.threads.length}</em>
-                </div>
-                {group.threads.map((thread) => {
+            <SessionRangeControl range={threadRange} disabled={loading} onChange={range => { setThreadRange(range); void loadThreads({ range }); }} />
+            <ProjectGroups scope={scope} agentId="codex" groups={groupedFiltered} search={query}>
+              {thread => {
                   const detail = threadListDetail(thread);
                   return (
                     <button
@@ -1557,9 +1744,8 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
                       {detail && <span className="thread-path">{detail}</span>}
                     </button>
                   );
-                })}
-              </section>
-            ))}
+              }}
+            </ProjectGroups>
             {threadPage.hasMore && <button className="history-button" disabled={loading} onClick={() => void loadThreads({ append: true })}>加载更多会话</button>}
             {filtered.length === 0 && (
               <div className="empty-state">
@@ -1623,8 +1809,8 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
                 <p>{isNewThread ? "输入消息后会在当前电脑上启动 Codex turn。" : "从左侧选择线程，或创建新线程继续工作。"}</p>
               </div>
             )}
-            {visibleMessages.map((message) => (
-              <React.Fragment key={message.id}>
+            <MessageTimeline key={activeThreadKey} messages={visibleMessages} renderMessage={(message) => (
+              <React.Fragment>
                 <MessageBubble
                   message={message}
                   smooth={smoothLatestAssistant && message.id === latestAssistantMessageId}
@@ -1645,12 +1831,16 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
                   />
                 )}
               </React.Fragment>
+            )} />
+            {(activeRuntime.userInputs ?? []).map(request => (
+              <UserInputCard key={request.id} request={request} disabled={connectionState !== "ok" || streamState !== "online"} onRespond={answers => respondUserInput(request, answers)} />
             ))}
             {showInlineTurnIndicator && inlineTurnIndicator && !inlineTurnIndicator.messageId && (
               <GenerationStatus label={inlineTurnIndicator.label} detail={inlineTurnIndicator.detail} tone={inlineTurnIndicator.tone} anchorRole="assistant" />
             )}
           </div>
 
+          <footer className="composer-panel">
           {hasNewMessages && (
             <button className="latest-pill" onClick={jumpToLatest}>
               <Activity size={15} />
@@ -1658,13 +1848,15 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
             </button>
           )}
 
-          <footer className="composer-panel">
+            {activeRuntime.desktopSubmission && <div className="connection-notice" role="status">提交结果待确认，草稿已保留；请勿重复发送。</div>}
+            {!activeRuntime.desktopSubmission && activeRuntime.desktopSendFeedback && <div className="connection-notice" role="status">{activeRuntime.desktopSendFeedback}</div>}
+            {activeRuntime.desktopInterrupt && <div className="connection-notice" role="status">打断结果待确认，正在同步会话。</div>}
             {(streamState === "recovering" || streamState === "unauthorized" || connectionState === "error") && <div className="connection-notice" role="status"><span className="status-dot error" />{streamState === "unauthorized" ? "凭证已失效，请重新配对" : streamState === "recovering" ? "正在恢复连接，消息与草稿已保留" : "连接暂时不可用，正在检查"}</div>}
             {isLiveTurnActive && (
               <div className="control-banner live-control compact" role="status" aria-live="polite">
-                <Loader2 size={15} className="spin" aria-hidden="true" />
+                {activeRuntime.userInputs?.length ? <MessageSquare size={15} aria-hidden="true" /> : <Loader2 size={15} className="spin" aria-hidden="true" />}
                 <span>{turnActivity.label}</span>
-                <button onClick={() => void interruptActiveTurn()} aria-label="打断">
+                <button onClick={() => void interruptActiveTurn()} disabled={!canInterrupt} aria-label="打断">
                   <CircleStop size={14} />
                 </button>
               </div>
@@ -1687,6 +1879,17 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
               <em>{connectionBadge(connectionState, canUseDesktopIpc ? desktopControlStatus : liveStatus)}</em>
             </div>
             {attachments.length > 0 && <AttachmentTray attachments={attachments} onRemove={removeAttachment} />}
+            {desktopQueue.length > 0 && <div className="desktop-queue" aria-label="待发消息" aria-live="polite">
+              {desktopQueue.map((item, index) => <div key={item.clientMessageId} className="queued-message">
+                <details><summary>{item.status === "waiting" ? `排队 ${index + 1}` : item.status === "paused" ? "任务中断，待发已暂停" : item.status === "sending" ? "正在提交" : "结果待确认，请勿重发"} · {firstLine(item.text)}</summary><p>{item.text}</p></details>
+                <button type="button" className="icon-button" aria-label={`取消待发消息 ${index + 1}`} onClick={() => void cancelQueuedMessage(item.clientMessageId)} disabled={queueCancelling !== null || !["waiting", "paused"].includes(item.status) || connectionState !== "ok"}><X size={18} /></button>
+              </div>)}
+            </div>}
+            {isLiveTurnActive && nativeDesktop && <div className="composer-delivery" role="group" aria-label="提交运行中消息">
+              <button type="button" onClick={() => void sendMessage("steer")} disabled={!canSubmitMessage}>引导发送</button>
+              <button type="button" onClick={() => void sendMessage("queue")} disabled={!canSend}>排队发送</button>
+            </div>}
+            {isLiveTurnActive && nativeDesktop && <p className="connection-notice">{canQueue ? "引导加入当前任务；排队在任务结束后执行。" : "排队需要更新网关；可使用引导发送。"}</p>}
             <div className="composer">
               <input
                 ref={uploadInputRef}
@@ -1708,7 +1911,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
                 rows={2}
                 onInput={event => { const element = event.currentTarget; element.style.height = "auto"; element.style.height = `${Math.min(152, element.scrollHeight)}px`; }}
                 value={draft}
-                onChange={(event) => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: event.target.value }); }}
+                onChange={(event) => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: event.target.value, desktopSendFeedback: undefined }); }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
                     event.preventDefault();
@@ -1718,9 +1921,11 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
                 placeholder="向 Codex 发送消息"
                 disabled={!canControlSelected}
               />
-              <span className="composer-mode">{isDesktopWatch ? "电脑" : "Relay"} · {isLiveTurnActive ? "运行中" : isDesktopHistoryOnly ? "历史会话" : "当前会话"}</span>
-              {isLiveTurnActive && !draft.trim() ? <button className="send-button" onClick={() => void interruptActiveTurn()} aria-label="停止生成"><CircleStop size={22} /></button> : <button className="send-button" onClick={() => void sendMessage()} disabled={!canSend} aria-label={isLiveTurnActive ? "发送引导" : "发送"}>
-                {sending && !isLiveTurnActive ? <Loader2 size={18} className="spin" /> : <ArrowUp size={21} />}
+              <span className="composer-mode">{isDesktopWatch ? "电脑" : "Relay"} · {isLiveTurnActive ? nativeDesktop ? "箭头默认排队" : "运行中" : isDesktopHistoryOnly ? "历史会话" : "当前会话"}</span>
+            <VoiceInput key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
+              onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }} />
+              {isLiveTurnActive && !draft.trim() && attachments.length === 0 ? <button className="send-button" onClick={() => void interruptActiveTurn()} disabled={!canInterrupt || submittingMessage} aria-label="停止生成"><CircleStop size={22} /></button> : <button className="send-button" onClick={() => void sendMessage()} disabled={!canSend} aria-label={isLiveTurnActive ? nativeDesktop ? "默认排队发送" : "发送引导" : "发送"}>
+                {submittingMessage || (sending && !isLiveTurnActive) ? <Loader2 size={18} className="spin" /> : <ArrowUp size={21} />}
               </button>}
             </div>
           </footer>
@@ -1801,6 +2006,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
           </div>
         </section>
 
+        {settingsOpen && <section className="settings-section"><VoiceSettings endpoint={endpoint} token={token} /></section>}
         <section className="settings-section"><details className="settings-disclosure"><summary>版本与更新</summary>
           <div className="version-card">
             <span>手机版本</span>
@@ -1823,7 +2029,7 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
             </strong>
             <span>更新状态</span>
             <strong>
-              {updateState.checking
+              {apkStatusText(apkUpdate.status) || (updateState.checking
                 ? "检查中"
                 : updateState.available
                   ? `可升级到 v${updateState.manifest?.versionName}`
@@ -1831,16 +2037,19 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
                     ? "未配置更新源"
                   : updateState.error
                     ? "检查失败"
-                    : "已是最新"}
+                    : "已是最新")}
             </strong>
           </div>
           {hotUpdateState.manifest?.notes && <p className="update-note">{hotUpdateState.manifest.notes}</p>}
           {updateState.manifest?.notes && <p className="update-note">{updateState.manifest.notes}</p>}
+          {updateState.error && <p className="update-note" role="alert">检查更新失败：{updateState.error}</p>}
+          <ApkUpdateProgress status={apkUpdate.status} error={apkUpdate.error} />
+          {!apkUpdate.supported && updateState.available && <p className="update-note">此环境需在浏览器下载安装包；覆盖安装新版 Android App 后，即可在 App 内完成后续更新。</p>}
           <div className="settings-actions">
             <button
               className="action-button"
               onClick={() => void Promise.all([checkForUpdates(true), checkHotUpdate(true)])}
-              disabled={updateState.checking || hotUpdateState.checking}
+              disabled={updateState.checking || hotUpdateState.checking || apkUpdating || hotUpdateState.installing}
             >
               {updateState.checking || hotUpdateState.checking ? <Loader2 size={16} className="spin" /> : <RefreshCcw size={16} />}
               <span>检查更新</span>
@@ -1848,19 +2057,19 @@ function Workspace({ connection, scope, onApply }: { connection: ConnectionProfi
             <button
               className="action-button primary"
               onClick={() => void applyHotUpdate()}
-              disabled={!hotUpdateState.available || hotUpdateState.installing}
+              disabled={!hotUpdateState.available || hotUpdateState.installing || apkUpdating}
             >
               {hotUpdateState.installing ? <Loader2 size={16} className="spin" /> : <RefreshCcw size={16} />}
               <span>应用热更新</span>
             </button>
-            <button className="action-button primary" onClick={openUpdateDownload} disabled={!updateState.available}>
-              <ExternalLink size={16} />
-              <span>下载新版</span>
+            <button className="action-button primary" onClick={() => void installApkUpdate()} disabled={(!updateState.available && !apkReady) || apkDownloading || apkUpdate.pending || hotUpdateState.installing || updateState.checking}>
+              {apkDownloading || apkUpdate.pending ? <Loader2 size={16} className="spin" /> : <ArrowUp size={16} />}
+              <span>{apkDownloading ? apkStatusText(apkUpdate.status) : apkReady ? apkUpdate.status?.phase === "permission_required" ? "允许安装并继续" : "继续安装" : apkUpdate.supported ? "下载并安装" : "浏览器下载 APK"}</span>
             </button>
             <button
               className="action-button"
               onClick={() => void rollbackHotUpdate()}
-              disabled={!hotUpdateState.status?.activeVersion}
+              disabled={!hotUpdateState.status?.activeVersion || hotUpdateState.installing || apkUpdating}
             >
               <CircleStop size={16} />
               <span>回退热更新</span>

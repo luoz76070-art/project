@@ -1,10 +1,12 @@
 import { CodexStore } from "../store/codexStore.js";
 import { loadConfig } from "../config.js";
 import { DesktopControl } from "../desktop/desktopControl.js";
+import { randomUUID } from "node:crypto";
+import type { DesktopControlCapability } from "../desktop/desktopNativeControl.js";
 
 const config = loadConfig();
 const store = new CodexStore(config.codexHome);
-const control = new DesktopControl(store);
+const control = new DesktopControl(store, { codexHome: config.codexHome, transport: config.desktopTransport });
 
 const status = await control.status();
 const result: Record<string, unknown> = {
@@ -29,14 +31,26 @@ try {
     if (!message || !threadId) {
       throw new Error("Set MOBILE_CODEX_DESKTOP_CONTROL_MESSAGE and ensure a desktop thread exists before mutating.");
     }
-    result.mutation = await control.sendMessage({
-      threadId,
-      message,
-      cwd: status.activeThread?.cwd ?? null,
-      mode: "auto",
-    });
+    const legacy = status.mode === "macos-ui-injector-control";
+    const release = legacy ? () => {} : control.followThread(threadId);
+    try {
+      const capability = legacy ? undefined : await new Promise<DesktopControlCapability>((resolve, reject) => {
+        const timer = setTimeout(() => { unsubscribe(); reject(new Error("Native Desktop snapshot unavailable; no message was submitted.")); }, 5_000);
+        const check = () => {
+          const value = control.getStreamSnapshot(threadId)?.control;
+          if (value?.token) { clearTimeout(timer); unsubscribe(); resolve(value); }
+        };
+        const unsubscribe = control.onStreamSnapshot(check);
+        check();
+      });
+      result.mutation = await control.sendMessage({
+        threadId, message, cwd: status.activeThread?.cwd ?? null, mode: "auto",
+        clientMessageId: randomUUID(), controlToken: capability?.token ?? undefined, expectedTurnId: capability?.activeTurnId ?? null,
+      });
+    } finally { release(); }
   }
   console.log(JSON.stringify(result, null, 2));
 } finally {
   await control.stop();
+  store.close();
 }

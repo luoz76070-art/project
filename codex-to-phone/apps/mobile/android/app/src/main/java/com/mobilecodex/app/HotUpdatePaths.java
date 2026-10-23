@@ -36,7 +36,9 @@ final class HotUpdatePaths {
         try {
             File canonicalRoot = root.getCanonicalFile();
             File canonicalFile = file.getCanonicalFile();
-            if (!canonicalFile.toPath().startsWith(canonicalRoot.toPath()) || canonicalFile.equals(canonicalRoot)) {
+            File parent = canonicalFile.getParentFile();
+            while (parent != null && !parent.equals(canonicalRoot)) parent = parent.getParentFile();
+            if (parent == null) {
                 throw new IllegalArgumentException("Refusing to remove outside hot update root");
             }
             // Delete symlinks themselves without following their children.

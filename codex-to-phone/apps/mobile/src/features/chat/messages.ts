@@ -3,6 +3,7 @@ import { firstLine, pathTail } from "../threads/model";
 import { clip } from "../../shared/format";
 import { collapseMirroredMessages, stripCodexAppDirectives, reconcileMessages } from "./messageReconciliation";
 import { maxMessagesPerThread } from "../../app/config";
+import { isProcessMessage } from "./processGroups";
 
 export function isToolMessage(message: CodexMessage) {
   return message.role === "tool" || (message.role !== "user" && message.role !== "assistant" && isToolKind(message.kind));
@@ -292,7 +293,7 @@ export function shouldFallbackToRelay(error: unknown) {
 export function messagesForRender(messages: CodexMessage[]) {
   return collapseMirroredMessages(
     messages.flatMap((message) => {
-      if (!isTextConversationMessage(message) || isEmptyChatMessage(message) || isGeneratedContextMessage(message)) return [];
+      if ((!isTextConversationMessage(message) && !isProcessMessage(message)) || isEmptyChatMessage(message) || isGeneratedContextMessage(message)) return [];
       if (message.role !== "assistant") return [message];
       const text = stripCodexAppDirectives(message.text);
       return text ? [{ ...message, text }] : [];
@@ -319,6 +320,7 @@ export function isGeneratedContextMessage(message: CodexMessage) {
     text.startsWith("<personality_spec>") ||
     text.startsWith("<skills_instructions>") ||
     text.startsWith("<plugins_instructions>") ||
+    text.startsWith("<send_user_message_question_reply>") ||
     text.startsWith("# AGENTS.md instructions") ||
     text.startsWith("<INSTRUCTIONS>") ||
     text.startsWith("Knowledge cutoff:") ||
@@ -376,6 +378,10 @@ export function turnInlineIndicator(
   if (options.pendingApproval) {
     const target = latestAssistant ?? latestUser ?? fallback;
     return { messageId: target?.id ?? "", label: "等待审批", detail: "确认后继续执行", tone: "approval" };
+  }
+
+  if (runtime.userInputs?.length) {
+    return { messageId: (latestAssistant ?? latestUser ?? fallback)?.id ?? "", ...userInputActivity(runtime), tone: "approval" };
   }
 
   if (runtime.activity) {
@@ -444,6 +450,7 @@ export function activeTurnActivity(
   options: { desktop: boolean; hasAssistantOutput: boolean; pendingApproval: boolean },
 ) {
   if (options.pendingApproval) return { label: "等待审批", detail: "确认后继续执行" };
+  if (runtime.userInputs?.length) return userInputActivity(runtime);
   if (runtime.activity === "working") return { label: "Codex 正在工作", detail: "正在执行操作，完成后继续同步" };
   if (runtime.activity === "thinking") return { label: "正在思考", detail: "电脑仍在处理当前请求" };
   if (runtime.activity === "outputting") return { label: "正在输出", detail: "正在同步电脑回复" };
@@ -456,7 +463,14 @@ export function activeTurnActivity(
   return { label: "正在思考", detail: options.desktop || runtime.watchMode === "desktop-tail" ? "等待桌面响应" : "等待 Codex 回复" };
 }
 
+function userInputActivity(runtime: ThreadRuntime) {
+  if (runtime.userInputs?.some(input => input.status === "pending")) return { label: "等待你回答", detail: "在下方选择或输入回答" };
+  if (runtime.userInputs?.some(input => input.status === "uncertain")) return { label: "回答结果待确认", detail: "请先查看会话状态" };
+  return { label: "正在确认回答", detail: "等待会话同步处理结果" };
+}
+
 export function desktopActionText(action: DesktopControlResponse["action"]) {
+  if (action === "queue-message") return "已加入待发队列";
   if (action === "ui-submit") return "已提交到电脑 Codex";
   if (action === "steer-turn") return "已向桌面 Codex 发送引导";
   if (action === "interrupt-turn") return "已向桌面 Codex 发送打断";

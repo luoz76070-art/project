@@ -1,0 +1,4 @@
+{
+  "description": "Original-session mobile bridge; inactive until explicitly configured",
+  "modules": ["./register.mjs"]
+}

@@ -9,7 +9,9 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(HotUpdatePlugin.class);
+        registerPlugin(ApkUpdatePlugin.class);
         registerPlugin(SecureCredentialsPlugin.class);
+        registerPlugin(VoiceRecorderPlugin.class);
         super.onCreate(savedInstanceState);
     }
 

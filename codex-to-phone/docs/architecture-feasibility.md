@@ -1,6 +1,18 @@
 # 架构与可行性
 
-更新时间：2026-05-12
+更新时间：2026-10-21（以下保留 2026-05-12 Windows 阶段历史证据）
+
+## 2026-10-20 Mac 插件化接入进展
+
+当前生产主线为 Mac Relay + Input Helper + Android + 公网 Broker。v1.2.2 源码已发布、备份；新开发的 [Agent 网关](agent-gateway.md) P0只进行现有服务接入和状态探测，不替换旧输入通道。P1原会话问答/控制/审批和P2插件管理已通过源码隔离验证，仍未部署或真实控制验收。
+
+本机 `codex-cli 0.163.0-alpha.10.2` 的控制 socket 已完成 WebSocket 初始化和 `thread/loaded/list`。结果为 connected、已加载会话单页数量 0、hasMore=false；这只能证明服务连通，尚不能证明 Desktop 当前会话归属或可控性。未发送消息、启动 turn、接管审批或修改系统权限。
+
+Unix socket 需要标准 HTTP Upgrade / WebSocket；`app-server proxy --sock` 转发字节，不是 JSONL 协议转换。首轮错误的 JSONL 假设已用真实握手纠正，隔离测试改为 HTTP/WebSocket over UDS。依据为 [官方 App Server 文档](https://developers.openai.com/codex/app-server/)，该传输仍属于实验性能力。
+
+插件可承担安装、配对和状态入口；持续远程接入仍需一个正在运行的后台网关。只有同会话的收发、实时事件和审批所有权分别验证后，才能评估减少辅助功能依赖。下文 Windows owner/follower IPC 的历史结果不能直接作为当前 Mac 验收。
+
+P2已用一个Node进程组合既有Relay+Tunnel，以loopback端口绑定排他。插件为skill入口，加载无副作用，不需要额外MCP桥接进程；独立构建包已从临时目录运行CLI生命周期。managed模式native与生产Mac App旧输入分开，实际安装/迁移及Android仍待验收；其他Agent适配属于P3。
 
 ## 结论
 

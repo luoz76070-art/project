@@ -17,6 +17,10 @@ export type CodexThreadSummary = {
 
 export type CodexMessage = {
   id: string;
+  clientMessageId?: string;
+  sourceItemId?: string;
+  turnId?: string;
+  phase?: "commentary" | "final_answer";
   timestamp: string;
   role: "user" | "assistant" | "system" | "developer" | "tool" | "unknown";
   text: string;
@@ -76,7 +80,7 @@ export class CodexStore {
     return this.readThreadSummary(threadId, file, (await fs.stat(file)).mtimeMs);
   }
 
-  async listThreads(limit = 50, offset = 0, query = ""): Promise<CodexThreadSummary[]> {
+  async listThreads(limit = 50, offset = 0, query = "", since = 0): Promise<CodexThreadSummary[]> {
     const [rows, files] = await Promise.all([this.readSessionIndex(), this.index.files()]);
     const candidates = new Map<string, { id: string; name: string | null; updatedAt: number; file: string | null }>();
     for (const row of rows) {
@@ -92,7 +96,7 @@ export class CodexStore {
     }
     while (this.rolloutPathCache.size > 10000) this.rolloutPathCache.delete(this.rolloutPathCache.keys().next().value!);
     const needle = query.trim().toLowerCase();
-    const ordered = [...candidates.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+    const ordered = [...candidates.values()].filter(candidate => candidate.updatedAt >= since).sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     const matching = [];
     for (const candidate of ordered) {
       if (needle) {
@@ -321,8 +325,13 @@ export class CodexStore {
       if (payload?.type === "message") {
         const role = normalizeRole(payload.role);
         const text = extractContentText(payload.content);
+        const metadata = payload.internal_chat_message_metadata_passthrough as Record<string, unknown> | undefined;
         if (role === "user" && !isDisplayableUserText(text)) return [];
-        return text ? [{ id: `${idPrefix}-${index}`, timestamp, role, text, kind: "message" }] : [];
+        return text ? [{ id: `${idPrefix}-${index}`, timestamp, role, text, kind: "message",
+          ...((role === "assistant" || role === "user") && typeof payload.id === "string" ? { sourceItemId: payload.id } : {}),
+          ...((role === "user" || role === "assistant") && typeof metadata?.turn_id === "string" ? { turnId: metadata.turn_id } : {}),
+          ...(payload.phase === "commentary" || payload.phase === "final_answer" ? { phase: payload.phase } : {}),
+        }] : [];
       }
       if (payload?.type === "function_call") {
         const text = formatFunctionCall(payload);
@@ -425,7 +434,7 @@ function dedupeMessages(messages: CodexMessage[]): CodexMessage[] {
   const seen = new Set<string>();
   const result: CodexMessage[] = [];
   for (const message of messages) {
-    const key = `${message.timestamp}:${message.role}:${message.kind}:${message.text}`;
+    const key = JSON.stringify([message.sourceItemId ?? null, message.timestamp, message.role, message.kind, message.text]);
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(message);

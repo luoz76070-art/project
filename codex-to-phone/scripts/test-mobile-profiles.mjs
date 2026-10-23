@@ -60,3 +60,46 @@ test('public plaintext endpoints are rejected; private LAN and HTTPS remain usab
   for (const value of ['https://relay.example/r/mac', 'http://127.0.0.1:8787', 'http://192.168.1.2', 'http://10.0.0.2', 'http://[::1]', 'http://mac.local']) assert.doesNotThrow(() => assertSecureEndpoint(value));
   for (const value of ['http://public.example', 'http://8.8.8.8', 'http://172.32.1.2', 'https://token:secret@relay.example', 'ftp://192.168.1.2']) assert.throws(() => assertSecureEndpoint(value), /HTTPS/);
 });
+
+for (const native of [false, true]) test(`${native ? 'native' : 'web'} HTTP preserves Desktop rejection codes without exposing response text`, async t => {
+  storage(t);
+  const previousFetch = globalThis.fetch;
+  let calls = 0;
+  const response = { error: 'desktop_control_refresh_required' };
+  globalThis.fetch = async () => { calls++; return new Response(JSON.stringify(response), { status: 409 }); };
+  t.after(() => { globalThis.fetch = previousFetch; });
+  const { apiPost } = await load('http', {
+    Capacitor: { isNativePlatform: () => native },
+    CapacitorHttp: { request: async () => { calls++; return { status: 409, data: JSON.stringify(response) }; } },
+  });
+  await assert.rejects(apiPost('https://synthetic.example/messages', 'synthetic-token', { message: 'fixture' }), error => {
+    assert.equal(error.status, 409); assert.equal(error.code, response.error);
+    assert.match(error.message, /会话控制状态/); return true;
+  });
+  assert.equal(calls, 1, 'writes must never retry automatically');
+  response.error = 'private-upstream-content';
+  await assert.rejects(apiPost('https://synthetic.example/messages', 'synthetic-token', {}), error => {
+    assert.equal(error.status, 409); assert.equal(error.code, undefined);
+    assert.ok(!error.message.includes('private-upstream-content')); return true;
+  });
+});
+
+for (const native of [false, true]) test(`${native ? 'native' : 'web'} voice errors retain known codes, discard provider text and never retry`, async t => {
+  storage(t); const previousFetch = globalThis.fetch; let calls = 0;
+  const data = { error: 'voice_provider_auth', detail: 'synthetic-private-key' };
+  globalThis.fetch = async () => { calls++; return Response.json(data, { status: 502 }); };
+  t.after(() => { globalThis.fetch = previousFetch; });
+  const { apiPost } = await load('http', {
+    Capacitor: { isNativePlatform: () => native },
+    CapacitorHttp: { request: async () => { calls++; return { status: 502, data }; } },
+  });
+  await assert.rejects(apiPost('https://synthetic.example/api/voice/refine', 'synthetic-token', {}), error => {
+    assert.equal(error.code, 'voice_provider_auth'); assert.match(error.message, /模型鉴权失败/);
+    assert.doesNotMatch(error.message, /synthetic-private-key/); return true;
+  });
+  assert.equal(calls, 1);
+  data.error = 'synthetic-private-provider-error';
+  await assert.rejects(apiPost('https://synthetic.example/api/voice/refine', 'synthetic-token', {}), error => {
+    assert.equal(error.code, undefined); assert.doesNotMatch(error.message, /synthetic-private/); return true;
+  });
+});

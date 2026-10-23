@@ -1,15 +1,18 @@
 import { CodexStore, type CodexMessage, type CodexThreadSummary } from "../store/codexStore.js";
-import { DesktopIpcClient, type DesktopIpcClientStatus, type DesktopIpcResponse } from "./desktopIpcClient.js";
+import { createHash, randomUUID } from "node:crypto";
+import { DesktopIpcClient, getDesktopIpcPipePath, type DesktopIpcClientStatus } from "./desktopIpcClient.js";
 import { MacosUiInjector, type MacosUiInjectorStatus } from "./macosUiInjector.js";
+import { asyncQuestionReply, conversationTurns, desktopQuestionCandidates, interactionError, record, validateQuestionAnswers, type DesktopQuestionCandidate, type UserInputRequest } from "./desktopQuestions.js";
+import { DesktopNativeControl, type DesktopControlCapability, type DesktopTransport, type NativeControlInput, type NativeControlOutcome } from "./desktopNativeControl.js";
+import { DesktopApprovals, type DesktopApproval, type DesktopApprovalDecision } from "./desktopApprovals.js";
+import { DesktopMessageQueue } from "./desktopMessageQueue.js";
 
-type CodexTextInput = {
-  type: "text";
-  text: string;
-  text_elements: [];
-};
+type QuestionBinding = { candidate: DesktopQuestionCandidate; view: UserInputRequest; signature: string };
+type PendingQuestion = { threadId: string; status: Exclude<UserInputRequest["status"], "pending"> };
+type FollowedThread = { refs: number; epoch: string; owner: string | null; revision: number | null; connecting: boolean; questions: Map<string, QuestionBinding>; deadline?: NodeJS.Timeout };
 
-type DesktopControlAction = "start-turn" | "steer-turn" | "interrupt-turn" | "ui-submit";
-type DesktopControlMode = "auto" | "start" | "steer";
+type DesktopControlAction = "start-turn" | "steer-turn" | "interrupt-turn" | "ui-submit" | "queue-message";
+type DesktopControlMode = "auto" | "start" | "steer" | "queue";
 type DesktopControlRuntime = "desktop-ipc-follower-control" | "macos-ui-injector-control";
 type DesktopThreadSignal = "ipc-stream" | "session-index";
 type DesktopStreamThread = {
@@ -30,6 +33,10 @@ export type DesktopStreamSnapshot = {
   updatedAt: string;
   changeType: string | null;
   source: "desktop-ipc";
+  userInputs?: UserInputRequest[];
+  approvals?: DesktopApproval[];
+  interactionsAvailable?: boolean;
+  control?: DesktopControlCapability;
 };
 
 export type DesktopControlResult = {
@@ -42,13 +49,12 @@ export type DesktopControlResult = {
   result?: unknown;
   warning?: string;
   error?: string;
+  delivery?: NativeControlOutcome["delivery"];
+  turnStatus?: NativeControlOutcome["turnStatus"];
 };
 
 export class DesktopControl {
-  private readonly client = new DesktopIpcClient({
-    clientType: "mobile-codex-relay-desktop-control",
-    requestTimeoutMs: 120_000,
-  });
+  private readonly client: DesktopIpcClient;
   private readonly macosUi = new MacosUiInjector();
   private readonly uiVerificationTimeoutMs = Math.max(0, Number(process.env.MOBILE_CODEX_UI_VERIFY_TIMEOUT_MS ?? 1500));
   private activeConversationId: string | null = null;
@@ -57,13 +63,207 @@ export class DesktopControl {
   private readonly streamSnapshots = new Map<string, DesktopStreamSnapshot>();
   private readonly streamWaiters = new Set<() => void>();
   private readonly streamSnapshotListeners = new Set<(snapshot: DesktopStreamSnapshot) => void>();
+  private readonly followed = new Map<string, FollowedThread>();
+  private readonly unconfirmedQuestions = new Map<string, PendingQuestion>();
+  private retryTimer: NodeJS.Timeout | null = null;
+  private retryAttempt = 0;
+  private stopped = false;
+  private readonly confirmationMs: number;
+  private readonly nativeControl: DesktopNativeControl;
+  private readonly approvalControl: DesktopApprovals;
+  private readonly transport: DesktopTransport;
+  readonly messageQueue: DesktopMessageQueue;
 
-  constructor(private readonly store: CodexStore) {
+  constructor(private readonly store: CodexStore, options: { client?: DesktopIpcClient; codexHome?: string; confirmationMs?: number; transport?: DesktopTransport } = {}) {
+    this.client = options.client ?? new DesktopIpcClient({ clientType: "mobile-codex-relay-desktop-control", pipePath: getDesktopIpcPipePath(options.codexHome), requestTimeoutMs: 5_000 });
+    this.confirmationMs = options.confirmationMs ?? 2_000;
+    this.transport = options.transport ?? (process.platform === "darwin" ? "legacy" : "native");
+    this.nativeControl = new DesktopNativeControl({
+      read: id => {
+        const session = this.followed.get(id), state = record(this.streamStates.get(id));
+        return session?.owner && session.revision != null && state && this.client.getStatus().initialized
+          ? { owner: session.owner, epoch: session.epoch, state } : null;
+      },
+      request: (method, params, owner, version) => this.client.sendRequest(method, params, { targetClientId: owner, version }),
+      wait: finished => this.waitForNativeConfirmation(finished),
+      changed: id => this.emitStreamSnapshot(id, "control"),
+    });
+    this.messageQueue = new DesktopMessageQueue({
+      view: id => { const snapshot = this.streamSnapshots.get(id); return snapshot && this.transport === "native" ? { control: this.nativeControl.capability(id, this.transport), status: snapshot.status } : null; },
+      confirmed: (id, messageId) => this.nativeControl.messageConfirmed(id, messageId),
+      send: input => this.nativeControl.send(input),
+      follow: id => this.followThread(id),
+      changed: id => this.emitStreamSnapshot(id, "queue"),
+    });
+    this.approvalControl = new DesktopApprovals({
+      read: id => {
+        const session = this.followed.get(id), state = record(this.streamStates.get(id));
+        return session?.owner && session.revision != null && state && this.client.getStatus().initialized
+          ? { owner: session.owner, epoch: session.epoch, state } : null;
+      },
+      request: (method, params, owner) => this.client.sendRequest(method, params, { targetClientId: owner, version: 1 }),
+      wait: finished => this.waitForNativeConfirmation(finished),
+      changed: id => this.emitStreamSnapshot(id, "approval"),
+    });
     this.client.onAnyMessage((message) => this.handleIpcMessage(message));
+    this.client.onDisconnect(() => {
+      for (const [id, session] of this.followed) this.invalidateFollow(id, session);
+      this.scheduleFollowRetry();
+    });
   }
 
   async stop(): Promise<void> {
+    this.stopped = true;
+    await this.messageQueue.stop();
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    for (const [id, session] of this.followed) this.invalidateFollow(id, session);
+    this.followed.clear();
     await this.client.disconnect();
+  }
+
+  followThread(threadId: string): () => void {
+    if (this.stopped) return () => {};
+    let session = this.followed.get(threadId);
+    if (!session) {
+      if (this.followed.size >= 16) throw interactionError("desktop_follow_limit", 429);
+      session = { refs: 0, epoch: randomUUID(), owner: null, revision: null, connecting: false, questions: new Map() };
+      this.followed.set(threadId, session);
+    }
+    session.refs++;
+    void this.connectFollow(threadId, session);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      if (--session.refs > 0 || this.followed.get(threadId) !== session) return;
+      this.followed.delete(threadId);
+      this.invalidateFollow(threadId, session);
+      void this.client.sendBroadcast("thread-stream-following-changed", { conversationId: threadId, hostId: "local", following: false }, 1).catch(() => {});
+    };
+  }
+
+  private async connectFollow(threadId: string, session: FollowedThread): Promise<void> {
+    if (session.connecting || session.owner || this.stopped) return;
+    const epoch = session.epoch;
+    session.connecting = true;
+    try {
+      await this.client.connect();
+      const owner = await this.client.sendRequest("thread-owner-discovery", { conversationId: threadId, hostId: "local" }, { version: 1 });
+      if (this.followed.get(threadId) !== session || session.epoch !== epoch || this.stopped) return;
+      if (owner.resultType !== "success" || !owner.handledByClientId) throw interactionError("desktop_owner_unavailable");
+      session.owner = owner.handledByClientId;
+      await this.client.sendBroadcast("thread-stream-following-changed", { conversationId: threadId, hostId: "local", following: true }, 1, [session.owner]);
+      if (session.revision == null && session.epoch === epoch) {
+        session.deadline = setTimeout(() => { this.invalidateFollow(threadId, session); this.scheduleFollowRetry(); }, 5_000);
+        session.deadline.unref();
+      }
+    } catch {
+      if (session.epoch === epoch) this.invalidateFollow(threadId, session);
+      this.scheduleFollowRetry();
+    } finally {
+      session.connecting = false;
+    }
+  }
+
+  private scheduleFollowRetry(): void {
+    if (this.stopped || !this.followed.size || this.retryTimer) return;
+    const delayMs = Math.min(30_000, 1000 * 2 ** Math.min(this.retryAttempt++, 5));
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      for (const [id, session] of this.followed) void this.connectFollow(id, session);
+    }, delayMs * (0.75 + Math.random() * 0.25));
+    this.retryTimer.unref();
+  }
+
+  private invalidateFollow(threadId: string, session: FollowedThread): void {
+    clearTimeout(session.deadline); session.deadline = undefined;
+    for (const pending of this.unconfirmedQuestions.values()) if (pending.threadId === threadId) pending.status = "uncertain";
+    session.epoch = randomUUID(); session.owner = null; session.revision = null; session.questions.clear();
+    this.approvalControl.invalidate(threadId);
+    this.streamStates.delete(threadId);
+    const previous = this.streamSnapshots.get(threadId);
+    if (previous) {
+      const snapshot = { ...previous, userInputs: [], approvals: [], interactionsAvailable: false, control: this.nativeControl.capability(threadId, this.transport), changeType: "disconnected", updatedAt: new Date().toISOString() };
+      if (this.transport === "native") snapshot.control.queue = this.messageQueue.snapshot(threadId);
+      this.streamSnapshots.set(threadId, snapshot);
+      for (const listener of this.streamSnapshotListeners) listener(snapshot);
+    }
+    for (const waiter of [...this.streamWaiters]) waiter();
+  }
+
+  async respondUserInput(threadId: string, inputId: string, value: unknown): Promise<{ status: "resolved" | "submitted" | "uncertain" }> {
+    const session = this.followed.get(threadId);
+    const binding = session?.questions.get(inputId);
+    if (!session || !binding || !session.owner || session.revision == null || !this.client.getStatus().initialized) throw interactionError("question_expired");
+    if (binding.view.status !== "pending" || this.unconfirmedQuestions.has(binding.signature)) throw interactionError("question_already_submitted");
+    const answers = validateQuestionAnswers(binding.view, value);
+    const candidate = binding.candidate;
+    const capability = candidate.kind === "desktop-async" ? this.nativeControl.capability(threadId, "native") : null;
+    if (capability && !capability.canSend) throw interactionError("desktop_submission_pending");
+    if (capability?.activeTurnId != null && capability.activeTurnId !== candidate.turnId) throw interactionError("question_expired");
+    if (this.unconfirmedQuestions.size >= 128) throw interactionError("desktop_question_limit", 429);
+    const epoch = session.epoch;
+    const owner = session.owner;
+    const pending: PendingQuestion = { threadId, status: "submitting" };
+    this.unconfirmedQuestions.set(binding.signature, pending);
+    binding.view.status = "submitting";
+    this.emitStreamSnapshot(threadId, "user-input");
+    try {
+      if (capability) {
+        const outcome = await this.nativeControl.send({
+          threadId, controlToken: capability.token!, expectedTurnId: capability.activeTurnId,
+          clientMessageId: randomUUID(), message: asyncQuestionReply(binding.view, answers),
+          mode: capability.activeTurnId ? "steer" : "start",
+        });
+        if (session.epoch !== epoch) throw interactionError("question_response_unknown");
+        if (!session.questions.has(inputId)) return { status: "resolved" };
+        if (outcome.delivery === "uncertain") throw interactionError("question_response_unknown");
+      } else {
+        const method = "thread-follower-submit-user-input";
+        const response = await this.client.sendRequest(method, {
+          conversationId: threadId, requestId: candidate.requestId,
+          response: { answers: Object.fromEntries(Object.entries(answers).map(([id, values]) => [id, { answers: values }])) },
+        }, { targetClientId: owner, version: 1 });
+        if (session.epoch !== epoch) throw interactionError("question_response_unknown");
+        if (!session.questions.has(inputId)) return { status: "resolved" };
+        const outer = record(response.result), result = record(outer?.result ?? outer);
+        if (response.resultType !== "success" || response.method !== method || response.handledByClientId !== owner || (outer?.method != null && outer.method !== method) || result?.ok !== true) throw interactionError("question_response_unknown");
+      }
+      pending.status = binding.view.status = "submitted";
+      this.emitStreamSnapshot(threadId, "user-input");
+      // An IPC acknowledgement can also mean the owner ignored a stale request.
+      // Only a subsequent authoritative state proves that the question was handled.
+      if (!capability) await this.waitForQuestionResolution(session, inputId, epoch);
+      if (session.epoch !== epoch) return { status: "uncertain" };
+      return { status: session.questions.has(inputId) ? "submitted" : "resolved" };
+    } catch {
+      if (session.epoch === epoch && !session.questions.has(inputId)) return { status: "resolved" };
+      pending.status = "uncertain";
+      if (session.epoch === epoch && session.questions.has(inputId)) {
+        binding.view.status = "uncertain";
+        this.emitStreamSnapshot(threadId, "user-input");
+      }
+      return { status: "uncertain" };
+    }
+  }
+
+  private waitForQuestionResolution(session: FollowedThread, id: string, epoch: string): Promise<void> {
+    return this.waitForNativeConfirmation(() => !session.questions.has(id) || session.epoch !== epoch);
+  }
+
+  respondApproval(threadId: string, approvalId: string, decision: DesktopApprovalDecision) {
+    return this.approvalControl.respond(threadId, approvalId, decision);
+  }
+
+  private waitForNativeConfirmation(finished: () => boolean): Promise<void> {
+    if (finished()) return Promise.resolve();
+    return new Promise(resolve => {
+      const done = () => { clearTimeout(timer); this.streamWaiters.delete(check); resolve(); };
+      const check = () => { if (finished()) done(); };
+      const timer = setTimeout(done, this.confirmationMs);
+      this.streamWaiters.add(check);
+    });
   }
 
   async status(): Promise<{
@@ -78,7 +278,7 @@ export class DesktopControl {
     capabilities: string[];
     error?: string;
   }> {
-    if (process.platform === "darwin") {
+    if (process.platform === "darwin" && this.transport === "legacy") {
       await this.client.connect().catch(() => undefined);
       const { thread: activeThread, source: activeThreadSource } = await this.getActiveThreadFromSignals();
       return {
@@ -143,56 +343,28 @@ export class DesktopControl {
     message: string;
     cwd?: string | null;
     mode?: DesktopControlMode;
+    clientMessageId?: string;
+    controlToken?: string;
+    expectedTurnId?: string | null;
+    owner?: string;
   }): Promise<DesktopControlResult> {
     const thread = await this.getThread(params.threadId);
-    const cwd = params.cwd ?? thread?.cwd ?? null;
-    const mode = params.mode ?? "auto";
 
-    if (process.platform === "darwin") {
+    if (process.platform === "darwin" && this.transport === "legacy") {
+      if (params.mode === "queue") throw interactionError("desktop_queue_unavailable", 409);
       return this.sendViaMacosUi(params.threadId, params.message, thread);
     }
-
-    if (mode !== "start") {
-      const steer = await this.tryDesktopRequest("thread-follower-steer-turn", {
-        conversationId: params.threadId,
-        input: toInput(params.message),
-        attachments: [],
-        restoreMessage: toRestoreMessage(cwd),
-      });
-      if (steer.ok || mode === "steer") return this.toResult("steer-turn", thread, steer);
-      if (!isExpectedSteerMiss(steer.error)) return this.toResult("steer-turn", thread, steer);
+    if (params.mode === "queue") {
+      if (!params.clientMessageId) throw interactionError("desktop_control_refresh_required");
+      await this.messageQueue.enqueue({ threadId: params.threadId, clientMessageId: params.clientMessageId, message: params.message }, params.owner ?? "admin", () => { this.nativeControl.validate(params); });
+      return { ok: true, action: "queue-message", delivery: "confirmed", mode: "desktop-ipc-follower-control", thread, ipc: this.client.getStatus() };
     }
-
-    const started = await this.tryDesktopRequest("thread-follower-start-turn", {
-      conversationId: params.threadId,
-      turnStartParams: {
-        input: toInput(params.message),
-        cwd,
-        inheritThreadSettings: true,
-      },
-    });
-    return this.toResult("start-turn", thread, started);
+    return { ...await this.nativeControl.send({ ...params, mode: params.mode }), mode: "desktop-ipc-follower-control", thread, ipc: this.client.getStatus() };
   }
 
-  async interruptThread(threadId: string): Promise<DesktopControlResult> {
+  async interruptThread(threadId: string, guard: Omit<NativeControlInput, "threadId"> = {}): Promise<DesktopControlResult> {
     const thread = await this.getThread(threadId);
-    const interrupted = await this.tryDesktopRequest("thread-follower-interrupt-turn", {
-      conversationId: threadId,
-    });
-    return this.toResult("interrupt-turn", thread, interrupted);
-  }
-
-  private async tryDesktopRequest(method: string, params: unknown): Promise<{ ok: boolean; ipc: DesktopIpcClientStatus; result?: unknown; error?: string }> {
-    try {
-      await this.client.connect();
-      const response = await this.client.sendRequest(method, params, { version: 1 });
-      if (response.resultType === "error") {
-        return { ok: false, ipc: this.client.getStatus(), error: response.error ?? "desktop-ipc-request-failed" };
-      }
-      return { ok: true, ipc: this.client.getStatus(), result: unwrapThreadFollowerResult(response) };
-    } catch (error) {
-      return { ok: false, ipc: this.client.getStatus(), error: toErrorMessage(error) };
-    }
+    return { ...await this.nativeControl.interrupt({ threadId, ...guard }), mode: "desktop-ipc-follower-control", thread, ipc: this.client.getStatus() };
   }
 
   private async sendViaMacosUi(
@@ -277,14 +449,36 @@ export class DesktopControl {
 
   private handleIpcMessage(message: unknown): void {
     if (!isDesktopBroadcast(message)) return;
+    if (message.method === "ipc-connection-reset" || message.method === "client-status-changed") {
+      const params = record(message.params);
+      for (const [id, session] of this.followed) {
+        if (message.method === "ipc-connection-reset" || (params?.status === "disconnected" && params.clientId === session.owner)) this.invalidateFollow(id, session);
+      }
+      this.scheduleFollowRetry();
+      return;
+    }
+    if (message.method === "thread-stream-following-status-requested") {
+      const params = record(message.params);
+      const id = typeof params?.conversationId === "string" ? params.conversationId : "";
+      const session = this.followed.get(id);
+      if (session?.owner && params?.hostId === "local") void this.client.sendBroadcast("thread-stream-following-changed", { conversationId: id, hostId: "local", following: true }, 1, [session.owner]).catch(() => {});
+      return;
+    }
     if (message.method !== "thread-stream-state-changed") return;
     const conversationId = getConversationId(message.params);
     if (!conversationId) return;
+    const session = this.followed.get(conversationId);
+    if (message.version === 11) {
+      if (!session || !this.applyFollowedChange(conversationId, session, message)) return;
+    } else {
+      // Legacy broadcasts remain read-only. They cannot validate pending questions.
+      if (session || (message.version !== undefined && message.version !== 1)) return;
+      this.applyStreamChange(conversationId, message.params);
+    }
     this.pruneStreams(conversationId);
     const existing = this.streamThreads.get(conversationId);
     const now = new Date().toISOString();
     const changeType = getChangeType(message.params);
-    this.applyStreamChange(conversationId, message.params);
 
     this.streamThreads.set(conversationId, {
       conversationId,
@@ -301,10 +495,49 @@ export class DesktopControl {
     for (const waiter of [...this.streamWaiters]) waiter();
   }
 
+  private applyFollowedChange(threadId: string, session: FollowedThread, message: { sourceClientId?: unknown; params?: unknown }): boolean {
+    const params = record(message.params), change = record(params?.change);
+    if (!session.owner || message.sourceClientId !== session.owner || params?.hostId !== "local" || !change) return false;
+    if (!Number.isSafeInteger(change.revision) || Number(change.revision) < 0) return false;
+    const revision = Number(change.revision);
+    if (session.revision != null && revision < session.revision) return false;
+    let state: Record<string, unknown> | null = null;
+    if (change.type === "snapshot") {
+      state = record(change.conversationState);
+      if (!state || state.id !== threadId || (state.hostId != null && state.hostId !== "local")) return false;
+    } else if (change.type === "patches") {
+      if (session.revision === revision) return false;
+      if (session.revision == null || change.baseRevision !== session.revision || !Array.isArray(change.patches)) {
+        this.invalidateFollow(threadId, session); this.scheduleFollowRetry(); void this.connectFollow(threadId, session); return false;
+      }
+      try { state = record(applyStatePatches(this.streamStates.get(threadId), change.patches, true)); }
+      catch { this.invalidateFollow(threadId, session); this.scheduleFollowRetry(); void this.connectFollow(threadId, session); return false; }
+      if (!state || state.id !== threadId) return false;
+    } else return false;
+    this.streamStates.set(threadId, state);
+    clearTimeout(session.deadline); session.deadline = undefined;
+    this.retryAttempt = 0;
+    session.revision = revision;
+    this.approvalControl.sync(threadId, state);
+    const previous = new Map([...session.questions.values()].map(binding => [binding.candidate.key, binding]));
+    const candidates = desktopQuestionCandidates(threadId, state).map(candidate => ({ candidate, signature: createHash("sha256").update(JSON.stringify(candidate)).digest("hex") }));
+    const signatures = new Set(candidates.map(({ signature }) => signature));
+    for (const [signature, pending] of this.unconfirmedQuestions) if (pending.threadId === threadId && !signatures.has(signature)) this.unconfirmedQuestions.delete(signature);
+    session.questions.clear();
+    for (const { candidate, signature } of candidates) {
+      const old = previous.get(candidate.key);
+      const binding: QuestionBinding = old?.signature === signature ? old : { candidate, signature, view: {
+        id: randomUUID(), threadId, turnId: candidate.turnId, kind: candidate.kind, status: this.unconfirmedQuestions.get(signature)?.status ?? "pending", questions: candidate.questions,
+      } };
+      session.questions.set(binding.view.id, binding);
+    }
+    return true;
+  }
+
   private pruneStreams(incomingId: string) {
     const ordered = [...this.streamThreads.entries()].sort(([,a],[,b]) => Date.parse(a.lastSeenAt) - Date.parse(b.lastSeenAt));
     for (const [id, thread] of ordered) {
-      if (id === incomingId || id === this.activeConversationId) continue;
+      if (id === incomingId || id === this.activeConversationId || this.followed.has(id)) continue;
       if (this.streamThreads.size < 16 && Date.now() - Date.parse(thread.lastSeenAt) < 30 * 60_000) continue;
       this.streamThreads.delete(id); this.streamStates.delete(id); this.streamSnapshots.delete(id);
     }
@@ -335,28 +568,20 @@ export class DesktopControl {
     const streamThread = this.streamThreads.get(conversationId);
     const snapshot = conversationToStreamSnapshot(conversationId, conversationState, changeType, streamThread?.eventCount ?? 0);
     if (!snapshot) return;
+    const session = this.followed.get(conversationId);
+    snapshot.interactionsAvailable = Boolean(session?.owner && session.revision != null);
+    snapshot.control = this.nativeControl.capability(conversationId, this.transport);
+    if (this.transport === "native") snapshot.control.queue = this.messageQueue.snapshot(conversationId);
+    snapshot.userInputs = session ? [...session.questions.values()].map(binding => ({ ...binding.view })) : [];
+    snapshot.approvals = snapshot.interactionsAvailable ? this.approvalControl.snapshot(conversationId) : [];
     this.streamSnapshots.set(conversationId, snapshot);
     for (const listener of [...this.streamSnapshotListeners]) listener(snapshot);
+    this.messageQueue.notify(conversationId);
   }
 
-  private toResult(
-    action: DesktopControlAction,
-    thread: CodexThreadSummary | null,
-    response: { ok: boolean; ipc: DesktopIpcClientStatus; result?: unknown; error?: string },
-  ): DesktopControlResult {
-    return {
-      ok: response.ok,
-      mode: "desktop-ipc-follower-control",
-      action,
-      thread,
-      ipc: response.ipc,
-      result: response.result,
-      error: response.error,
-    };
-  }
 }
 
-function isDesktopBroadcast(value: unknown): value is { type: "broadcast"; method: string; sourceClientId?: unknown; params?: unknown } {
+function isDesktopBroadcast(value: unknown): value is { type: "broadcast"; method: string; sourceClientId?: unknown; version?: number; params?: unknown } {
   return Boolean(value && typeof value === "object" && (value as { type?: unknown }).type === "broadcast");
 }
 
@@ -402,7 +627,7 @@ function conversationToStreamSnapshot(
 }
 
 function extractConversationMessages(state: Record<string, unknown>): CodexMessage[] {
-  const turns = Array.isArray(state.turns) ? state.turns : [];
+  const turns = conversationTurns(state);
   const messages: CodexMessage[] = [];
   turns.forEach((turn, turnIndex) => {
     if (!turn || typeof turn !== "object") return;
@@ -419,11 +644,14 @@ function extractConversationMessages(state: Record<string, unknown>): CodexMessa
         role: "user",
         text: inputText,
         kind: "userMessage",
+        turnId,
+        ...(typeof record.params === "object" && record.params && typeof (record.params as Record<string, unknown>).clientUserMessageId === "string"
+          ? { clientMessageId: (record.params as Record<string, unknown>).clientUserMessageId as string } : {}),
       });
     }
     items.forEach((item, itemIndex) => {
       const message = desktopItemToMessage(item, turnId, itemIndex, timestamp);
-      if (message) messages.push(message);
+      if (message) messages.push(typeof record.turnId === "string" ? { ...message, turnId: record.turnId } : message);
     });
   });
   return dedupeStreamMessages(messages);
@@ -437,13 +665,19 @@ function desktopItemToMessage(item: unknown, turnId: string, itemIndex: number, 
   const itemId = typeof record.id === "string" ? record.id : `${type}-${itemIndex}`;
   const id = `desktop-${turnId}-${itemId}`;
   const timestamp = timestampFromItem(record) ?? fallbackTimestamp;
-  if (type === "userMessage") {
-    const text = extractDesktopInputText(record.content);
-    return text && isDisplayableUserText(text) ? { id, timestamp, role: "user", text, kind: type } : null;
+  if (type === "userMessage" || type === "steeringUserMessage") {
+    if (type === "steeringUserMessage" && record.status !== "accepted") return null;
+    const text = extractDesktopInputText(type === "userMessage" ? record.content : record.input);
+    const clientMessageId = typeof record.clientUserMessageId === "string" ? record.clientUserMessageId : record.clientId;
+    return text && isDisplayableUserText(text) ? { id, timestamp, role: "user", text, kind: "userMessage", turnId,
+      ...(typeof clientMessageId === "string" ? { clientMessageId } : {}) } : null;
   }
   if (type === "agentMessage") {
     const text = typeof record.text === "string" ? record.text : "";
-    return text.trim() ? { id, timestamp, role: "assistant", text, kind: type } : null;
+    return text.trim() ? { id, timestamp, role: "assistant", text, kind: type,
+      ...(typeof record.id === "string" ? { sourceItemId: record.id } : {}),
+      ...(record.phase === "commentary" || record.phase === "final_answer" ? { phase: record.phase } : {}),
+    } : null;
   }
   if (type === "plan") {
     const text = typeof record.text === "string" ? record.text : "";
@@ -493,6 +727,7 @@ function isGeneratedContextText(trimmed: string): boolean {
     trimmed.startsWith("<personality_spec>") ||
     trimmed.startsWith("<skills_instructions>") ||
     trimmed.startsWith("<plugins_instructions>") ||
+    trimmed.startsWith("<send_user_message_question_reply>") ||
     trimmed.startsWith("# AGENTS.md instructions") ||
     trimmed.startsWith("<INSTRUCTIONS>") ||
     trimmed.startsWith("Knowledge cutoff:") ||
@@ -501,7 +736,7 @@ function isGeneratedContextText(trimmed: string): boolean {
 }
 
 function normalizeStreamStatus(state: Record<string, unknown>): DesktopStreamSnapshot["status"] {
-  const turns = Array.isArray(state.turns) ? state.turns : [];
+  const turns = conversationTurns(state);
   const latest = [...turns].reverse().find((turn) => turn && typeof turn === "object") as Record<string, unknown> | undefined;
   const raw = String(latest?.status ?? state.threadRuntimeStatus ?? "").toLowerCase();
   if (/fail|error/.test(raw)) return "failed";
@@ -548,9 +783,27 @@ function dedupeStreamMessages(messages: CodexMessage[]): CodexMessage[] {
   return order.map((id) => byId.get(id)).filter((message): message is CodexMessage => Boolean(message));
 }
 
-function applyStatePatches(target: unknown, patches: unknown[]): unknown {
-  const next = structuredClone(target);
-  for (const patch of patches) applyStatePatch(next, patch);
+function applyStatePatches(target: unknown, patches: unknown[], strict = false): unknown {
+  let next = structuredClone(target);
+  for (const patch of patches) {
+    if (strict) {
+      const value = record(patch);
+      const path = value?.path;
+      if (!value || !["add", "remove", "replace"].includes(String(value.op)) || !Array.isArray(path) || path.some(key => !["string", "number"].includes(typeof key) || ["__proto__", "prototype", "constructor"].includes(String(key)))) throw new Error("desktop-patch-invalid");
+      if (!path.length) {
+        if (value.op === "remove") throw new Error("desktop-patch-root-remove");
+        next = structuredClone(value.value); continue;
+      }
+      let parent = next;
+      for (const key of path.slice(0, -1)) {
+        if (!parent || typeof parent !== "object" || !Object.hasOwn(parent, key)) throw new Error("desktop-patch-path");
+        parent = (parent as Record<string, unknown>)[key];
+      }
+      const key = path.at(-1)!;
+      if (!parent || typeof parent !== "object" || (Array.isArray(parent) && (!Number.isSafeInteger(key) || key < 0 || key > parent.length || (value.op !== "add" && key === parent.length))) || (value.op !== "add" && !Object.hasOwn(parent, key))) throw new Error("desktop-patch-path");
+    }
+    applyStatePatch(next, patch);
+  }
   return next;
 }
 
@@ -605,41 +858,6 @@ function getPatchParent(target: unknown, path: Array<string | number>): unknown 
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-function toInput(text: string): CodexTextInput[] {
-  return [{ type: "text", text, text_elements: [] }];
-}
-
-function toRestoreMessage(cwd: string | null) {
-  return {
-    cwd,
-    context: {
-      workspaceRoots: cwd ? [cwd] : [],
-      collaborationMode: null,
-      commentAttachments: [],
-    },
-    responsesapiClientMetadata: null,
-  };
-}
-
-function unwrapThreadFollowerResult(response: DesktopIpcResponse): unknown {
-  const result = response.result;
-  if (result && typeof result === "object" && "result" in result) {
-    return (result as { result: unknown }).result;
-  }
-  return result;
-}
-
-function isExpectedSteerMiss(error: string | undefined): boolean {
-  const message = (error ?? "").toLowerCase();
-  return (
-    message.includes("cannot steer") ||
-    message.includes("without an active turn") ||
-    message.includes("no active turn") ||
-    message.includes("run ended") ||
-    message.includes("conversation is not being streamed")
-  );
 }
 
 function toErrorMessage(error: unknown): string {

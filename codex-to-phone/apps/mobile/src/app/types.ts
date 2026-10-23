@@ -11,6 +11,10 @@ export type ThreadSummary = {
 
 export type CodexMessage = {
   id: string;
+  clientMessageId?: string;
+  sourceItemId?: string;
+  turnId?: string;
+  phase?: "commentary" | "final_answer";
   timestamp: string;
   role: string;
   text: string;
@@ -107,6 +111,11 @@ export type ThreadRuntime = {
   lastEventCount: number;
   lastTurnError: string;
   approvals: LiveApproval[];
+  userInputs?: UserInputRequest[];
+  desktopControl?: DesktopControlCapability;
+  desktopSubmission?: { clientMessageId: string; delivery: "submitted" | "uncertain" };
+  desktopSendFeedback?: string;
+  desktopInterrupt?: { clientMessageId: string; delivery: "submitted" | "uncertain" };
   smoothMessageId: string | null;
   attachments: PendingAttachment[];
 };
@@ -119,14 +128,19 @@ export type LiveApprovalDecision = "accept" | "acceptForSession" | "decline" | "
 
 export type LiveApproval = {
   id: string;
-  requestId: string | number;
+  requestId?: string | number;
+  source?: "desktop";
+  threadId?: string;
+  turnId?: string;
   kind: "command" | "fileChange" | "permissions" | "unsupported";
-  status: "pending" | "approved" | "declined" | "cancelled" | "failed";
+  status: "pending" | "submitting" | "submitted" | "uncertain" | "approved" | "declined" | "cancelled" | "failed";
   title: string;
   detail: string;
   command: string | null;
   cwd: string | null;
   reason: string | null;
+  preview?: string;
+  unavailableReason?: string | null;
   availableDecisions: LiveApprovalDecision[];
   createdAt: string;
   updatedAt: string;
@@ -140,6 +154,7 @@ export type LiveTurnSnapshot = {
   eventCount: number;
   messages: CodexMessage[];
   approvals: LiveApproval[];
+  userInputs?: UserInputRequest[];
   thread: ThreadSummary | null;
   error: string | null;
   updatedAt: string;
@@ -154,21 +169,55 @@ export type DesktopStreamSnapshot = {
   updatedAt: string;
   changeType: string | null;
   source: "desktop-ipc";
+  userInputs?: UserInputRequest[];
+  interactionsAvailable?: boolean;
+  approvals?: LiveApproval[];
+  control?: DesktopControlCapability;
+};
+
+export type DesktopControlCapability = {
+  transport: "legacy" | "native";
+  token: string | null;
+  activeTurnId: string | null;
+  canSend: boolean;
+  canInterrupt: boolean;
+  queue?: { available: boolean; items: { clientMessageId: string; text: string; status: "waiting" | "sending" | "uncertain" | "paused"; createdAt: string }[] };
+  submission: { clientMessageId: string; action: "start-turn" | "steer-turn" | "interrupt-turn"; delivery: "confirmed" | "submitted" | "uncertain"; turnStatus?: LiveTurnStatus } | null;
+};
+
+export type UserInputRequest = {
+  id: string;
+  threadId: string;
+  turnId: string;
+  kind: "desktop-sync" | "desktop-async" | "relay";
+  status: "pending" | "submitting" | "submitted" | "uncertain";
+  questions: {
+    id: string;
+    header: string;
+    question: string;
+    options: { label: string; description: string }[];
+    allowOther: boolean;
+    secret: boolean;
+  }[];
 };
 
 export type DesktopControlResponse = {
   ok: boolean;
   mode: "desktop-ipc-follower-control" | "macos-ui-injector-control";
-  action: "start-turn" | "steer-turn" | "interrupt-turn" | "ui-submit";
+  action: "start-turn" | "steer-turn" | "interrupt-turn" | "ui-submit" | "queue-message";
   thread: ThreadSummary | null;
   warning?: string;
   error?: string;
+  delivery?: "confirmed" | "submitted" | "uncertain";
+  turnStatus?: LiveTurnStatus;
 };
 
 export type LoadThreadsOptions = {
   selectLatest?: boolean;
   append?: boolean;
   search?: string;
+  range?: "recent" | "all";
+  silent?: boolean;
 };
 
 export type ConnectionProfile = {
@@ -185,8 +234,8 @@ export type AndroidUpdateManifest = {
   versionName: string;
   versionCode: number;
   apkUrl: string;
-  size?: number;
-  sha256?: string;
+  size: number;
+  sha256: string;
   mandatory?: boolean;
   notes?: string;
   publishedAt?: string;

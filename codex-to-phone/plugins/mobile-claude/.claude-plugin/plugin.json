@@ -1,0 +1,6 @@
+{
+  "name": "mobile-codex-bridge",
+  "version": "0.1.1",
+  "author": { "name": "Mobile Codex contributors" },
+  "description": "Connect this Claude Code session to the Mobile Codex gateway using native function hooks."
+}

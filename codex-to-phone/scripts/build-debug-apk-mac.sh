@@ -49,7 +49,7 @@ corepack pnpm --filter @mobile-codex/mobile exec cap sync android
 node scripts/normalize-capacitor-config.mjs
 
 pushd apps/mobile/android >/dev/null
-gradle assembleDebug --no-daemon
+gradle :app:clean :app:assembleDebug --no-daemon
 popd >/dev/null
 
 mkdir -p dist-apk

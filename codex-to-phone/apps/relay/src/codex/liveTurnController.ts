@@ -1,5 +1,7 @@
 import { AppServerClient } from "./appServerClient.js";
 import { EventEmitter } from "node:events";
+import { randomUUID } from "node:crypto";
+import { interactionError, parseUserInputQuestions, validateQuestionAnswers, type UserInputRequest } from "../desktop/desktopQuestions.js";
 import type { CodexMessage, CodexThreadSummary } from "../store/codexStore.js";
 
 type AppThread = {
@@ -94,6 +96,7 @@ export type LiveTurnSnapshot = {
   messages: CodexMessage[];
   events: LiveTurnEvent[];
   approvals: LiveApproval[];
+  userInputs: UserInputRequest[];
   thread: CodexThreadSummary | null;
   error: string | null;
   updatedAt: string;
@@ -104,6 +107,7 @@ type LiveTurnState = LiveTurnSnapshot & {
   approvalParams: Map<string, Record<string, unknown>>;
   snapshotTimer: NodeJS.Timeout | null;
   pendingSnapshot: boolean;
+  userInputRequests: Map<string, { requestId: string | number; client: AppServerClient }>;
 };
 
 export class LiveTurnController extends EventEmitter {
@@ -293,6 +297,23 @@ export class LiveTurnController extends EventEmitter {
     return this.snapshot(state);
   }
 
+  respondUserInput(params: { threadId: string; turnId: string; inputId: string; answers: unknown }): LiveTurnSnapshot {
+    const state = this.turns.get(params.turnId);
+    if (!state) throw interactionError("question_expired");
+    const input = state.userInputs.find(item => item.id === params.inputId);
+    const binding = state.userInputRequests.get(params.inputId);
+    if (state.threadId !== params.threadId || state.status !== "inProgress" || !input || !binding || binding.client !== this.client || !this.client?.isConnected()) throw interactionError("question_expired");
+    if (input.status !== "pending") throw interactionError("question_already_submitted");
+    const answers = validateQuestionAnswers(input, params.answers);
+    input.status = "submitting";
+    try {
+      this.client.respond(binding.requestId, { answers: Object.fromEntries(Object.entries(answers).map(([id, values]) => [id, { answers: values }])) });
+      input.status = "submitted";
+    } catch { input.status = "uncertain"; }
+    this.emitSnapshotNow(state);
+    return this.snapshot(state);
+  }
+
   async stop(): Promise<void> {
     ++this.clientGeneration;
     const clients = new Set([this.client, this.initializingClient]);
@@ -301,6 +322,7 @@ export class LiveTurnController extends EventEmitter {
     this.starting = null;
     await Promise.all([...clients].map((client) => client?.stop()));
     for (const state of this.turns.values()) {
+      state.userInputs = []; state.userInputRequests.clear();
       if (state.snapshotTimer) clearTimeout(state.snapshotTimer);
     }
   }
@@ -344,14 +366,33 @@ export class LiveTurnController extends EventEmitter {
 
   private handleNotification(event: RpcEvent): void {
     const params = event.params ?? {};
+    if (event.method === "serverRequest/resolved") {
+      for (const state of this.turns.values()) {
+        if (typeof params.threadId === "string" && params.threadId !== state.threadId) continue;
+        for (const [id, binding] of state.userInputRequests) {
+          if (binding.requestId !== params.requestId) continue;
+          state.userInputRequests.delete(id);
+          state.userInputs = state.userInputs.filter(input => input.id !== id);
+          this.emitSnapshotNow(state);
+        }
+      }
+      return;
+    }
     const turnId = typeof params.turnId === "string" ? params.turnId : getTurnIdFromTurn(params.turn);
     const threadId = typeof params.threadId === "string" ? params.threadId : null;
     const state = turnId ? this.turns.get(turnId) : threadId ? this.getStateByThread(threadId) : null;
 
-    if (!state) return;
+    if (!state || (threadId && threadId !== state.threadId)) return;
 
     if (event.id !== undefined) {
-      this.addApprovalRequest(state, event);
+      if (state.status !== "starting" && state.status !== "inProgress") return;
+      if (event.method === "item/tool/requestUserInput") {
+        const questions = parseUserInputQuestions(params.questions);
+        if (!questions || !this.client || [...state.userInputRequests.values()].some(item => item.requestId === event.id)) return;
+        const id = randomUUID();
+        state.userInputRequests.set(id, { requestId: event.id, client: this.client });
+        state.userInputs.push({ id, threadId: state.threadId, turnId: state.turnId, kind: "relay", status: "pending", questions });
+      } else this.addApprovalRequest(state, event);
       this.emitSnapshot(state);
       return;
     }
@@ -432,6 +473,8 @@ export class LiveTurnController extends EventEmitter {
       ],
       events: [],
       approvals: [],
+      userInputs: [],
+      userInputRequests: new Map(),
       thread: params.thread,
       error: null,
       updatedAt: timestamp,
@@ -541,6 +584,7 @@ export class LiveTurnController extends EventEmitter {
       messages: state.messages,
       events: state.events,
       approvals: state.approvals,
+      userInputs: state.userInputs.map(input => ({ ...input })),
       thread: state.thread,
       error: state.error,
       updatedAt: state.updatedAt,
@@ -549,6 +593,7 @@ export class LiveTurnController extends EventEmitter {
 
   private emitSnapshot(state: LiveTurnState): void {
     if (state.status === "completed" || state.status === "interrupted" || state.status === "failed") {
+      state.userInputs = []; state.userInputRequests.clear();
       this.emitSnapshotNow(state);
       return;
     }

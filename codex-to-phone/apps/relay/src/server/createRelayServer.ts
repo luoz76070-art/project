@@ -5,7 +5,7 @@ import { snapshotSender } from "./snapshotPatch.js";
 import { SubmissionRegistry } from "./submissions.js";
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import type { PassThrough } from "node:stream";
 import { createEventStream } from "./eventStream.js";
@@ -16,28 +16,45 @@ import { DesktopControl, type DesktopStreamSnapshot } from "../desktop/desktopCo
 import { LiveCodex } from "../codex/liveCodex.js";
 import { LiveTurnController, type LiveTurnSnapshot } from "../codex/liveTurnController.js";
 import { UploadStore } from "../store/uploadStore.js";
+import { createAgentGateway, type AgentGateway } from "../agents/agentGateway.js";
+import type { GatewayRuntimeStatus } from "../gateway/managedGateway.js";
+import { createAgentSessionRoutes } from "./agentSessionRoutes.js";
+import { authorizeClaudeBridge, registerClaudeBridgeRoutes } from "./claudeBridgeRoutes.js";
+import { claudeConfigSchema } from "../agents/claudeProtocol.js";
+import { VoiceCredentialStore } from "../voice/credentials.js";
+import { VoiceService } from "../voice/service.js";
+import { registerVoiceRoutes } from "./voiceRoutes.js";
 
 export type RelayServerOptions = {
   config?: RelayConfig;
   logger?: boolean;
+  gateway?: { snapshot: () => GatewayRuntimeStatus; managerKey: string; requestStop: () => void };
   services?: Partial<{
     store: CodexStore;
     live: LiveCodex;
     liveTurns: LiveTurnController;
     desktopControl: DesktopControl;
     uploads: UploadStore;
+    agentGateway: AgentGateway;
+    voice: VoiceService;
   }>;
 };
 
 export async function createRelayServer(options: RelayServerOptions = {}) {
   const config = options.config ?? loadConfig();
+  if (config.claude && (!claudeConfigSchema.safeParse(config.claude).success || config.claude.bridgeToken === config.token)) throw new Error("CLAUDE_CONFIG_INVALID");
   const store = options.services?.store ?? new CodexStore(config.codexHome);
   const live = options.services?.live ?? new LiveCodex(config.defaultCwd);
   const liveTurns = options.services?.liveTurns ?? new LiveTurnController(config.defaultCwd);
-  const desktopControl = options.services?.desktopControl ?? new DesktopControl(store);
+  const desktopControl = options.services?.desktopControl ?? new DesktopControl(store, { codexHome: config.codexHome, transport: config.desktopTransport });
   const uploads = options.services?.uploads ?? new UploadStore(config.defaultCwd);
+  const agentGateway = options.services?.agentGateway ?? createAgentGateway({ codexHome: config.codexHome, opencode: config.opencode, claude: config.claude, deepseek: config.deepseek });
+  const claudeBridge = config.claude ? agentGateway.claudeBridge() : null;
   const submissions = new SubmissionRegistry();
   const devices = await DeviceRegistry.open(path.join(config.defaultCwd, ".mobile-codex", "devices.json"));
+  if (!options.services?.desktopControl && (config.desktopTransport === "native" || (!config.desktopTransport && process.platform !== "darwin"))) await desktopControl.messageQueue.open(path.join(config.defaultCwd, ".mobile-codex", "desktop-queue.json"), owner => devices.has(owner));
+  const voiceCredentials = await VoiceCredentialStore.open(path.join(config.defaultCwd, ".mobile-codex", "voice-credentials.json"));
+  const voice = options.services?.voice ?? new VoiceService();
   const owners = new WeakMap<FastifyRequest, string>();
   const deviceStreams = new Map<string, Set<PassThrough>>();
   const uploadRequests = new Set<string>();
@@ -47,7 +64,10 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const app = Fastify({ logger: options.logger === false ? false : { serializers: { req: req => ({ method: req.method, url: req.url?.split("?")[0] }) }, redact: ["req.headers.authorization"] }, bodyLimit: 36 * 1024 * 1024 });
 
   const streams = new Set<PassThrough>();
-  app.addHook("preClose", async () => { for (const stream of streams) stream.destroy(); });
+  const agentSessionRoutes = createAgentSessionRoutes({ gateway: agentGateway, owners, devices, streams, deviceStreams, submissions });
+  // A route may still await its upstream's first frame before reply.send(stream).
+  // Cancel adapters before HTTP drain, otherwise onClose cannot release that wait.
+  app.addHook("preClose", async () => { voice.stop(); for (const stream of streams) stream.destroy(); await Promise.all([agentGateway.stop(), desktopControl.messageQueue?.stop()]); });
   app.addHook("onClose", async () => { store.close(); await Promise.all([desktopControl.stop(), liveTurns.stop(), live.stop?.()]); });
 
   await app.register(cors, {
@@ -57,11 +77,16 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   app.addHook("onRequest", async (request, reply) => {
     const pathname = request.url.split("?")[0];
     if (pathname === "/health" || pathname === "/api/pairing/consume" || request.method === "OPTIONS") return;
+    if (pathname?.startsWith("/api/claude-bridge/")) {
+      if (!authorizeClaudeBridge(request, config.claude?.bridgeToken)) return reply.code(401).send({ error: "unauthorized" });
+      return;
+    }
     const eventStream = parseLiveEventStreamUrl(request.url);
     const desktopEventStream = parseDesktopEventStreamUrl(request.url);
     let owner: string | null = null;
     if (eventStream && isValidStreamToken(eventStream.streamToken, eventStream.turnId)) owner = streamTokens.get(eventStream.streamToken!)!.owner;
     if (desktopEventStream && isValidDesktopStreamToken(desktopEventStream.streamToken, desktopEventStream.threadId)) owner = desktopStreamTokens.get(desktopEventStream.streamToken!)!.owner;
+    owner ??= agentSessionRoutes.owner(request.url);
     if (!owner) {
       const header = request.headers.authorization;
       const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
@@ -97,6 +122,10 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     if (owners.get(request) !== "admin" && owners.get(request) !== id) return reply.code(403).send({ error: "admin_required" });
     await devices.revoke(id);
+    await desktopControl.messageQueue?.revoke(id);
+    voice.revoke(id);
+    await voiceCredentials.remove(id);
+    agentSessionRoutes.revoke(id);
     for (const stream of deviceStreams.get(id) ?? []) stream.destroy();
     for (const [token, value] of streamTokens) if (value.owner === id) streamTokens.delete(token);
     for (const [token, value] of desktopStreamTokens) if (value.owner === id) desktopStreamTokens.delete(token);
@@ -109,6 +138,31 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   });
 
   app.get("/api/connection", async () => ({ ok: true, authenticated: true }));
+  registerVoiceRoutes(app, { owners, devices, credentials: voiceCredentials, service: voice });
+  if (config.claude && claudeBridge) registerClaudeBridgeRoutes(app, claudeBridge);
+
+  if (options.gateway) {
+    const gateway = options.gateway;
+    app.get("/api/gateway", async () => ({ gateway: gateway.snapshot() }));
+    app.post("/api/gateway/stop", { bodyLimit: 4096 }, async (request, reply) => {
+      const key = request.headers["x-mobile-codex-manager-key"];
+      const local = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.socket.remoteAddress ?? "");
+      if (owners.get(request) !== "admin" || !local || typeof key !== "string" || Buffer.byteLength(key) !== Buffer.byteLength(gateway.managerKey) || !timingSafeEqual(Buffer.from(key), Buffer.from(gateway.managerKey))) return reply.code(403).send({ error: "gateway_manager_required" });
+      const { instanceId } = z.object({ instanceId: z.string().uuid() }).strict().parse(request.body);
+      if (gateway.snapshot().instanceId !== instanceId) return reply.code(409).send({ error: "gateway_instance_changed" });
+      // Schedule after sending the acknowledgement; closing also releases SSE streams.
+      setImmediate(gateway.requestStop);
+      return reply.code(202).send({ stopping: true, instanceId });
+    });
+  }
+
+  app.get("/api/agents", async () => ({ agents: agentGateway.snapshot() }));
+  app.post("/api/agents/:id/probe", { bodyLimit: 4096 }, async (request, reply) => {
+    if (owners.get(request) !== "admin") return reply.code(403).send({ error: "admin_required" });
+    const { id } = z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/) }).parse(request.params);
+    return { agent: await agentGateway.probe(id) };
+  });
+  agentSessionRoutes.register(app);
 
   app.get("/health", async () => ({
     ok: true,
@@ -290,6 +344,12 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     return { turn: await liveTurns.respondApproval({ turnId: params.turnId, approvalId: params.approvalId, decision: body.decision }) };
   });
 
+  app.post("/api/live/turns/:turnId/user-inputs/:inputId/respond", { bodyLimit: 65_536 }, async request => {
+    const params = z.object({ turnId: z.string().min(1).max(200), inputId: z.string().uuid() }).parse(request.params);
+    const body = z.object({ threadId: z.string().min(1).max(200), answers: z.record(z.string(), z.array(z.string().min(1).max(10_000)).min(1).max(20)) }).strict().parse(request.body);
+    return { turn: liveTurns.respondUserInput({ ...params, ...body }) };
+  });
+
   app.post("/api/uploads", async (request) => {
     const body = z
       .object({
@@ -301,9 +361,10 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   });
 
   app.get("/api/threads", async (request) => {
-    const query = z.object({ limit: z.coerce.number().int().positive().max(200).default(120), offset: z.coerce.number().int().min(0).default(0), query: z.string().max(200).default("") }).parse(request.query);
-    const threads = await store.listThreads(query.limit, query.offset, query.query);
-    return { threads, hasMore: threads.length === query.limit, nextOffset: query.offset + threads.length };
+    const query = z.object({ limit: z.coerce.number().int().positive().max(200).default(120), offset: z.coerce.number().int().min(0).default(0), query: z.string().max(200).default(""), range: z.enum(["recent", "all"]).default("recent") }).parse(request.query);
+    const rows = await store.listThreads(query.limit + 1, query.offset, query.query, query.range === "recent" ? Date.now() - 30 * 86400_000 : 0);
+    const threads = rows.slice(0, query.limit);
+    return { threads, hasMore: rows.length > query.limit, nextOffset: query.offset + threads.length };
   });
 
   app.get("/api/threads/:id", async (request) => {
@@ -344,7 +405,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
       return;
     }
 
-    void desktopControl.status().catch(() => undefined);
+    if (!desktopControl.followThread) void desktopControl.status().catch(() => undefined);
     const owner = owners.get(request)!;
     // Reserve synchronously before subscriptions perform any asynchronous work.
     if (streams.size >= 32 || (deviceStreams.get(owner)?.size ?? 0) >= 4 || !devices.has(owner)) return reply.code(429).send({ error: "stream_limit" });
@@ -359,6 +420,8 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     };
     const unsubscribe = desktopControl.onStreamSnapshot(onSnapshot);
     events.onClose(unsubscribe);
+    const unfollow = desktopControl.followThread?.(params.id);
+    if (unfollow) events.onClose(unfollow);
     const current = desktopControl.getStreamSnapshot(params.id);
     if (current) sendSnapshot(current);
     if (query.cursor !== undefined) {
@@ -406,6 +469,18 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     return { ...data, mode: "desktop-session-tail-readonly" };
   });
 
+  app.post("/api/desktop/threads/:id/user-inputs/:inputId/respond", { bodyLimit: 65_536 }, async request => {
+    const { id, inputId } = z.object({ id: z.string().min(1).max(200), inputId: z.string().uuid() }).parse(request.params);
+    const { answers } = z.object({ answers: z.record(z.string().max(10_000), z.array(z.string().min(1).max(10_000)).min(1).max(20)) }).strict().parse(request.body);
+    return desktopControl.respondUserInput(id, inputId, answers);
+  });
+
+  app.post("/api/desktop/threads/:id/approvals/:approvalId/respond", { bodyLimit: 4096 }, async request => {
+    const { id, approvalId } = z.object({ id: z.string().min(1).max(200), approvalId: z.string().uuid() }).parse(request.params);
+    const { decision } = z.object({ decision: z.enum(["accept", "acceptForSession", "decline", "cancel"]) }).strict().parse(request.body);
+    return desktopControl.respondApproval(id, approvalId, decision);
+  });
+
   function uniqueThreads(threads: Array<Awaited<ReturnType<CodexStore["getActiveDesktopThread"]>>>, limit: number) {
     const seen = new Set<string>();
     const result = [];
@@ -439,20 +514,40 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
         message: z.string().min(1).max(20_000),
         clientMessageId: z.string().uuid().optional(),
         cwd: z.string().min(1).nullable().optional(),
-        mode: z.enum(["auto", "start", "steer"]).optional(),
+        mode: z.enum(["auto", "start", "steer", "queue"]).optional(),
+        controlToken: z.string().uuid().optional(),
+        expectedTurnId: z.string().min(1).max(300).nullable().optional(),
       })
       .parse(request.body);
-    return submissions.execute(body.clientMessageId, { route: "desktop-message", threadId: params.id, ...body }, () => desktopControl.sendMessage({
+    const owner = owners.get(request)!;
+    const fingerprint = body.mode === "queue" ? { route: "desktop-queue", threadId: params.id, message: body.message, owner } : { route: "desktop-message", threadId: params.id, ...body, owner };
+    return submissions.execute(body.clientMessageId, fingerprint, () => desktopControl.sendMessage({
       threadId: params.id,
       message: body.message,
       cwd: body.cwd,
       mode: body.mode,
+      clientMessageId: body.clientMessageId,
+      controlToken: body.controlToken,
+      expectedTurnId: body.expectedTurnId,
+      owner,
     }));
+  });
+
+  app.post("/api/desktop/control/threads/:id/queue/:messageId/cancel", async (request) => {
+    const { id, messageId } = z.object({ id: z.string().min(1).max(300), messageId: z.string().uuid() }).parse(request.params);
+    if (!desktopControl.messageQueue) throw Object.assign(new Error("desktop_queue_unavailable"), { statusCode: 409 });
+    await desktopControl.messageQueue.cancel(id, messageId);
+    return { ok: true };
   });
 
   app.post("/api/desktop/control/threads/:id/interrupt", async (request) => {
     const params = z.object({ id: z.string().min(1) }).parse(request.params);
-    return desktopControl.interruptThread(params.id);
+    const body = z.object({
+      clientMessageId: z.string().uuid().optional(),
+      controlToken: z.string().uuid().optional(),
+      expectedTurnId: z.string().min(1).max(300).optional(),
+    }).parse(request.body ?? {});
+    return submissions.execute(body.clientMessageId, { route: "desktop-interrupt", threadId: params.id, ...body }, () => desktopControl.interruptThread(params.id, body));
   });
 
   app.setErrorHandler((error, request, reply) => {

@@ -50,9 +50,9 @@ export const cachedThreadLimit = 24;
 
 export const cachedMessagesPerThread = 120;
 
-export const appVersionName = "1.2.2-update-restore";
+export const appVersionName = "1.3.9-process-collapse-preview";
 
-export const appVersionCode = 18;
+export const appVersionCode = 30;
 
 export const appVersionLabel = `v${appVersionName}`;
 

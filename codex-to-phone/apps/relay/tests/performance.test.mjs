@@ -113,10 +113,56 @@ test('IPC shares initialization and invalid JSON rejects pending work without es
 test('IPC rejects an oversized frame before allocating its payload', async t => {
   const fixture = await ipcFixture(t);
   await fixture.client.connect();
-  const header = Buffer.alloc(4); header.writeUInt32LE(100 * 1024 * 1024);
+  const header = Buffer.alloc(4); header.writeUInt32LE(64 * 1024 * 1024 + 1);
   fixture.socket().write(header);
   await once(fixture.socket(), 'close');
   assert.equal(fixture.client.getStatus().lastError, 'desktop-ipc-frame-limit');
+});
+
+test('IPC receives a fragmented long-session snapshot with linear buffer copying', { timeout: 8000 }, async t => {
+  const fixture = await ipcFixture(t); await fixture.client.connect();
+  const text = '开始中文🙂' + 'x'.repeat(17 * 1024 * 1024) + '结束';
+  const data = frame({ type: 'broadcast', method: 'synthetic-large-snapshot', params: { text } });
+  let copiedBytes = 0;
+  const copy = Buffer.prototype.copy, concat = Buffer.concat;
+  t.mock.method(Buffer.prototype, 'copy', function(...args) { const count = copy.apply(this, args); copiedBytes += count; return count; });
+  t.mock.method(Buffer, 'concat', function(list, ...rest) { copiedBytes += list.reduce((sum, part) => sum + part.length, 0); return concat.call(this, list, ...rest); });
+  let offMessage, offDisconnect;
+  const received = new Promise((resolve, reject) => {
+    offMessage = fixture.client.onAnyMessage(message => { if (message.method === 'synthetic-large-snapshot') resolve(message); });
+    offDisconnect = fixture.client.onDisconnect(() => reject(Error(fixture.client.getStatus().lastError ?? 'unexpected disconnect')));
+  });
+  t.after(() => { offMessage(); offDisconnect(); });
+  const sending = (async () => {
+    for (let offset = 0; offset < data.length; offset += 32_749) {
+      if (!fixture.socket().write(data.subarray(offset, offset + 32_749))) await once(fixture.socket(), 'drain');
+    }
+  })();
+  const [, message] = await Promise.all([sending, received]);
+  assert.equal(message.params.text, text);
+  assert.ok(copiedBytes <= data.length * 2, `frame copied ${copiedBytes} bytes for ${data.length} wire bytes`);
+  t.diagnostic(JSON.stringify({ snapshotBytes: data.length, copiedBytes }));
+});
+
+test('IPC handles split headers, UTF-8 boundaries and consecutive frames in one read', async t => {
+  const fixture = await ipcFixture(t); await fixture.client.connect();
+  const messages = [];
+  const stop = fixture.client.onAnyMessage(message => { if (message.method === 'synthetic-fragment') messages.push(message.params.text); });
+  t.after(stop);
+  const first = frame({ type: 'broadcast', method: 'synthetic-fragment', params: { text: '中文🙂' } });
+  const second = frame({ type: 'broadcast', method: 'synthetic-fragment', params: { text: '第二帧' } });
+  const multiByte = first.indexOf(Buffer.from('中文')) + 1;
+  const chunks = [first.subarray(0, 1), first.subarray(1, 3), first.subarray(3, multiByte), Buffer.concat([first.subarray(multiByte), second])];
+  for (const chunk of chunks) { fixture.socket().write(chunk); await new Promise(resolve => setTimeout(resolve, 5)); }
+  assert.deepEqual(messages, ['中文🙂', '第二帧']);
+});
+
+test('IPC discards an incomplete frame on disconnect before reconnecting', async t => {
+  const fixture = await ipcFixture(t); await fixture.client.connect();
+  const disconnected = new Promise(resolve => { const stop = fixture.client.onDisconnect(() => { stop(); resolve(); }); });
+  fixture.socket().end(Buffer.from([100, 0, 0])); await disconnected;
+  const status = await fixture.client.connect();
+  assert.equal(status.initialized, true); assert.equal(fixture.connections(), 2);
 });
 
 test('incremental snapshots send only appended text and retain old-client compatibility', () => {

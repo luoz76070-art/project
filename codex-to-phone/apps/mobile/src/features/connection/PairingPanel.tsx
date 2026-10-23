@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { apiGet, apiPost, assertSecureEndpoint, authHeaders, buildUrl, normalizeEndpoint, requestJson, toFriendlyFetchError } from "./http";
+import { GatewayPanel } from "./GatewayPanel";
 
 type Device = { id: string; name: string; createdAt: string };
 
@@ -51,7 +52,7 @@ export function PairingPanel({ endpoint, token, onPaired }: { endpoint: string; 
 
   return <section className="settings-section pairing-section">
     <h3>连接电脑</h3>
-    <p className="setting-description">在电脑 Relay 中点击 Pair phone，将配对信息粘贴到这里。配对信息 5 分钟内有效，仅可使用一次。</p>
+    <p className="setting-description">在电脑 Relay 中点击 Pair phone，或让 Codex 的 Mobile Codex 插件生成配对信息，再粘贴到这里。配对信息 5 分钟内有效，仅可使用一次。</p>
     <label className="pairing-input"><span>配对信息</span><textarea aria-label="配对信息" value={pairingText} maxLength={4096} placeholder="粘贴电脑配对信息或一次性配对码" onChange={event => setPairingText(event.target.value)} /></label>
     <div className="settings-actions">
       <button className="action-button primary" onClick={() => void pair()} disabled={busy || !pairingText.trim()}>配对连接</button>
@@ -59,5 +60,6 @@ export function PairingPanel({ endpoint, token, onPaired }: { endpoint: string; 
     </div>
     {status && <p className="setting-description" role="status">{status}</p>}
     {devices.map(device => <div className="device-row" key={device.id}><span>{device.name}<small>{new Date(device.createdAt).toLocaleDateString()}</small></span><button className="action-button" disabled={busy} onClick={() => void revoke(device.id)}>撤销</button></div>)}
+    <GatewayPanel endpoint={endpoint} token={token} />
   </section>;
 }

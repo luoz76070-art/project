@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { buildHotBundle } from '../apps/mobile/scripts/build-hot-bundle.mjs';
+
+test('single-file hot updates contain lazy routes, their styles and imported assets without changing the APK dist', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-hot-fixture-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const mobile = path.join(root, 'apps/mobile');
+  await fs.mkdir(path.join(mobile, 'dist'), { recursive: true });
+  await fs.writeFile(path.join(mobile, '.env.production.local'), 'VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL=https://updates.example.test/android/latest.json\nVITE_MOBILE_CODEX_HOT_MANIFEST_URL=https://updates.example.test/hot/latest.json\n');
+  await fs.writeFile(path.join(mobile, 'dist/index.html'), 'keep-the-apk-build');
+  await fs.writeFile(path.join(mobile, 'index.html'), '<html><head></head><body><script type="module" src="/main.js"></script></body></html>');
+  await fs.writeFile(path.join(mobile, 'main.js'), 'window.literalReplacement = "$&"; window.openLazy = () => import("./lazy.js").then(m => m.show());');
+  await fs.writeFile(path.join(mobile, 'lazy.js'), 'import "./lazy.css"; import icon from "./icon.svg"; export function show() { document.body.textContent = "lazy-route-ready</script>" + icon; }');
+  await fs.writeFile(path.join(mobile, 'lazy.css'), '.lazy-view { color: rgb(1, 2, 3); }');
+  await fs.writeFile(path.join(mobile, 'icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><path d="M1 1h1v1z"/></svg>');
+  const result = await buildHotBundle(root, 'fixture.1');
+  const html = await fs.readFile(result.output, 'utf8');
+  assert.ok(html.includes('lazy-route-ready'));
+  assert.ok(html.includes('.lazy-view'));
+  assert.ok(html.includes('data:image/svg+xml'));
+  assert.ok(html.includes('$&'));
+  assert.ok(html.includes('name="mobile-codex-hot-bundle" content="fixture.1"'));
+  assert.equal([...html.matchAll(/<script\b[^>]*\bsrc=/g)].length, 0);
+  assert.equal([...html.matchAll(/<link\b[^>]*\bhref=/g)].length, 0);
+  assert.equal([...html.matchAll(/import\(["'][^"']+["']\)/g)].length, 0);
+  assert.equal([...html.matchAll(/<\/script>/g)].length, 1);
+  assert.equal(result.sha256, createHash('sha256').update(html).digest('hex'));
+  assert.equal(result.size, Buffer.byteLength(html));
+  assert.equal(await fs.readFile(path.join(mobile, 'dist/index.html'), 'utf8'), 'keep-the-apk-build');
+});

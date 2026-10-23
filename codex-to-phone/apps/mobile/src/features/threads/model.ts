@@ -1,4 +1,16 @@
-import { type ThreadSummary } from "../../app/types";
+import { type ThreadSummary, type ThreadRuntime } from "../../app/types";
+
+export type SessionRange = "recent" | "all";
+export const sessionListRefreshMs = 30_000;
+
+export function sessionInRange(updatedAt: string, range: SessionRange, now = Date.now()) {
+  return range === "all" || Date.parse(updatedAt) >= now - 30 * 86400_000;
+}
+
+export function retainCodexThread(id: string, selectedId: string | null, runtime: ThreadRuntime) {
+  return id === selectedId || runtime.sending || runtime.turnStatus === "starting" || runtime.turnStatus === "inProgress"
+    || Boolean(runtime.pendingMessageId || runtime.desktopSubmission || runtime.desktopInterrupt || runtime.userInputs?.length || runtime.approvals.length || runtime.desktopControl?.queue?.items.length);
+}
 
 export function mergeThreads(...groups: ThreadSummary[][]) {
   const seen = new Set<string>();
@@ -27,18 +39,25 @@ export function threadListDetail(thread: ThreadSummary) {
 }
 
 export function groupThreadsByProject(threads: ThreadSummary[]) {
-  const groups = new Map<string, { key: string; label: string; threads: ThreadSummary[] }>();
-  for (const thread of threads) {
-    const key = projectGroupKey(thread.cwd);
-    const group = groups.get(key) ?? { key, label: projectGroupLabel(thread.cwd), threads: [] };
-    group.threads.push(thread);
+  return groupByProject(threads, thread => thread.cwd);
+}
+
+export function groupByProject<T>(items: T[], directory: (item: T) => string | null | undefined) {
+  const groups = new Map<string, { key: string; label: string; items: T[]; detail: string }>();
+  for (const item of items) {
+    const key = projectGroupKey(directory(item));
+    const group = groups.get(key) ?? { key, label: projectGroupLabel(directory(item)), items: [], detail: "" };
+    group.items.push(item);
     groups.set(key, group);
   }
-  return [...groups.values()];
+  const labels = new Map<string, number>();
+  for (const group of groups.values()) labels.set(group.label, (labels.get(group.label) ?? 0) + 1);
+  return [...groups.values()].map(group => ({ ...group, detail: labels.get(group.label)! > 1 ? shortPath(group.key) : "" }));
 }
 
 export function projectGroupKey(cwd: string | null | undefined) {
-  const normalized = normalizePathText(cwd);
+  const normalized = normalizePathText(cwd).replace(/\\/g, "/").replace(/\/+$/g, "");
+  if (!normalized && normalizePathText(cwd).startsWith("/")) return "/";
   return normalized || "__uncategorized__";
 }
 

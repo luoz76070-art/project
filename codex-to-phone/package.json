@@ -13,7 +13,7 @@
     "mac:package": "pnpm build && pnpm mac:helper && pnpm mac:relay-app",
     "android:setup:mac": "bash scripts/setup-android-tools-mac.sh",
     "android:apk:mac": "bash scripts/build-debug-apk-mac.sh",
-    "android:hot-bundle": "pnpm --filter @mobile-codex/mobile build && node scripts/build-hot-bundle.mjs",
+    "android:hot-bundle": "node scripts/build-hot-bundle.mjs",
     "test:messages": "node scripts/test-message-reconciliation.mjs",
     "test:codex-executable": "pnpm --filter @mobile-codex/relay codex-executable:smoke",
     "dev:relay:mac": "pnpm mac:helper && MOBILE_CODEX_HOST=${MOBILE_CODEX_HOST:-0.0.0.0} MOBILE_CODEX_PORT=${MOBILE_CODEX_PORT:-8787} MOBILE_CODEX_TOKEN=${MOBILE_CODEX_TOKEN:?Set MOBILE_CODEX_TOKEN to a strong random value} pnpm dev:relay",
@@ -22,12 +22,25 @@
     "typecheck": "pnpm --filter @mobile-codex/relay typecheck && pnpm --filter @mobile-codex/mobile typecheck",
     "test:transport": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/transport.test.mjs",
     "test:correctness": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/correctness.test.mjs",
-    "test:mobile": "node --test scripts/test-mobile-connection.mjs scripts/test-mobile-profiles.mjs",
-    "test:hot-update": "node scripts/test-hot-update-paths.mjs",
+    "test:mobile": "node --test scripts/test-mobile-connection.mjs scripts/test-mobile-profiles.mjs scripts/test-mobile-voice.mjs",
+    "test:voice": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/voice.test.mjs scripts/test-mobile-voice.mjs",
+    "test:hot-update": "node scripts/test-hot-update-paths.mjs && node --test scripts/test-hot-bundle.mjs",
+    "test:apk-update": "node --test scripts/test-apk-update.mjs",
     "test:performance": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/performance.test.mjs",
-    "test:availability": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/availability.test.mjs"
+    "test:availability": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/availability.test.mjs",
+    "test:gateway": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/agentGateway.test.mjs",
+    "probe:gateway": "pnpm --filter @mobile-codex/relay gateway:probe",
+    "test:user-input": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/userInput.test.mjs",
+    "test:desktop-native": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/desktopNativeControl.test.mjs apps/relay/tests/desktopMessageQueue.test.mjs",
+    "test:desktop-approvals": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/desktopApprovals.test.mjs",
+    "build:plugin": "node scripts/build-plugin.mjs",
+    "test:managed-gateway": "pnpm --filter @mobile-codex/relay build && pnpm build:plugin && node --test --test-timeout=15000 apps/relay/tests/managedGateway.test.mjs apps/relay/tests/macGatewayService.test.mjs",
+    "test:opencode": "pnpm --filter @mobile-codex/relay build && node --test --test-timeout=12000 apps/relay/tests/openCode.test.mjs",
+    "test:claude": "pnpm --filter @mobile-codex/relay build && node --test --test-timeout=12000 apps/relay/tests/claude.test.mjs",
+    "test:deepseek": "pnpm --filter @mobile-codex/relay build && node --test --test-timeout=12000 apps/relay/tests/deepSeek.test.mjs apps/relay/tests/deepSeekHistory.test.mjs"
   },
   "devDependencies": {
+    "esbuild": "0.28.2",
     "typescript": "5.9.3"
   },
   "packageManager": "pnpm@10.20.0"

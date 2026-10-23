@@ -21,7 +21,8 @@
     "live-control:approval-smoke": "tsx src/smoke/liveControlApprovalSmoke.ts",
     "desktop-ipc:probe": "tsx src/smoke/desktopIpcProbe.ts",
     "desktop-control:smoke": "tsx src/smoke/desktopControlSmoke.ts",
-    "codex-executable:smoke": "tsx src/smoke/codexExecutableSmoke.ts"
+    "codex-executable:smoke": "tsx src/smoke/codexExecutableSmoke.ts",
+    "gateway:probe": "tsx src/smoke/agentGatewayProbe.ts"
   },
   "dependencies": {
     "@fastify/cors": "11.1.0",

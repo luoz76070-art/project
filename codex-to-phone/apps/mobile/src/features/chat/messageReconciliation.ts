@@ -4,6 +4,10 @@ export type ReconciliationMessage = {
   role: string;
   text: string;
   kind: string;
+  clientMessageId?: string;
+  sourceItemId?: string;
+  turnId?: string;
+  phase?: "commentary" | "final_answer";
   attachments?: unknown;
 };
 
@@ -11,8 +15,6 @@ const mirrorWindowMs = 1_500;
 const optimisticMatchWindowMs = 120_000;
 
 export function reconcileMessages<T extends ReconciliationMessage>(current: T[], incoming: T[]): T[] {
-  if (incoming.length === 0) return collapseMirroredMessages(current);
-
   const byId = new Map<string, T>();
   for (const message of [...current, ...incoming]) {
     const existing = byId.get(message.id);
@@ -24,15 +26,55 @@ export function reconcileMessages<T extends ReconciliationMessage>(current: T[],
 
 export function collapseMirroredMessages<T extends ReconciliationMessage>(messages: T[]): T[] {
   const rendered: T[] = [];
+  const submissions = new Map<string, number>();
+  const sourceItems = new Map<string, number>();
   for (const message of sortMessages(messages)) {
-    const duplicateIndex = findMirroredMessage(rendered, message);
+    const submission = clientMessageIdentity(message);
+    const sourceItem = sourceItemIdentity(message);
+    const duplicateIndex = (submission ? submissions.get(submission) : undefined) ?? (sourceItem ? sourceItems.get(sourceItem) : undefined) ?? findMirroredMessage(rendered, message);
     if (duplicateIndex < 0) {
+      if (submission) submissions.set(submission, rendered.length);
+      if (sourceItem) sourceItems.set(sourceItem, rendered.length);
       rendered.push(message);
       continue;
     }
     rendered[duplicateIndex] = mergeSameMessage(rendered[duplicateIndex], message);
+    if (submission) submissions.set(submission, duplicateIndex);
+    if (sourceItem) sourceItems.set(sourceItem, duplicateIndex);
   }
-  return rendered;
+  return sortMessages(reconcileDesktopUserSources(rendered));
+}
+
+function isDesktopUserItem(message: ReconciliationMessage): boolean {
+  return message.role === "user" && message.kind === "userMessage" && Boolean(message.turnId)
+    && (message.id.startsWith("desktop-") || message.id === `${message.turnId}-input`);
+}
+
+function reconcileDesktopUserSources<T extends ReconciliationMessage>(messages: T[]): T[] {
+  const groups = new Map<string, { native: number[]; history: number[] }>();
+  messages.forEach((message, index) => {
+    if (message.role !== "user" || !message.turnId || isOptimisticUserMessage(message)) return;
+    const native = isDesktopUserItem(message) && !message.sourceItemId && clientMessageIdentity(message);
+    const history = ["message", "user_message"].includes(message.kind) && message.sourceItemId && !clientMessageIdentity(message);
+    if (!native && !history) return;
+    const key = JSON.stringify([message.turnId, message.text.trim()]);
+    const group = groups.get(key) ?? { native: [], history: [] };
+    group[native ? "native" : "history"].push(index);
+    groups.set(key, group);
+  });
+  const removed = new Set<number>();
+  const replacements = new Map<number, T>();
+  for (const group of groups.values()) {
+    // Both ordered sources must cover the same occurrences. A partial page is
+    // ambiguous; keeping it is safer than assigning another input's identity.
+    if (!group.native.length || group.native.length !== group.history.length) continue;
+    group.native.forEach((nativeIndex, occurrence) => {
+      const historyIndex = group.history[occurrence];
+      removed.add(nativeIndex);
+      replacements.set(historyIndex, mergeSameMessage(messages[nativeIndex], messages[historyIndex]));
+    });
+  }
+  return messages.map((message, index) => replacements.get(index) ?? message).filter((_, index) => !removed.has(index));
 }
 
 export function stripCodexAppDirectives(text: string): string {
@@ -68,6 +110,13 @@ function reconcileOptimisticMessages<T extends ReconciliationMessage>(messages: 
       if (persistedIndex === optimisticIndex || usedPersisted.has(persistedIndex)) continue;
       const persisted = messages[persistedIndex];
       if (!isPersistedUserMessage(persisted)) continue;
+      const optimisticIdentity = clientMessageIdentity(optimistic);
+      const persistedIdentity = clientMessageIdentity(persisted);
+      if (optimisticIdentity && persistedIdentity) {
+        if (optimisticIdentity !== persistedIdentity) continue;
+        bestIndex = persistedIndex;
+        break;
+      }
       if (normalizedText(persisted.text) !== normalizedText(optimistic.text)) continue;
 
       const distance = timestampDistance(optimistic, persisted);
@@ -94,6 +143,10 @@ function findMirroredMessage<T extends ReconciliationMessage>(rendered: T[], inc
   for (let index = rendered.length - 1; index >= start; index -= 1) {
     const current = rendered[index];
     if (current.id === incoming.id) return index;
+    const currentItem = sourceItemIdentity(current), incomingItem = sourceItemIdentity(incoming);
+    if (currentItem && incomingItem && currentItem !== incomingItem) continue;
+    const currentIdentity = clientMessageIdentity(current), incomingIdentity = clientMessageIdentity(incoming);
+    if (currentIdentity && incomingIdentity && currentIdentity !== incomingIdentity) continue;
     if (isExactEventCopy(current, incoming)) return index;
     if (!isKnownMirrorPair(current, incoming)) continue;
     if (timestampDistance(current, incoming) > mirrorWindowMs) continue;
@@ -138,8 +191,16 @@ function sameOrIncrementalText(current: ReconciliationMessage, incoming: Reconci
 function mergeSameMessage<T extends ReconciliationMessage>(current: T, incoming: T): T {
   const preferred = preferredMessage(current, incoming);
   const attachments = incoming.attachments ?? current.attachments;
+  const clientMessageId = preferred.clientMessageId ?? incoming.clientMessageId ?? current.clientMessageId;
+  const sourceItemId = preferred.sourceItemId ?? assistantItemIdentity(preferred) ?? incoming.sourceItemId ?? assistantItemIdentity(incoming) ?? current.sourceItemId ?? assistantItemIdentity(current);
+  const turnId = preferred.turnId ?? incoming.turnId ?? current.turnId;
+  const phase = preferred.phase ?? incoming.phase ?? current.phase;
   return {
     ...preferred,
+    ...(clientMessageId ? { clientMessageId } : {}),
+    ...(sourceItemId ? { sourceItemId } : {}),
+    ...(turnId ? { turnId } : {}),
+    ...(phase ? { phase } : {}),
     ...(attachments === undefined ? {} : { attachments }),
   } as T;
 }
@@ -147,12 +208,37 @@ function mergeSameMessage<T extends ReconciliationMessage>(current: T, incoming:
 function preferredMessage<T extends ReconciliationMessage>(current: T, incoming: T): T {
   if (isOptimisticUserMessage(current) && !isOptimisticUserMessage(incoming)) return incoming;
   if (isOptimisticUserMessage(incoming) && !isOptimisticUserMessage(current)) return current;
+  if (current.role === "user" && current.turnId && current.turnId === incoming.turnId) {
+    if (isDesktopUserItem(current) && incoming.sourceItemId) return incoming;
+    if (isDesktopUserItem(incoming) && current.sourceItemId) return current;
+  }
   if (incoming.text.length > current.text.length) return incoming;
+  if (incoming.text === current.text && assistantItemIdentity(current) && assistantItemIdentity(current) === assistantItemIdentity(incoming) && incoming.kind === "message") return incoming;
   return current;
+}
+
+function assistantItemIdentity(message: ReconciliationMessage): string | null {
+  if (message.role !== "assistant") return null;
+  if (message.sourceItemId) return message.sourceItemId;
+  // APK26 and earlier native snapshots already embedded the original item ID.
+  return /^desktop-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-(.+)$/iu.exec(message.id)?.[1] ?? null;
+}
+
+function sourceItemIdentity(message: ReconciliationMessage): string | null {
+  if (message.role === "user") return message.sourceItemId ? `user:${message.sourceItemId}` : isDesktopUserItem(message) ? `native-user:${message.id}` : null;
+  const identity = assistantItemIdentity(message);
+  return identity ? `assistant:${identity}` : null;
 }
 
 function isPersistedUserMessage(message: ReconciliationMessage): boolean {
   return message.role === "user" && !isOptimisticUserMessage(message);
+}
+
+function clientMessageIdentity(message: ReconciliationMessage): string | null {
+  if (message.role !== "user") return null;
+  if (message.clientMessageId) return message.clientMessageId;
+  // Recover identities from already cached native placeholders made by earlier APKs.
+  return message.id.startsWith("desktop-local-") ? message.id.slice("desktop-local-".length) || null : null;
 }
 
 function isOptimisticUserMessage(message: ReconciliationMessage): boolean {

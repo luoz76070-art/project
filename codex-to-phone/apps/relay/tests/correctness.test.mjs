@@ -268,3 +268,33 @@ test('concurrent starts reserve capacity before initialization completes', async
   await Promise.all(starts);
   assert.equal((await controller.status()).activeTurns, 32);
 });
+
+test('rollout user history and delta retain source identity and the original turn without fabricating a client ID', async t => {
+  const raw = JSON.stringify({ timestamp: '2026-10-23T05:52:09.088Z', type: 'response_item', payload: { type: 'message', id: 'msg_fixture_steer', role: 'user', content: [{ type: 'input_text', text: '合成引导' }], internal_chat_message_metadata_passthrough: { turn_id: 'fixture-original-turn' } } }) + '\n';
+  const { store } = await fixture(t, raw); t.after(() => store.close());
+  for (const page of [await store.readThreadWithCursor(id), await store.readThreadLatest(id), await store.readThreadDelta(id)]) {
+    assert.equal(page.messages[0].sourceItemId, 'msg_fixture_steer');
+    assert.equal(page.messages[0].turnId, 'fixture-original-turn');
+    assert.equal(page.messages[0].clientMessageId, undefined);
+    assert.match(page.messages[0].id, /^log-/);
+  }
+});
+
+test('distinct user source items at the same timestamp keep both actual inputs', async t => {
+  const line = sourceItemId => JSON.stringify({ timestamp: '2026-10-23T05:52:09.088Z', type: 'response_item', payload: { type: 'message', id: sourceItemId, role: 'user', content: [{ type: 'input_text', text: '重复但真实的输入' }], internal_chat_message_metadata_passthrough: { turn_id: 'fixture-original-turn' } } }) + '\n';
+  const { store } = await fixture(t, line('msg_first') + line('msg_second') + line('msg_second')); t.after(() => store.close());
+  for (const page of [await store.readThreadWithCursor(id), await store.readThreadLatest(id), await store.readThreadDelta(id)]) {
+    assert.deepEqual(page.messages.map(message => message.sourceItemId), ['msg_first', 'msg_second']);
+  }
+});
+
+test('rollout history and delta preserve the original assistant item identity and phase', async t => {
+  const raw = JSON.stringify({ timestamp: '2026-10-22T18:52:19.963Z', type: 'response_item', payload: { type: 'message', id: 'msg_fixture_final', role: 'assistant', phase: 'final_answer', internal_chat_message_metadata_passthrough: { turn_id: 'fixture-turn' }, content: [{ type: 'output_text', text: '同一条回复' }] } }) + '\n';
+  const { store } = await fixture(t, raw); t.after(() => store.close());
+  for (const page of [await store.readThreadWithCursor(id), await store.readThreadLatest(id), await store.readThreadDelta(id)]) {
+    assert.equal(page.messages[0].sourceItemId, 'msg_fixture_final');
+    assert.equal(page.messages[0].phase, 'final_answer');
+    assert.equal(page.messages[0].turnId, 'fixture-turn');
+    assert.match(page.messages[0].id, /^log-/);
+  }
+});

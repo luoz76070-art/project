@@ -1,15 +1,17 @@
 import { type ThreadSummary, type LiveTurnSnapshot, type CodexMessage } from "../../app/types";
 import { apiGet, buildUrl } from "./http";
 import { turnStatusText } from "../chat/messages";
-import { isDesktopSource } from "../threads/model";
+import { isDesktopSource, sessionInRange, type SessionRange } from "../threads/model";
 import { desktopLatestMaxBytes, desktopLatestMaxMessages } from "../../app/config";
 
-export async function loadThreadList(endpoint: string, token: string, signal?: AbortSignal, offset = 0, query = ""): Promise<{ threads: ThreadSummary[]; hasMore?: boolean; nextOffset?: number }> {
+export async function loadThreadList(endpoint: string, token: string, signal?: AbortSignal, offset = 0, query = "", range: SessionRange = "recent"): Promise<{ threads: ThreadSummary[]; hasMore?: boolean; nextOffset?: number }> {
   try {
-    return await apiGet<{ threads: ThreadSummary[]; hasMore?: boolean; nextOffset?: number }>(buildUrl(endpoint, `/api/threads?limit=120&offset=${offset}&query=${encodeURIComponent(query)}`), token, signal);
+    const data = await apiGet<{ threads: ThreadSummary[]; hasMore?: boolean; nextOffset?: number }>(buildUrl(endpoint, `/api/threads?${new URLSearchParams({ limit: "120", offset: String(offset), query, range })}`), token, signal);
+    return { ...data, threads: data.threads.filter(thread => sessionInRange(thread.updatedAt, range)) };
   } catch {
     signal?.throwIfAborted();
-    return await apiGet<{ threads: ThreadSummary[] }>(buildUrl(endpoint, "/api/live/threads?limit=120"), token, signal);
+    const data = await apiGet<{ threads: ThreadSummary[] }>(buildUrl(endpoint, "/api/live/threads?limit=120"), token, signal);
+    return { threads: data.threads.filter(thread => sessionInRange(thread.updatedAt, range) && thread.threadName.toLowerCase().includes(query.trim().toLowerCase())) };
   }
 }
 

@@ -153,7 +153,14 @@ public class HotUpdatePlugin extends Plugin {
             if (status < 200 || status >= 300) {
                 throw new IOException("download returned HTTP " + status);
             }
-            long contentLength = connection.getContentLengthLong();
+            // getContentLengthLong requires API 24; keep downloads compatible with API 23.
+            long contentLength = -1;
+            String lengthHeader = connection.getHeaderField("Content-Length");
+            if (lengthHeader != null) {
+                try { contentLength = Long.parseLong(lengthHeader.trim()); }
+                catch (NumberFormatException error) { throw new IOException("invalid bundle content length", error); }
+                if (contentLength < 0) throw new IOException("invalid bundle content length");
+            }
             if (contentLength > MAX_BUNDLE_BYTES) {
                 throw new IOException("bundle is too large");
             }

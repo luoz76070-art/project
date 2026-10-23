@@ -1,0 +1,32 @@
+{
+  "name": "dsh-mobile-codex",
+  "version": "0.2.1",
+  "type": "module",
+  "main": "index.mjs",
+  "files": [
+    "index.mjs",
+    "bridge.mjs",
+    "catalog.mjs",
+    "messages.mjs",
+    "interactions.mjs",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.19.0",
+    "dsh": "=0.2.1-rc.2"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT"
+}

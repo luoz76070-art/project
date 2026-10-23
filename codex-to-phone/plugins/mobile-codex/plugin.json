@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "mobile-codex",
+  "version": "0.2.0",
+  "description": "Manage the Mobile Codex gateway and pair a phone with existing desktop conversations.",
+  "author": { "name": "Mobile Codex contributors" },
+  "license": "MIT",
+  "extensions": {
+    "com.openai": {
+      "requires_local_executor": true,
+      "interface": {
+        "displayName": "Mobile Codex",
+        "shortDescription": "手机配对、后台网关与设备管理",
+        "category": "Productivity"
+      },
+      "onboardingSkill": "./skills/mobile-codex/SKILL.md"
+    }
+  }
+}
