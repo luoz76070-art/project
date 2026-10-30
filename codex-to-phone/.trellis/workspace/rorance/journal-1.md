@@ -1568,3 +1568,41 @@ APK29用户确认语音主流程通过；网关增加有限低权重短语，真
 ### Next Steps
 
 - APK30真机显示与原语音供应商问题另验，后续独立功能完成后先本地提交，完整版本集中同步。
+
+
+## Session 47: DeepSeek rc.3兼容交付与手机只读验收完成
+<!-- trellis-session: v=2 fp=f0f9d6a803cd458f -->
+
+**Date**: 2026-10-30
+**Task**: DeepSeek rc.3兼容交付与手机只读验收完成
+**Package**: relay
+**Branch**: `main`
+
+### Summary
+
+原插件0.2.2与网关完成rc.3兼容部署，用户确认APK36列表、正文和重新打开均正常；归档本轮。
+
+### Main Changes
+
+- 精确支持rc.2/rc.3、动态宿主版本及网关白名单；通过官方原profile加载固定插件并按用户授权切换网关，保留原电脑任务。
+- 补记真机验收、交付清单、工程入口、CHANGELOG和计划状态；main直接交付任务通过脚本的无PR归档选项收尾。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6c2c700` | fix(codex-to-phone): restore DeepSeek rc.3 bridge compatibility |
+| `b4903b8` | docs(codex-to-phone): record DeepSeek rc.3 deployment and preview sync |
+
+### Testing
+
+- [OK] 此前已通过：两版官方各25项、DeepSeek60项、完整verify（手机121/后端380）；原桥接27项、本地/公网31项、Codex重连12项。
+- [OK] 2026-10-30用户真机确认：APK36列表、正文与重新打开均正常；本次仅文档收尾，不重复构建、运行模型或重启服务。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 真实控制候选计划位于docs/plans/2026-10-30-deepseek-control-acceptance.md，尚未启动；由用户决定并指定测试会话。

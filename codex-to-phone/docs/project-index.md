@@ -15,7 +15,7 @@
 当前主入口：
 
 - Android APK：`dist-apk/mobile-codex-1.2.2-update-restore-debug.apk`（versionCode 18，已恢复原手机更新通道并发布，待真机验收）
-- Android独立预览：`dist-apk/mobile-codex-1.3.15-reliability-preview-debug.apk`（versionCode36，preview36/previous35已发布，配套网关已切换，源码与preview标签已同步GitHub。手机121/后端377、Android lint0错误8警告、公网19项、网关58项与Codex重连12项通过；用户确认升级连接、短摘要、系统保存取消重试正常，原重复输入重开后仅一条。DeepSeek rc.3兼容按用户选择放至下一轮；详见[交付记录](audits/2026-10-30/preview-validation.md)）。
+- Android独立预览：`dist-apk/mobile-codex-1.3.15-reliability-preview-debug.apk`（versionCode36，preview36/previous35已发布，配套网关已切换，源码与preview标签已同步GitHub。手机121/后端377、Android lint0错误8警告、公网19项、网关58项与Codex重连12项通过；用户确认升级连接、短摘要、系统保存取消重试正常，原重复输入重开后仅一条。详见[交付记录](audits/2026-10-30/preview-validation.md)；后续[DeepSeek rc.3兼容及手机复联](audits/2026-10-30/deepseek-rc3-compat.md)也已完成，继续使用APK36）。
 - Mac 原生网关：`~/Library/Application Support/Mobile Codex Gateway/releases/<固定版本>/mobile-codex/lib/gateway.mjs`，当前单Node进程、native IPC；[插件管理入口](../plugins/mobile-codex/README.md)。
 - 旧 Mac Relay/Input App：生成App已压缩归档并移除，源码与构建入口保留；[清理及恢复记录](audits/2026-10-21/legacy-mac-app-cleanup.md)。
 - Relay/Broker：`apps/relay`
@@ -24,7 +24,7 @@
 
 ## Trellis 与当前优化
 
-最新[DeepSeek rc.3兼容与手机复联](audits/2026-10-30/deepseek-rc3-compat.md)：插件0.2.2精确支持rc.2/rc.3，真实版本上报与网关白名单同步；两版官方各25项、DeepSeek60项及完整verify通过（手机121/后端380）。原插件已在原宿主加载，14会话首帧和重连通过；原网关已安全切换，本地/公网31项及Codex重连12项通过；手机复联待用户确认，沿用APK36。
+最新[DeepSeek rc.3兼容与手机复联](audits/2026-10-30/deepseek-rc3-compat.md)：插件0.2.2精确支持rc.2/rc.3，真实版本上报与网关白名单同步；两版官方各25项、DeepSeek60项及完整verify通过（手机121/后端380）。原插件已在原宿主加载，14会话首帧和重连通过；原网关已安全切换，本地/公网31项及Codex重连12项通过。用户已确认APK36列表、正文与重新打开正常，本轮完成；[真实控制验收候选计划](plans/2026-10-30-deepseek-control-acceptance.md)待用户决定是否启动。
 
 最新[阶段五状态模块与统一验证入口](audits/2026-10-30/maintenance-boundaries.md)：五个状态/轮询函数迁入runtimeSync，关键回归直接导入生产模块，真实App effect和浏览器接线保持覆盖。新增verify/verify:android/verify:all与明确JS/TS lint规则；Android兼容脚本正式入库。完整入口通过，手机121/121、后端377/377，最终入口自测6/6，Android编译/lint为0错误、8警告。390px合成临时→历史→正式→结束→重连/重开均单气泡且草稿保持。未发布、未Git写入，原手机双气泡与系统保存仍独立待验。[可靠性计划](plans/2026-10-29-reliability.md)本地五项已完成，[预览与真机验收](plans/2026-10-30-preview-validation.md)已由用户启动，APK36已发布，其余进展见本轮交付；命令见[验证入口](verification.md)。
 

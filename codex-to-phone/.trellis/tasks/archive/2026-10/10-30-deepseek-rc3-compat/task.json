@@ -3,7 +3,7 @@
   "name": "deepseek-rc3-compat",
   "title": "DeepSeek rc.3兼容与手机复联验收",
   "description": "核对并适配官方rc.3原进程接口，隔离验证、更新原桥接插件与必要网关，验收手机原会话恢复。",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": "deepseek",
   "package": "relay",
@@ -11,7 +11,7 @@
   "creator": "rorance",
   "assignee": "rorance",
   "createdAt": "2026-10-30",
-  "completedAt": null,
+  "completedAt": "2026-10-30",
   "branch": "main",
   "base_branch": "main",
   "worktree_path": null,
@@ -21,6 +21,6 @@
   "children": [],
   "parent": null,
   "relatedFiles": [],
-  "notes": "两版官方各25项、DeepSeek60项、verify通过；原插件HMR加载、网关切换、14会话首帧、公网31项及Codex12项通过。仅待手机原会话确认。",
+  "notes": "两版官方各25项、DeepSeek60项、verify通过；原插件HMR加载、网关切换、14会话首帧、公网31项及Codex12项通过。2026-10-30用户确认APK36列表、正文和重新打开均正常，本轮完成。main直接交付，无PR；归档使用脚本为无PR任务提供的skip-branch-validation选项。真实控制候选计划尚未启动。",
   "meta": {}
 }
