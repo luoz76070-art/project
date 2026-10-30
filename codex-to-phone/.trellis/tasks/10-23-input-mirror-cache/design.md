@@ -3,3 +3,15 @@
 消息合并发生在features/chat/messageReconciliation。用户原始ID分属native与rollout，不能改为纯正文去重。保留nativeMessageId作为已关联的本地身份元数据，与clientMessageId/sourceItemId并列识别，避免选用历史记录后丢掉native别名。无client的未绑定native也参与原有同turn/完整正文/等数量有序配对；已绑定历史不再进入未绑定组。明确client冲突时保留。
 
 缓存身份版本3重新读取0/1/2正文，保留本地输入、草稿、待确认。元数据随新缓存保存，之后继续离线读取。API与后端不用新字段，不更新控制协议，不重启在线网关。
+
+三路补修：历史携带clientMessageId可能仅表示已与HTTP确认占位关联，不能据此认定已有native绑定。只以nativeMessageId判断是否已配对；未绑定的同turn/完整正文/等数量两路继续一一关联。任何对应项出现明确不同client身份则保守保留整组，避免错误消除独立提交。仍使用原mergeSameMessage保留历史时间、附件及全部身份；已有版本3缓存经同一合并/渲染入口修复，不再换缓存版本。
+
+诊断模块独立于React/HTTP，接受点击时runtime与实际渲染数组。runtime补只读的单会话原缓存读取器，返回状态、身份版本和消息，避免loadThreadRuntimeCache迁移过滤后掩盖原状态。所有不透明ID也只输出SHA256，kind/role/时间白名单化；显示正文复用parseMessageAttachments。按相同显示指纹统计三层数量，明确同文不等于误重复，不自动合并。限制分组/记录数并报告截断及总数。App仅在手动复制期间计算，使用既有writeClipboard，局部反馈且可重试，不记录报告到localStorage。
+
+成品检查发现既有writeClipboard在Android注册Clipboard JS代理，但APK没有对应原生类或注册，原生复制会被拒绝。为使诊断能在手机使用，最小扩展为新增ClipboardPlugin.write并在MainActivity注册；仅按用户点击写入纯文本，不读取剪贴板、不增加权限或自动上传。构建、完整lint和APK DEX/注册核验为交付条件，浏览器替身不能代替原生存在性检查，实际Android复制仍独立验收。
+
+后续完整过渡测试已复现临时turn-input被正式native替换时，snapshot reducer删除生效但App旧runtime合并及历史临时别名仍存，48种合成顺序28种重复。修正设计待实施：明确初始临时项到正式项的继承，在快照接入时同时退役旧记录并迁移历史别名；缺身份/冲突/重复引导保持保守，不用纯正文去重。现存缓存按明确关系修复并保留草稿与待确认。不得用全量snapshot覆盖历史分页。具体边界与验收见docs/audits/2026-10-23/input-transition-test-plan.md；未改产品，不认定已证明手机早期状态。
+
+2026-10-24用户明确要求实施并发布预览。最小跨层边界：Relay仅给原始userMessage首项增加replacesMessageId=turn-input，steeringUserMessage不声明替换；手机合并器在折叠前按明确关系、同turn/完整正文/无client冲突迁移旧临时记录与历史native别名，并保留该关系用于迟到快照及缓存恢复。缓存版本保持3，加载/保存均归一化已知关系，草稿/待确认/cursor/generation不变。MessageTimeline使用初始输入的替换链身份保持key稳定。预计修改两端消息类型、Relay投影、手机合并/缓存/Timeline及入口回归；发送/队列/权限协议保持。缺关系的旧缓存等待新网关的只读权威投影，不猜测同文初始/引导关系。本轮诊断复制优化暂停，不做Git写入。
+
+2026-10-24长任务边界补充：正式初始输入可被120条正文尾窗挤出，因此snapshot增加最多240条inputReplacements，仅含turn/predecessor/native/client身份。App将索引一并交给合并器，迁移已有明确临时别名并保留关系；已知正文/client或多个successor冲突时保守保留，缺关系不猜。只更新metadata的partial也必须修复旧缓存。

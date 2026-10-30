@@ -1,0 +1,9 @@
+// The lint analyzer runs on JDK17; Capacitor Java compilation needs JDK21+.
+def compilerHome = System.getenv('MOBILE_CODEX_COMPILE_JAVA_HOME')
+if (!compilerHome) throw new GradleException('Run pnpm verify:android to select the compiler JDK')
+allprojects {
+    tasks.withType(JavaCompile).configureEach {
+        options.fork = true
+        options.forkOptions.javaHome = file(compilerHome)
+    }
+}

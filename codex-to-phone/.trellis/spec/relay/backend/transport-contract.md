@@ -1,5 +1,11 @@
 # Broker / Tunnel 流式契约
 
+## 手动连接诊断（2026-10-29）
+
+`GET /api/diagnostics`沿用Bearer/配对设备鉴权，仅返回schema、当前产物buildId和托管Tunnel最近20条内存事件。`startTunnel`可选onDiagnostic记录代次/序号/固定原因/数字closeCode；不记录URL、密钥、close reason或原错误，不读模型会话、不重放写入。普通Relay无托管Tunnel时enabled=false。完整数据、大小限制及手机兼容见[短诊断契约](../../mobile/frontend/diagnostics-contract.md)。
+
+Desktop初始`userMessage`首项带`replacesMessageId=turnId-input`；accepted steering不替换初始占位。snapshot附加`inputReplacements`身份索引，最多最近240条，消息正文尾窗仍120条。索引只含turnId/replacesMessageId/nativeMessageId及可选clientMessageId，不含正文/控制信息；full与partial均须保留该metadata，允许零正文变化时只更新关系。长尾与边界在desktopNativeControl隔离测试验证，手机接入/缓存过渡另验。
+
 ## 1. 范围与触发
 
 实现 F01/F02/F03 与 F19 的传输部分；源码为 `src/transport/`、`src/server/eventStream.ts`。手机的 REST/SSE 地址不变。此契约不表示前端档案隔离、订阅恢复或真实 Desktop 控制已完成。
@@ -73,3 +79,7 @@ response       { id, status, headers, body: string }  # 旧协议
 - 错误：仅按 requestId 匹配或相信 readyState=OPEN；正确：绑定连接对象，并主动心跳探测。
 - 错误：SSE 使用 raw.writeHead 绕开 Fastify；正确：`reply.send(PassThrough)` 并在响应关闭时清理。
 - 错误：为迁移建空规范或复制第二套路由；正确：规范指向真实模块，Node/SEA 只保留同一工厂。
+
+## 用户正文投影兼容（2026-10-29）
+
+role/item type维持原含义，普通用户正文和标题不能因自然语言角色前缀被隐藏。缺明确来源的旧记录按现有专用包络标记兼容过滤：environment_context、permissions instructions、app-context、collaboration_mode、personality_spec、skills_instructions、plugins_instructions、AGENTS.md instructions、INSTRUCTIONS、send_user_message_question_reply；不新增未经证实的来源字段。此边界同时适用于rollout、Desktop与app-server，问答回执不投影为普通用户输入。通用`You are `和`Knowledge cutoff:`不是上下文来源证据。

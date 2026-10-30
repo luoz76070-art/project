@@ -1,5 +1,9 @@
 # 后端验证
 
+统一核心入口为 `corepack pnpm verify`，含Android用 `verify:all`。先完成Relay和插件构建再以并发2运行 `apps/relay/tests/*.test.mjs`，避免文件通知测试与大规模IO测试争用；该目录只允许隔离测试，真实probe/官方运行时复核继续单独执行。正式工具链及失败契约见 `docs/verification.md`；不能并行启动其他会清理dist的命令。
+
+诊断改动须在Relay和独立插件构建完成后运行`diagnostics.test.mjs`及`managedGateway.test.mjs`：断言当前产物ID、20条容量及省略数、字段脱敏、匿名拒绝/有效鉴权、无pong心跳断开到下一连接代次的顺序、重复stop只记录一次；独立bundle也须返回有效构建ID。全部使用临时配置/端口与合成服务，不读取真实会话。API与手机兼容见[短诊断契约](../../mobile/frontend/diagnostics-contract.md)。
+
 执行过程跨层回归须验证native所有角色的真实record.turnId及rollout助手metadata.turn_id；不能只给用户消息加任务号。DeepSeek插件0.2.1增加6项实时/异常/重连及1项冷历史阶段用例，断言原生成功边界、stream.turn而非chunk.turn、末步候选失效、分页预算及零激活。info.messagePhases可选兼容旧插件；源码测试通过不等于实际HMR已加载，运营只读验证和原Harness保持单独记证据。详见[DeepSeek阶段契约](deepseek-contract.md)。
 
 - `corepack pnpm typecheck`：两端类型检查。
@@ -33,3 +37,5 @@
 - DeepSeek当前增加默认HTTP工厂配置接线回归，共23项：该用例不能注入AgentGateway，须让配置经过与生产相同的构造路径，否则即使全部适配器与注入路由测试通过，也可能遗漏可选Agent注册。
 - 插件0.1.2后DeepSeek共40项，增加原生问题/完整计划、continued、工具输入索引/PTC、单次允许/拒绝、多语言displayReason、缺参/歧义/非法/超限、旧turn/step、两端先答/取消、unknown跨重连及设备HTTP幂等。原23项为前期计数。官方交互检查另用`node scripts/check-deepseek-interactions.mjs <隔离运行时绝对目录>`，8项含真实Cordis traceable服务，避免只用普通对象fixture遗漏服务Proxy契约；无外部模型和用户真实审批。
 - `node scripts/check-deepseek-runtime.mjs <隔离运行时绝对目录>`：显式使用固定官方发布依赖，检查bundle/版本门、CLI配置合成、真实Loader/内存会话/事件总线和卸载；再使用官方agent-loop-testkit装载生产AgentLoop，仅登记本地确定性LLM adapter，验证queue/steer、canonical去重、keepInbox及旧turn拒绝。13项检查、3次本地响应、无外部模型；脚本创建并清理临时profile，不读用户profile，不安装依赖，也不计为用户原会话控制验收。不要并入默认离线测试。
+
+普通角色提示词不得按`You are `、`Knowledge cutoff:`前缀过滤。历史、标题、native params/canonical/accepted steering、app-server item通知和完成回读须共同验证`scripts/fixtures/user-prompts.mjs`矩阵；专用包络缺来源兼容和问答reply排除保持一致。分别使用correctness临时rollout/假app-server和desktopNativeControl合成IPC，不读真实会话。读取dist的测试须在Relay构建完成后运行，不能与会清理dist的build并行。

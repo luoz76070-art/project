@@ -9,7 +9,7 @@
 
 Codex To Phone 不是远程桌面，也不会把 Codex 账号放到手机上。Codex 仍在电脑上运行，手机通过你自己控制的 Relay 和 Broker 查看最近会话并提交输入。
 
-当前开发预览为APK32 `1.3.11-compact-composer-preview`：运行状态收进输入框，紧凑引导/排队按需显示，待发默认折叠；390px运行态footer由271.5px缩至125px。手机69项、类型/构建/更新、浏览器19项及公网19项通过，Android lint0错误/8项既有警告。preview32/previous31，正式18/hot保持；手机App内检查更新，真机触摸/键盘待验，见[交付记录](docs/audits/2026-10-23/compact-running-composer.md)。包含APK31的[输入关联与缓存补修](docs/audits/2026-10-23/input-mirror-cache.md)，原重复截图仍待实机复核。
+当前开发预览为APK35 `1.3.14-input-replacement-preview`：明确临时输入到正式输入的替换关系，迁移历史记录旧别名并修复已有版本3缓存，保留草稿、待确认及真实同文多次输入；配套网关提供独立于120条尾窗的有界身份索引。手机84项、后端相关113项、消息/类型/构建及实际浏览器过渡检查通过，完整Android lint 0错误/8警告。同签名preview35/previous34已发布，正式18/hot保持，App内检查更新。网关已切换，86项只读健康检查及两Agent首帧/重连通过；原手机重复记录和覆盖安装待真机验收，无需复制长诊断。见[修正与交付](docs/audits/2026-10-24/input-replacement.md)。
 
 源码采用“分步本地提交，完整版本验收后集中推送GitHub”的流程；本项目位于父仓库`project`的`codex-to-phone/`子目录，提交和推送前必须核对项目范围。预览版本与正式验收分开标记，手机/网关部署仍沿各自发布流程。具体步骤见[版本同步约定](docs/ops/version-sync.md)。
 
@@ -262,7 +262,15 @@ scripts/publish-hot-update.sh \
 
 ## 常用命令
 
+统一检查与Android工具链说明见[本地验证入口](docs/verification.md)。
+
 ```bash
+# 核心隔离检查（lint、类型、构建、测试）
+corepack pnpm verify
+
+# 核心检查 + Android Java编译与lint
+corepack pnpm verify:all
+
 # 类型检查
 corepack pnpm typecheck
 

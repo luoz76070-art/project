@@ -1,7 +1,7 @@
 import { type CodexMessage, type ToolMessageMeta, type ThreadRuntime, type LiveTurnStatus, type DesktopControlResponse, type LiveApprovalDecision } from "../../app/types";
 import { firstLine, pathTail } from "../threads/model";
 import { clip } from "../../shared/format";
-import { collapseMirroredMessages, stripCodexAppDirectives, reconcileMessages } from "./messageReconciliation";
+import { collapseMirroredMessages, stripCodexAppDirectives, reconcileMessages, type InputReplacement } from "./messageReconciliation";
 import { maxMessagesPerThread } from "../../app/config";
 import { isProcessMessage } from "./processGroups";
 
@@ -312,6 +312,8 @@ export function isEmptyChatMessage(message: CodexMessage) {
 export function isGeneratedContextMessage(message: CodexMessage) {
   if (message.role !== "user") return false;
   const text = message.text.trim();
+  // Legacy user-role records lack a source field. Only reserved context
+  // envelopes are evidence; natural-language role prompts are ordinary input.
   return (
     text.startsWith("<environment_context>") ||
     text.startsWith("<permissions instructions>") ||
@@ -322,9 +324,7 @@ export function isGeneratedContextMessage(message: CodexMessage) {
     text.startsWith("<plugins_instructions>") ||
     text.startsWith("<send_user_message_question_reply>") ||
     text.startsWith("# AGENTS.md instructions") ||
-    text.startsWith("<INSTRUCTIONS>") ||
-    text.startsWith("Knowledge cutoff:") ||
-    text.startsWith("You are ")
+    text.startsWith("<INSTRUCTIONS>")
   );
 }
 
@@ -423,8 +423,8 @@ export function mergeMessages(current: CodexMessage[], incoming: CodexMessage[])
   return reconcileMessages(current, incoming);
 }
 
-export function mergeMessagesById(current: CodexMessage[], incoming: CodexMessage[]) {
-  return reconcileMessages(current, incoming);
+export function mergeMessagesById(current: CodexMessage[], incoming: CodexMessage[], inputReplacements?: InputReplacement[]) {
+  return reconcileMessages(current, incoming, inputReplacements);
 }
 
 export function capMessages(messages: CodexMessage[], runtime?: { historyBrowsing?: boolean }) {

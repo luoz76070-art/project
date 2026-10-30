@@ -28,6 +28,7 @@ export type DesktopStreamSnapshot = {
   threadId: string;
   status: "starting" | "inProgress" | "completed" | "interrupted" | "failed";
   messages: CodexMessage[];
+  inputReplacements?: { turnId: string; replacesMessageId: string; nativeMessageId: string; clientMessageId?: string }[];
   messageCount: number;
   eventCount: number;
   updatedAt: string;
@@ -613,11 +614,19 @@ function conversationToStreamSnapshot(
 ): DesktopStreamSnapshot | null {
   if (!conversationState || typeof conversationState !== "object") return null;
   const state = conversationState as Record<string, unknown>;
-  const messages = extractConversationMessages(state).slice(-120);
+  const allMessages = extractConversationMessages(state);
+  const messages = allMessages.slice(-120);
+  // Keep identity repair independent of the bounded message tail. No body or
+  // control data is included; only the latest 240 initial-input relations.
+  const inputReplacements = allMessages.filter(message => message.turnId && message.replacesMessageId).slice(-240).map(message => ({
+    turnId: message.turnId!, replacesMessageId: message.replacesMessageId!, nativeMessageId: message.id,
+    ...(message.clientMessageId ? { clientMessageId: message.clientMessageId } : {}),
+  }));
   return {
     threadId: conversationId,
     status: normalizeStreamStatus(state),
     messages,
+    inputReplacements,
     messageCount: messages.length,
     eventCount,
     updatedAt: new Date().toISOString(),
@@ -635,7 +644,8 @@ function extractConversationMessages(state: Record<string, unknown>): CodexMessa
     const turnId = typeof record.turnId === "string" ? record.turnId : `turn-${turnIndex}`;
     const timestamp = timestampFromTurn(record);
     const items = Array.isArray(record.items) ? record.items : [];
-    const hasUserItem = items.some((item) => item && typeof item === "object" && (item as Record<string, unknown>).type === "userMessage");
+    const initialUserIndex = items.findIndex((item) => item && typeof item === "object" && (item as Record<string, unknown>).type === "userMessage");
+    const hasUserItem = initialUserIndex >= 0;
     const inputText = hasUserItem ? "" : extractDesktopInputText((record.params as Record<string, unknown> | undefined)?.input);
     if (inputText && isDisplayableUserText(inputText)) {
       messages.push({
@@ -651,7 +661,13 @@ function extractConversationMessages(state: Record<string, unknown>): CodexMessa
     }
     items.forEach((item, itemIndex) => {
       const message = desktopItemToMessage(item, turnId, itemIndex, timestamp);
-      if (message) messages.push(typeof record.turnId === "string" ? { ...message, turnId: record.turnId } : message);
+      if (message) messages.push({
+        ...message,
+        ...(typeof record.turnId === "string" ? { turnId: record.turnId } : {}),
+        // Only the original user item replaces params.input. Accepted steering
+        // is a separate occurrence even when its text is exactly the same.
+        ...(itemIndex === initialUserIndex && message.role === "user" ? { replacesMessageId: `${turnId}-input` } : {}),
+      });
     });
   });
   return dedupeStreamMessages(messages);
@@ -719,6 +735,8 @@ function isDisplayableUserText(text: string): boolean {
 }
 
 function isGeneratedContextText(trimmed: string): boolean {
+  // Compatibility for user items without source metadata: reserved envelopes
+  // identify context; natural-language role prompts do not.
   return (
     trimmed.startsWith("<environment_context>") ||
     trimmed.startsWith("<permissions instructions>") ||
@@ -729,9 +747,7 @@ function isGeneratedContextText(trimmed: string): boolean {
     trimmed.startsWith("<plugins_instructions>") ||
     trimmed.startsWith("<send_user_message_question_reply>") ||
     trimmed.startsWith("# AGENTS.md instructions") ||
-    trimmed.startsWith("<INSTRUCTIONS>") ||
-    trimmed.startsWith("Knowledge cutoff:") ||
-    trimmed.startsWith("You are ")
+    trimmed.startsWith("<INSTRUCTIONS>")
   );
 }
 

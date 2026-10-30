@@ -9,7 +9,7 @@
     "broker:dev": "tsx src/brokerServer.ts",
     "broker:start": "node dist/brokerServer.js",
     "tunnel:start": "node dist/remoteTunnelClient.js",
-    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && node scripts/write-build-info.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke": "tsx src/smoke/smoke.ts",
     "appserver:smoke": "tsx src/smoke/appserverSmoke.ts",

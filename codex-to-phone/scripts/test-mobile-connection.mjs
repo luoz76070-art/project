@@ -4,7 +4,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 import { build } from 'esbuild';
+import { ordinaryPrompts, contextEnvelopes } from './fixtures/user-prompts.mjs';
 
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-connection-test-'));
 async function moduleFrom(file) {
@@ -13,7 +15,8 @@ async function moduleFrom(file) {
   return import(pathToFileURL(outputPath).href);
 }
 const { subscribeEvents } = await moduleFrom('features/connection/subscription.ts');
-const { saveThreadRuntimeCache, loadThreadRuntimeCache, defaultRuntime, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, desktopApprovalsPatch, approvalResponsePatch } = await moduleFrom('features/chat/runtime.ts');
+const { saveThreadRuntimeCache, loadThreadRuntimeCache, readThreadMessageCacheForDiagnostics, defaultRuntime, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, desktopApprovalsPatch, approvalResponsePatch } = await moduleFrom('features/chat/runtime.ts');
+const { makeMessageDiagnostics } = await moduleFrom('features/chat/messageDiagnostics.ts');
 const { offlineAgent, agentDelivery, agentHistoryWindow, reconcileAgentDraft, verifyAgentSnapshot, loadAgentDrafts, saveAgentDrafts } = await moduleFrom('features/agents/runtime.ts');
 const { groupByProject, projectGroupKey, sessionInRange, retainCodexThread } = await moduleFrom('features/threads/model.ts');
 const { loadProjectGroups, saveProjectGroups } = await moduleFrom('features/threads/projectPreferences.ts');
@@ -26,6 +29,34 @@ try { ({ messagesForRender } = await moduleFrom('features/chat/messages.ts')); }
 const tick = () => new Promise(resolve => setTimeout(resolve, 10));
 
 const processMessage = (id, phase, extra = {}) => ({ id, role: 'assistant', text: id, phase, kind: 'agent_message', timestamp: '2026-10-23T06:00:00Z', ...extra });
+test('ordinary role prompts remain visible in local, native and history messages', () => {
+  for (const [prefix, kind] of [['local-', 'user_message'], ['desktop-', 'userMessage'], ['log-', 'message']]) {
+    const input = ordinaryPrompts.map((text, index) => ({ id: `${prefix}${index}`, role: 'user', text, kind, timestamp: `2026-10-29T00:00:0${index}Z` }));
+    assert.deepEqual(messagesForRender(input), input);
+  }
+});
+
+test('explicit roles, hook items and legacy context envelopes stay outside user bubbles', () => {
+  const hidden = contextEnvelopes.map((text, index) => ({ id: `context-${index}`, role: 'user', text, kind: 'message', timestamp: '' }));
+  hidden.push(...['system', 'developer'].map(role => ({ id: role, role, text: ordinaryPrompts[0], kind: 'message', timestamp: '' })),
+    { id: 'hook', role: 'tool', kind: 'hookPrompt', text: 'synthetic hook', timestamp: '' });
+  assert.deepEqual(messagesForRender(hidden), []);
+});
+
+test('ordinary role prompts survive cache reopen and keep distinct same-text submissions', () => {
+  const original = globalThis.localStorage, values = new Map();
+  globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  try {
+    const input = [...ordinaryPrompts, ordinaryPrompts[0]].map((text, index) => ({ id: `log-${index}`, sourceItemId: `source-${index}`, turnId: `turn-${index}`, role: 'user', text, kind: 'message', timestamp: `2026-10-29T00:00:0${index}Z` }));
+    const question = { id: 'question', role: 'user', text: contextEnvelopes.at(-1), kind: 'message', timestamp: '' };
+    saveThreadRuntimeCache({ thread: { ...defaultRuntime(), draft: '未发送草稿', messages: [...input, question] } }, 'prompt-visibility');
+    const restored = loadThreadRuntimeCache('prompt-visibility').thread;
+    assert.equal(restored.draft, '未发送草稿');
+    assert.deepEqual(messagesForRender(restored.messages).map(m => [m.sourceItemId, m.text]), input.map(m => [m.sourceItemId, m.text]));
+    assert.equal(restored.messages.some(m => m.id === question.id), false);
+  } finally { globalThis.localStorage = original; }
+});
+
 test('streaming commentary remains expanded until an explicit final answer arrives', () => {
   const input = [processMessage('read', 'commentary'), processMessage('check', 'commentary')];
   const active = groupMessageProcesses(input);
@@ -266,9 +297,9 @@ function environment(t) {
 test('stream error obtains a fresh token, resumes, and disposal ignores late frames', async t => {
   const { sources, own } = environment(t);
   let tokens = 0, snapshots = 0;
-  const states = [];
+  const states = [], diagnosticEvents = [];
   const stop = subscribeEvents({ getToken: async () => ({ streamToken: String(++tokens) }), url: x => x,
-    events: { desktop: () => snapshots++ }, onState: x => states.push(x), retryBaseMs: 1 });
+    events: { desktop: () => snapshots++ }, onState: x => states.push(x), onDiagnostic: event => diagnosticEvents.push(event), retryBaseMs: 1 });
   own(stop);
   await tick(); sources[0].onopen(); sources[0].onerror();
   await tick();
@@ -281,6 +312,7 @@ test('stream error obtains a fresh token, resumes, and disposal ignores late fra
   stop(); sources[1].emit('desktop', {});
   assert.equal(snapshots, 1);
   assert.ok(states.includes('recovering') && states.includes('online'));
+  assert.deepEqual(diagnosticEvents.map(event => [event.generation, event.reason]), [[1, 'start'], [1, 'open'], [1, 'stream-error'], [2, 'retry'], [2, 'open'], [2, 'dispose']]);
 });
 
 test('hidden tabs close streams; foreground resumes with a new token', async t => {
@@ -549,6 +581,34 @@ test('current caches retain native aliases for identity-free replay while leavin
   } finally { globalThis.localStorage = previous; }
 });
 
+test('version 3 cache and render repair HTTP-linked history followed by an early native item', () => {
+  const values = new Map(), previous = globalThis.localStorage;
+  globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  try {
+    const native = { id: 'desktop-tri-turn-first', turnId: 'tri-turn', role: 'user', text: '合成三路输入', kind: 'userMessage', timestamp: '2026-10-23T10:21:19.174Z' };
+    const history = { ...native, id: 'log-tri-first', kind: 'message', sourceItemId: 'msg_tri_first', clientMessageId: 'tri-client', timestamp: '2026-10-23T10:21:19.247Z' };
+    const started = { id: 'log-tri-started', role: 'tool', kind: 'task_started', text: 'Codex turn started', timestamp: '2026-10-23T10:21:19.200Z' };
+    const pending = { id: 'desktop-local-next', clientMessageId: 'next', role: 'user', kind: 'local', text: '另一条待确认输入', timestamp: '2026-10-23T10:22:00Z' };
+    saveThreadRuntimeCache({ thread: { ...defaultRuntime(), messages: [native, started, history, pending], cursor: 500, generation: 'tri-generation', draft: '正在编辑的草稿', pendingMessageId: 'next', pendingMessageText: pending.text } }, 'tri-source');
+    const restored = loadThreadRuntimeCache('tri-source').thread;
+    assert.equal(restored.cursor, 500); assert.equal(restored.generation, 'tri-generation');
+    assert.equal(restored.draft, '正在编辑的草稿'); assert.equal(restored.pendingMessageId, 'next');
+    const visible = messagesForRender(restored.messages);
+    assert.equal(visible.filter(message => message.text === native.text).length, 1, 'cached duplicates are repaired without invalidating current caches');
+    assert.equal(visible.filter(message => message.kind === 'task_started').length, 1);
+    assert.ok(visible.some(message => message.id === pending.id));
+    const merged = reconcileMessages(restored.messages, [native, history]);
+    const input = merged.find(message => message.sourceItemId === history.sourceItemId);
+    assert.equal(input.nativeMessageId, native.id); assert.equal(input.clientMessageId, history.clientMessageId);
+    assert.equal(desktopMessageReceived({ ...restored, messages: merged }, history.clientMessageId), true);
+    const final = { id: 'tri-final', turnId: native.turnId, role: 'assistant', kind: 'agentMessage', phase: 'final_answer', text: '合成完成', timestamp: '2026-10-23T10:21:20Z' };
+    const groups = groupMessageProcesses(messagesForRender([...merged, final]));
+    assert.equal(groups.filter(group => group.kind === 'message' && group.message.text === native.text).length, 1);
+    assert.ok(groups.some(group => group.kind === 'process' && group.messages.some(message => message.id === started.id)));
+    assert.ok(groups.some(group => group.kind === 'message' && group.message.id === final.id));
+  } finally { globalThis.localStorage = previous; }
+});
+
 test('a persisted user message linked to native input remains confirmation evidence after reconciliation', () => {
   const message = { id: 'log-synthetic-user', role: 'user', kind: 'message', sourceItemId: 'msg-synthetic-user', clientMessageId: 'confirmed-input', turnId: 'synthetic-turn', text: '只引导一次', timestamp: '2026-10-23T05:52:09Z' };
   for (const kind of ['message', 'user_message']) assert.equal(desktopMessageReceived({ ...defaultRuntime(), messages: [{ ...message, kind }] }, 'confirmed-input'), true);
@@ -627,6 +687,89 @@ test('late HTTP uncertainty cannot resurrect a submission after queue admission 
   }
   const local = { ...defaultRuntime(), messages: [{ role: 'user', kind: 'local', clientMessageId: 'mine' }] };
   assert.equal(desktopControlResponsePatch(local, receipt, 'mine').desktopSubmission.delivery, 'uncertain');
+});
+
+const diagnosticHash = text => createHash('sha256').update(text).digest('hex');
+test('message diagnostics compare raw cache, runtime, actual render input and DOM without exporting content or credentials', async () => {
+  const original = globalThis.localStorage;
+  const text = '只用于隔离测试的私有正文';
+  const native = { id: 'desktop-private-id', role: 'user', kind: 'userMessage', text, timestamp: '2026-10-23T12:09:48.987Z', turnId: 'private-turn', clientMessageId: 'private-client' };
+  const history = { ...native, id: 'log-private-id', kind: 'message', sourceItemId: 'private-source', text: text + '\n', timestamp: '2026-10-23T12:09:49.155Z', token: 'secret-message-token' };
+  const messages = [native, history];
+  const serialized = JSON.stringify({ target: { messages, messageIdentityVersion: 1, draft: 'private-draft', pendingMessageText: 'private-pending', token: 'secret-cache-token' } });
+  const reads = [];
+  globalThis.localStorage = { getItem(key) { reads.push(key); return key === 'mobileCodexThreadRuntimeCacheV2:private-scope' ? serialized : null; }, setItem() { assert.fail('diagnostics must not write storage'); } };
+  try {
+    const cache = readThreadMessageCacheForDiagnostics('private-scope', 'target');
+    assert.equal(cache.messageIdentityVersion, 1); assert.equal(cache.messages.length, 2);
+    assert.deepEqual(reads, ['mobileCodexThreadRuntimeCacheV2:private-scope'], 'diagnostics only inspect the original body cache');
+    assert.equal(loadThreadRuntimeCache('private-scope').target.messages.length, 0, 'diagnostic captures original cache before loader migration');
+    reads.length = 0;
+    const visible = messagesForRender(messages);
+    assert.equal(visible.length, 1);
+    const before = JSON.stringify({ messages, visible, cache });
+    const report = await makeMessageDiagnostics({ threadId: 'private-thread', appVersionCode: 34, runtime: messages, rendered: visible, domUserTexts: [text], cache });
+    assert.equal(report.threadSha256, diagnosticHash('private-thread'));
+    assert.deepEqual(report.sameTextGroups[0].counts, { runtime: 2, rendered: 1, cache: 2, dom: 1 });
+    const record = report.sameTextGroups[0].records.find(record => record.message.origin === 'history').message;
+    assert.equal(record.ids.source, diagnosticHash('private-source'));
+    assert.equal(record.rawText.trimmedSha256, report.sameTextGroups[0].displaySha256);
+    assert.notEqual(record.rawText.sha256, record.rawText.trimmedSha256);
+    const output = JSON.stringify(report);
+    for (const value of [text, 'private-', 'secret-', 'token', 'pendingMessageText', 'draft']) assert.equal(output.includes(value), false, value);
+    assert.equal(JSON.stringify({ messages, visible, cache }), before);
+    assert.deepEqual(reads, [], 'report generation must not read unrelated storage');
+  } finally { globalThis.localStorage = original; }
+});
+
+test('diagnostics retain independent same-text inputs and distinguish text hidden by attachment presentation', async () => {
+  const text = 'same input', secretPath = '/private/attachment-secret.png';
+  const base = { role: 'user', kind: 'user_message', text, timestamp: '2026-10-23T12:00:00Z' };
+  const messages = [{ ...base, id: 'first', sourceItemId: 'source1', clientMessageId: 'client1' },
+    { ...base, id: 'second', sourceItemId: 'source2', clientMessageId: 'client2', timestamp: '2026-10-23T12:01:00Z', text: `${text}\n\n已上传附件：\n- secret.png | ${secretPath}` }];
+  const visible = messagesForRender(messages);
+  assert.equal(visible.length, 2, 'independent submissions stay independent');
+  const report = await makeMessageDiagnostics({ threadId: 'thread', appVersionCode: 34, runtime: messages, rendered: visible, domUserTexts: [text, text], cache: { status: 'missing', messageIdentityVersion: null, messages: [], invalidMessageCount: 0 } });
+  assert.deepEqual(report.sameTextGroups[0].counts, { runtime: 2, rendered: 2, cache: 0, dom: 2 });
+  const records = report.sameTextGroups[0].records.filter(record => record.stage === 'rendered').map(record => record.message);
+  assert.notEqual(records[0].ids.client, records[1].ids.client);
+  assert.notEqual(records[0].rawText.sha256, records[1].rawText.sha256);
+  assert.equal(records[0].display.sha256, records[1].display.sha256);
+  assert.equal(records[1].display.attachments, 1);
+  assert.equal(JSON.stringify(report).includes(secretPath), false);
+});
+
+test('diagnostic snapshots preserve captured values while hashing yields and can expose DOM-only duplication', async () => {
+  const message = { id: 'captured', role: 'user', kind: 'userMessage', text: 'captured text', timestamp: '2026-10-23T12:00:00Z' };
+  const input = { threadId: 'thread', appVersionCode: 34, runtime: [message], rendered: [message], domUserTexts: [message.text, message.text], cache: { status: 'missing', messageIdentityVersion: null, messages: [], invalidMessageCount: 0 } };
+  const promise = makeMessageDiagnostics(input);
+  message.text = 'a later update'; message.id = 'a later ID'; input.runtime.length = 0;
+  const report = await promise;
+  assert.deepEqual(report.sameTextGroups[0].counts, { runtime: 1, rendered: 1, cache: 0, dom: 2 });
+  assert.equal(report.recentRendered[0].ids.id, diagnosticHash('captured'));
+  assert.equal(report.recentRendered[0].rawText.sha256, diagnosticHash('captured text'));
+});
+
+test('diagnostics bound exported records and explicitly report omitted history/groups', async () => {
+  const messages = Array.from({ length: 300 }, (_, index) => ({ id: `id${index}`, role: 'user', kind: 'user_message', text: `synthetic-${Math.floor(index / 2)}`, timestamp: '2026-10-23T12:00:00Z', clientMessageId: `client${index}`, sourceItemId: `source${index}` }));
+  const report = await makeMessageDiagnostics({ threadId: 'thread', appVersionCode: 34, runtime: messages, rendered: messages, domUserTexts: messages.map(message => message.text), cache: { status: 'available', messageIdentityVersion: 3, messages, invalidMessageCount: 0 } });
+  assert.ok(report.stages.every(stage => stage.totalMessages === 300 && stage.omittedMessages === 60 && stage.analyzedUserMessages === 240));
+  assert.equal(report.dom.omittedElements, 60);
+  assert.equal(report.sameTextGroups.length, 8); assert.equal(report.omittedGroups, 112);
+  assert.ok(report.sameTextGroups.reduce((count, group) => count + group.records.length, 0) <= 40);
+  assert.ok(report.sameTextGroups.some(group => group.omittedRecords > 0));
+  assert.ok(Buffer.byteLength(JSON.stringify(report)) < 65536);
+});
+
+test('diagnostic cache reader reports missing/corrupt data and does not migrate or clear it', () => {
+  const original = globalThis.localStorage;
+  try {
+    for (const [serialized, status, invalid] of [[null, 'missing', 0], ['{', 'unreadable', 0], ['{"target":{"messages":false}}', 'unreadable', 0], ['{"target":{"messages":[null,{}],"messageIdentityVersion":3}}', 'available', 2]]) {
+      globalThis.localStorage = { getItem: () => serialized, setItem: () => assert.fail('no writes') };
+      const cache = readThreadMessageCacheForDiagnostics('scope', 'target');
+      assert.equal(cache.status, status); assert.equal(cache.invalidMessageCount, invalid); assert.deepEqual(cache.messages, []);
+    }
+  } finally { globalThis.localStorage = original; }
 });
 
 test.after(() => fs.rm(temp, { recursive: true, force: true }));

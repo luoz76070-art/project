@@ -3,8 +3,13 @@ import { PairingPanel } from "../features/connection/PairingPanel";
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import { type ConnectionProfile, type ThemeMode, type SplitMode, type ApprovalPolicy, type SandboxMode, type ThreadSummary, type ThreadRuntime, type DiagnosticStep, type RelayStatus, type UpdateState, type HotUpdateState, type LoadThreadsOptions, type HotUpdateManifest, type DesktopActiveResponse, type CodexMessage, type LiveTurnSnapshot, type SendRoute, type PendingAttachment, type DesktopControlResponse, type UploadResponse, type DesktopStreamSnapshot, type LiveApproval, type LiveApprovalDecision, type UserInputRequest } from "./types";
 import { defaultProfileId, defaultTheme, defaultSplitMode, defaultApprovalPolicy, defaultSandboxMode, defaultSidePaneSize, defaultTopPaneSize, newThreadId, updateManifestUrl, appVersionCode, hotUpdateManifestUrl, desktopPollActiveMs, desktopPollIdleMs, liveSnapshotThrottleMs, livePollFallbackMs, statusKeepaliveMs, appVersionLabel } from "./config";
-import { loadThreadRuntimeCache, defaultRuntime, getRuntime, saveThreadRuntimeCache, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, desktopApprovalsPatch, approvalResponsePatch } from "../features/chat/runtime";
-import { messagesForRender, activeTurnActivity, turnInlineIndicator, capMessages, mergeMessages, mergeMessagesById, turnStatusText, desktopActionText, nextSmoothMessageId, canUseEventSource } from "../features/chat/messages";
+import { loadThreadRuntimeCache, readThreadMessageCacheForDiagnostics, defaultRuntime, getRuntime, saveThreadRuntimeCache, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, approvalResponsePatch, threadCacheSaveNotice, type ThreadCacheSaveResult } from "../features/chat/runtime";
+import { makeMessageDiagnostics, readDiagnosticDom } from "../features/chat/messageDiagnostics";
+import { readDiagnosticEnvironment, makeDiagnosticsExport, saveDiagnosticFile } from "../features/chat/diagnosticExport";
+import { createConnectionJournal } from "../features/connection/diagnosticJournal";
+import { createPollScope } from "../features/chat/sync";
+import { createRuntimeSync } from "../features/chat/runtimeSync";
+import { messagesForRender, activeTurnActivity, turnInlineIndicator, capMessages, mergeMessages, mergeMessagesById, turnStatusText, desktopActionText, canUseEventSource } from "../features/chat/messages";
 import { groupThreadsByProject, mergeThreads, shortPath, isDesktopSource, firstLine, threadListDetail, cleanTitle, sourceClass, sourceLabel, retainCodexThread, sessionInRange, sessionListRefreshMs, type SessionRange } from "../features/threads/model";
 import { ProjectGroups } from "../features/threads/ProjectGroups";
 import { SessionRangeControl } from "../features/threads/SessionRangeControl";
@@ -20,7 +25,7 @@ import { ApkUpdateProgress } from "../features/updates/ApkUpdateProgress";
 import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mimeTypeFromName, isImageFile, revokeAttachmentPreviews } from "../features/chat/attachments";
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
 import { clamp, applyTheme } from "../shared/preferences";
-import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, Plus, ArrowUp, ChevronLeft, ChevronDown } from "lucide-react";
+import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, Plus, ArrowUp, ChevronLeft, ChevronDown, Download } from "lucide-react";
 import { formatDate } from "../shared/format";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { MessageBubble, MessageTimeline, GenerationStatus, ApprovalCard, AttachmentTray } from "../features/chat/components";
@@ -46,13 +51,17 @@ export function App() {
 
 function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void }) {
   const scopeAbortRef = useRef(new AbortController());
+  const diagnosticJournalRef = useRef(createConnectionJournal());
+  const diagnosticEpochRef = useRef(0);
+  const desktopPollRef = useRef<AbortController | null>(null);
+  const livePollRef = useRef<AbortController | null>(null);
   const threadListRequestRef = useRef<AbortController | null>(null);
   const userInputSubmissionsRef = useRef(new Set<string>());
   const approvalSubmissionsRef = useRef(new Set<string>());
   const desktopInterruptRef = useRef<{ threadId: string; controlToken: string; expectedTurnId: string; clientMessageId: string } | null>(null);
   const endpoint = normalizeEndpoint(connection.endpoint);
   const token = connection.token;
-  const apiGet = <T,>(url: string, auth?: string) => requestGet<T>(url, auth, scopeAbortRef.current.signal);
+  const apiGet = <T,>(url: string, auth?: string, signal = scopeAbortRef.current.signal) => requestGet<T>(url, auth, signal);
   const apiPost = <T,>(url: string, auth: string, body: unknown) => requestPost<T>(url, auth, body, scopeAbortRef.current.signal);
   useEffect(() => {
     const controller = new AbortController();
@@ -73,6 +82,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
   const workspaceCache = useMemo(() => loadWorkspaceCache(scope), [scope]);
   const [threads, setThreads] = useState<ThreadSummary[]>(workspaceCache.threads);
   const [threadState, setThreadState] = useState<Record<string, ThreadRuntime>>(() => loadThreadRuntimeCache(scope));
+  const [cacheSaveResult, setCacheSaveResult] = useState<ThreadCacheSaveResult>({ status: "saved" });
   const [selected, setSelected] = useState<ThreadSummary | null>(() => workspaceCache.threads.find(thread => thread.id === workspaceCache.selectedId) ?? null);
   const [isNewThread, setIsNewThread] = useState(workspaceCache.isNewThread);
   const [query, setQuery] = useState("");
@@ -90,6 +100,9 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [copyingMessageDiagnostics, setCopyingMessageDiagnostics] = useState(false);
+  const [messageDiagnosticsStatus, setMessageDiagnosticsStatus] = useState("");
+  const messageDiagnosticsLock = useRef(false);
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const [submittingMessage, setSubmittingMessage] = useState(false);
   const [queueCancelling, setQueueCancelling] = useState<string | null>(null);
@@ -131,6 +144,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
   const forceBottomRef = useRef(false);
   const atBottomRef = useRef(true);
   const activeThreadKey = selected?.id ?? (isNewThread ? newThreadId : "");
+  useEffect(() => { diagnosticEpochRef.current++; setMessageDiagnosticsStatus(""); }, [activeThreadKey, settingsOpen]);
   const activeRuntime = getRuntime(threadState, activeThreadKey);
   const pendingInputId = activeRuntime.userInputs?.[0]?.id;
   const messages = activeRuntime.messages;
@@ -381,7 +395,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
     setStatus("读取线程中");
     forceBottomRef.current = scrollPositionsRef.current[thread.id] === undefined;
     atBottomRef.current = forceBottomRef.current;
-    patchRuntime(thread.id, { loading: true, status: "读取线程中" });
+    patchRuntime(thread.id, { loading: true, lastAccessedAt: Date.now(), status: "读取线程中" });
     try {
       const shouldUseDesktopTail = isDesktopSource(thread);
       const data = await readThread(endpoint, token, thread, scopeAbortRef.current.signal);
@@ -1099,47 +1113,12 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
     });
   }
 
-  function applyLiveTurnSnapshot(threadKey: string, turn: LiveTurnSnapshot) {
-    updateRuntime(threadKey, (runtime) => {
-      const messages = capMessages(mergeMessagesById(runtime.messages, turn.messages), runtime);
-      return {
-        ...runtime,
-        messages,
-        sending: turn.status === "starting" || turn.status === "inProgress",
-        loaded: true,
-        status: turnStatusText(turn.status),
-        activeTurnId: turn.status === "starting" || turn.status === "inProgress" ? turn.turnId : null,
-        turnStatus: turn.status,
-        lastEventCount: turn.eventCount,
-        lastTurnError: turn.error ?? "",
-        approvals: turn.approvals ?? runtime.approvals,
-        userInputs: turn.userInputs ?? [],
-        smoothMessageId: nextSmoothMessageId(runtime, messages),
-      };
-    });
-  }
-
-  function applyDesktopStreamSnapshot(threadKey: string, snapshot: DesktopStreamSnapshot) {
-    updateRuntime(threadKey, (runtime) => {
-      const messages = capMessages(mergeMessagesById(runtime.messages, snapshot.messages), runtime);
-      const snapshotActive = snapshot.status === "starting" || snapshot.status === "inProgress";
-      return {
-        ...runtime,
-        ...turnProgressPatch(runtime, { turnStatus: snapshot.status }),
-        messages,
-        loaded: true,
-        status: snapshotActive ? "桌面实时同步中" : turnStatusText(snapshot.status),
-        watching: true,
-        activeTurnId: null,
-        lastEventCount: snapshot.eventCount,
-        userInputs: snapshot.interactionsAvailable ? snapshot.userInputs ?? [] : [],
-        ...desktopApprovalsPatch(runtime, snapshot.approvals, snapshot.interactionsAvailable),
-        ...desktopControlPatch(runtime, snapshot.control),
-        lastTurnError: "",
-        smoothMessageId: nextSmoothMessageId(runtime, messages),
-      };
-    });
-  }
+  const { applyLiveTurnSnapshot, applyDesktopStreamSnapshot, applyDesktopDelta, watchDesktopDelta, pollLiveTurn } = createRuntimeSync({
+    getRuntime: () => activeRuntimeRef.current,
+    getSignal: () => scopeAbortRef.current.signal,
+    updateRuntime,
+    read: <T,>(route: string, signal: AbortSignal) => apiGet<T>(buildUrl(endpoint, route), token, signal),
+  });
 
   async function respondUserInput(request: UserInputRequest, answers: Record<string, string[]>) {
     if (request.threadId !== activeThreadKey || userInputSubmissionsRef.current.has(request.id)) return;
@@ -1197,44 +1176,6 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
       if ((error as { status?: number }).status === 409) patchApproval("resolved");
       else patchApproval("uncertain");
     } finally { approvalSubmissionsRef.current.delete(approval.id); }
-  }
-
-  function applyDesktopDelta(threadId: string, data: { messages: CodexMessage[]; cursor: number; generation?: string; reset?: boolean; turnStatus?: ThreadRuntime["turnStatus"]; activity?: ThreadRuntime["activity"] }) {
-    updateRuntime(threadId, (runtime) => {
-      const nextMessages = capMessages(mergeMessages(data.reset ? [] : runtime.messages, data.messages), runtime);
-      return {
-        ...runtime,
-        ...turnProgressPatch(data.reset ? { ...runtime, turnStatus: "idle", activity: undefined, sending: false, activeTurnId: null } : runtime, data),
-        cursor: data.cursor, generation: data.generation,
-        messages: nextMessages, watching: true,
-        historyBefore: data.reset ? 0 : runtime.historyBefore,
-        status: data.turnStatus ? turnStatusText(data.turnStatus) : runtime.status,
-        smoothMessageId: nextSmoothMessageId(runtime, nextMessages),
-      };
-    });
-  }
-
-  async function watchDesktopDelta(threadId: string, cursor: number) {
-    const generation = activeRuntimeRef.current.generation;
-    const data = await apiGet<Parameters<typeof applyDesktopDelta>[1]>(
-      buildUrl(endpoint, `/api/desktop/threads/${encodeURIComponent(threadId)}/delta?cursor=${cursor}${generation ? `&generation=${encodeURIComponent(generation)}` : ""}`), token,
-    );
-    if (data.cursor !== cursor || data.messages.length || data.reset || data.turnStatus || data.activity) applyDesktopDelta(threadId, data);
-  }
-
-  async function pollLiveTurn(threadKey: string, turnId: string) {
-    const data = await apiGet<{ turn: LiveTurnSnapshot | null; error?: string }>(
-      buildUrl(endpoint, `/api/live/turns/${encodeURIComponent(turnId)}`),
-      token,
-    );
-    if (!data.turn) throw new Error(data.error ?? "live turn not found");
-    applyLiveTurnSnapshot(threadKey, data.turn);
-    if (data.turn.status === "completed") {
-      setStatus("Codex 已完成");
-      void loadThreads();
-    }
-    if (data.turn.status === "interrupted") setStatus("Codex 已打断");
-    if (data.turn.status === "failed") setStatus(data.turn.error ?? "Codex 运行失败");
   }
 
   function onMessagesScroll() {
@@ -1363,12 +1304,16 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
   workspaceCacheRef.current = { threads, selectedId: selected?.id ?? null, isNewThread };
   const cacheTimerRef = useRef<number | null>(null);
   cacheStateRef.current = threadState;
+  function persistWorkspaceCache() {
+    const result = saveThreadRuntimeCache(cacheStateRef.current, scope);
+    setCacheSaveResult(current => current.status === result.status ? current : result);
+    if (result.status !== "input-failed") saveWorkspaceCache(scope, workspaceCacheRef.current);
+  }
   useEffect(() => {
     if (cacheTimerRef.current === null) {
       cacheTimerRef.current = window.setTimeout(() => {
         cacheTimerRef.current = null;
-        saveThreadRuntimeCache(cacheStateRef.current, scope);
-        saveWorkspaceCache(scope, workspaceCacheRef.current);
+        persistWorkspaceCache();
       }, 700);
     }
   }, [threadState, threads, selected?.id, isNewThread, scope]);
@@ -1376,8 +1321,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
     const flush = () => {
       if (cacheTimerRef.current !== null) window.clearTimeout(cacheTimerRef.current);
       cacheTimerRef.current = null;
-      saveThreadRuntimeCache(cacheStateRef.current, scope);
-      saveWorkspaceCache(scope, workspaceCacheRef.current);
+      persistWorkspaceCache();
     };
     const onHidden = () => { if (document.hidden) flush(); };
     window.addEventListener("pagehide", flush);
@@ -1417,29 +1361,41 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
     activeRuntimeRef.current = activeRuntime;
   }, [activeRuntime]);
 
+  // Announce only committed state, never an HTTP/SSE result queued for validation.
+  useEffect(() => {
+    if (!activeThreadKey || activeRuntime.watchMode === "desktop-tail") return;
+    if (activeRuntime.turnStatus === "completed") {
+      setStatus("Codex 已完成");
+      void loadThreads({ silent: true });
+    }
+    if (activeRuntime.turnStatus === "interrupted") setStatus("Codex 已打断");
+    if (activeRuntime.turnStatus === "failed") setStatus(activeRuntime.lastTurnError || "Codex 运行失败");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThreadKey, activeRuntime.watchMode, activeRuntime.turnStatus, activeRuntime.lastTurnError]);
+
   useEffect(() => {
     if (!selected?.id || activeRuntime.loading || activeRuntime.watchMode !== "desktop-tail" || streamState === "online" || streamState === "unauthorized") return;
-    let cancelled = false;
+    const polling = createPollScope(scopeAbortRef.current.signal);
+    const { signal } = polling.controller;
+    desktopPollRef.current = polling.controller;
     let inFlight = false;
     const threadId = selected.id;
     let timer: number | null = null;
     const schedule = () => {
-      if (cancelled || document.hidden) return;
+      if (signal.aborted || document.hidden) return;
       const runtime = activeRuntimeRef.current;
       const active = runtime.sending || runtime.turnStatus === "starting" || runtime.turnStatus === "inProgress";
       timer = window.setTimeout(() => void tick(), active ? desktopPollActiveMs : desktopPollIdleMs);
     };
     const tick = async () => {
-      if (cancelled || selectedRef.current?.id !== threadId) return;
+      if (signal.aborted || selectedRef.current?.id !== threadId) return;
       const runtime = activeRuntimeRef.current;
       if (runtime.watchMode !== "desktop-tail") return;
       if (document.hidden) return;
       if (inFlight) return;
       inFlight = true;
       try {
-        await watchDesktopDelta(threadId, runtime.cursor);
-      } catch (error) {
-        patchRuntime(threadId, { watching: false, status: toFriendlyFetchError(error) });
+        await watchDesktopDelta(threadId, runtime.cursor, signal);
       } finally {
         inFlight = false;
         schedule();
@@ -1453,7 +1409,8 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
     void tick();
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
-      cancelled = true;
+      polling.dispose();
+      if (desktopPollRef.current === polling.controller) desktopPollRef.current = null;
       if (timer !== null) window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1461,9 +1418,12 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
 
   useEffect(() => {
     if (!selected?.id || activeRuntime.loading || activeRuntime.watchMode !== "desktop-tail" || !canUseEventSource()) return;
+    const subscription = createPollScope(scopeAbortRef.current.signal);
+    const { signal } = subscription.controller;
     const threadId = selected.id;
     const reduce = createSnapshotReducer<DesktopStreamSnapshot>();
     const unsubscribe = subscribeEvents({
+      onDiagnostic: diagnosticJournalRef.current.subscribe("desktop"),
       getToken: (signal) => requestPost(buildUrl(endpoint, `/api/desktop/threads/${encodeURIComponent(threadId)}/stream-token`), token, {}, signal),
       url: (streamToken) => {
         const runtime = activeRuntimeRef.current;
@@ -1472,46 +1432,45 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
         return buildUrl(endpoint, `/api/desktop/threads/${encodeURIComponent(threadId)}/events?${params}`);
       },
       events: {
-        desktop: (data) => { const snapshot = reduce(data); if (snapshot.threadId === threadId) applyDesktopStreamSnapshot(threadId, snapshot); },
-        delta: (data) => applyDesktopDelta(threadId, data as Parameters<typeof applyDesktopDelta>[1]),
+        desktop: (data) => { if (signal.aborted) return; const snapshot = reduce(data); if (snapshot.threadId === threadId) applyDesktopStreamSnapshot(threadId, snapshot, signal); },
+        delta: (data) => { if (!signal.aborted) applyDesktopDelta(threadId, data as Parameters<typeof applyDesktopDelta>[1], { signal }); },
       },
       onState: (state) => {
+        if (signal.aborted) return;
+        if (state === "online" || state === "unauthorized") desktopPollRef.current?.abort();
         setStreamState(state);
         if (state !== "online") updateRuntime(threadId, runtime => ({ ...runtime, ...desktopControlOfflinePatch(runtime) }));
         if (state === "unauthorized") { patchRuntime(threadId, { status: "连接凭证已失效，请在设置中更新", watching: false }); setConnectionState("error"); }
         else if (state === "recovering") patchRuntime(threadId, { status: "正在恢复连接，已有内容已保留" });
       },
     });
-    return () => { unsubscribe(); updateRuntime(threadId, runtime => ({ ...runtime, ...desktopControlOfflinePatch(runtime) })); };
+    return () => { subscription.dispose(); unsubscribe(); updateRuntime(threadId, runtime => ({ ...runtime, ...desktopControlOfflinePatch(runtime) })); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, activeRuntime.loading, activeRuntime.watchMode, endpoint, token]);
 
   useEffect(() => {
     if (!activeRuntime.activeTurnId || !activeThreadKey || activeRuntime.watchMode === "desktop-tail") return;
     if (!canUseEventSource()) return;
-    let cancelled = false;
+    const subscription = createPollScope(scopeAbortRef.current.signal);
+    const { signal } = subscription.controller;
     let pendingSnapshot: LiveTurnSnapshot | null = null;
     let snapshotTimer: number | null = null;
     const threadKey = activeThreadKey;
     const turnId = activeRuntime.activeTurnId;
     setLiveStreamFallbackTurnId((current) => (current === turnId ? null : current));
     const flushSnapshot = () => {
-      if (!pendingSnapshot) return;
+      if (signal.aborted || !pendingSnapshot) return;
       const snapshot = pendingSnapshot;
       pendingSnapshot = null;
       if (snapshotTimer !== null) {
         window.clearTimeout(snapshotTimer);
         snapshotTimer = null;
       }
-      applyLiveTurnSnapshot(threadKey, snapshot);
-      if (snapshot.status === "completed") {
-        setStatus("Codex 已完成");
-        void loadThreads();
-      }
-      if (snapshot.status === "interrupted") setStatus("Codex 已打断");
-      if (snapshot.status === "failed") setStatus(snapshot.error ?? "Codex 运行失败");
+      if (activeRuntimeRef.current.activeTurnId !== turnId || snapshot.turnId !== turnId || snapshot.threadId !== threadKey) return;
+      applyLiveTurnSnapshot(threadKey, snapshot, { signal, turnId });
     };
     const scheduleSnapshot = (snapshot: LiveTurnSnapshot) => {
+      if (signal.aborted || snapshot.turnId !== turnId || snapshot.threadId !== threadKey) return;
       pendingSnapshot = snapshot;
       if (snapshot.status === "completed" || snapshot.status === "interrupted" || snapshot.status === "failed") {
         flushSnapshot();
@@ -1524,10 +1483,13 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
 
     const reduce = createSnapshotReducer<LiveTurnSnapshot>();
     const unsubscribe = subscribeEvents({
+      onDiagnostic: diagnosticJournalRef.current.subscribe("live"),
       getToken: (signal) => requestPost(buildUrl(endpoint, `/api/live/turns/${encodeURIComponent(turnId)}/stream-token`), token, {}, signal),
       url: (streamToken) => buildUrl(endpoint, `/api/live/turns/${encodeURIComponent(turnId)}/events?v=1&streamToken=${encodeURIComponent(streamToken)}`),
       events: { turn: (data) => scheduleSnapshot(reduce(data)) },
       onState: (state) => {
+        if (signal.aborted) return;
+        if (state === "online" || state === "unauthorized") livePollRef.current?.abort();
         setStreamState(state);
         setLiveStreamFallbackTurnId(state === "online" || state === "unauthorized" || state === "paused" ? null : turnId);
         if (state !== "online") {
@@ -1541,7 +1503,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
       },
     });
     return () => {
-      cancelled = true;
+      subscription.dispose();
       if (snapshotTimer !== null) window.clearTimeout(snapshotTimer);
       unsubscribe();
       patchRuntime(threadKey, { userInputs: [] });
@@ -1552,22 +1514,22 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
   useEffect(() => {
     if (!activeRuntime.activeTurnId || !activeThreadKey || activeRuntime.watchMode === "desktop-tail") return;
     if (canUseEventSource() && liveStreamFallbackTurnId !== activeRuntime.activeTurnId) return;
-    let cancelled = false;
+    const polling = createPollScope(scopeAbortRef.current.signal);
+    const { signal } = polling.controller;
+    livePollRef.current = polling.controller;
     let inFlight = false;
     const threadKey = activeThreadKey;
     const turnId = activeRuntime.activeTurnId;
     let timer: number | null = null;
     const schedule = () => {
-      if (!cancelled && !document.hidden) timer = window.setTimeout(() => void tick(), livePollFallbackMs);
+      if (!signal.aborted && !document.hidden) timer = window.setTimeout(() => void tick(), livePollFallbackMs);
     };
     const tick = async () => {
-      if (cancelled || document.hidden) return;
+      if (signal.aborted || document.hidden) return;
       if (inFlight) return;
       inFlight = true;
       try {
-        await pollLiveTurn(threadKey, turnId);
-      } catch (error) {
-        patchRuntime(threadKey, { status: toFriendlyFetchError(error), lastTurnError: toFriendlyFetchError(error) });
+        await pollLiveTurn(threadKey, turnId, signal);
       } finally {
         inFlight = false;
         schedule();
@@ -1581,7 +1543,8 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
     void tick();
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
-      cancelled = true;
+      polling.dispose();
+      if (livePollRef.current === polling.controller) livePollRef.current = null;
       if (timer !== null) window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1845,6 +1808,10 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
           </div>
 
           <footer className="composer-panel">
+            {cacheSaveResult.status !== "saved" && <div className="connection-notice cache-save-notice" role={cacheSaveResult.status === "input-failed" ? "alert" : "status"}>
+              <span>{threadCacheSaveNotice(cacheSaveResult)}</span>
+              {cacheSaveResult.status === "input-failed" && <button type="button" className="tool-button" onClick={persistWorkspaceCache}>重试保存</button>}
+            </div>}
           {hasNewMessages && (
             <button className="latest-pill" onClick={jumpToLatest}>
               <Activity size={15} />
@@ -2004,6 +1971,15 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
         </section>
 
         {settingsOpen && <section className="settings-section"><VoiceSettings endpoint={endpoint} token={token} /></section>}
+        <section className="settings-section"><details className="settings-disclosure"><summary>会话显示诊断</summary>
+          <p className="update-note">出现显示或连接问题时，可复制不超过 2 KB 的摘要。详细报告单独保存为文件，最多 64 KB。仅含版本、身份指纹、数量及连接状态，不含正文、附件路径或密钥。</p>
+          <div className="settings-actions"><button className="action-button" disabled={!selected?.id || copyingMessageDiagnostics} onClick={() => void exportMessageDiagnostics("copy")}>
+            {copyingMessageDiagnostics ? <Loader2 size={16} className="spin" /> : <Copy size={16} />}
+            <span>{copyingMessageDiagnostics ? "正在生成诊断…" : "复制诊断摘要"}</span>
+          </button>
+          <button className="action-button" disabled={!selected?.id || copyingMessageDiagnostics} onClick={() => void exportMessageDiagnostics("file")}><Download size={16} /><span>保存详细报告</span></button></div>
+          {messageDiagnosticsStatus && <p className="update-note" role="status">{messageDiagnosticsStatus}</p>}
+        </details></section>
         <section className="settings-section"><details className="settings-disclosure"><summary>版本与更新</summary>
           <div className="version-card">
             <span>手机版本</span>
@@ -2197,6 +2173,42 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
       </aside>
     </main>
   );
+
+  async function exportMessageDiagnostics(mode: "copy" | "file") {
+    const threadId = selectedRef.current?.id;
+    if (!threadId || messageDiagnosticsLock.current) return;
+    const epoch = diagnosticEpochRef.current, signal = scopeAbortRef.current.signal;
+    const current = () => !signal.aborted && diagnosticEpochRef.current === epoch && selectedRef.current?.id === threadId;
+    messageDiagnosticsLock.current = true;
+    setCopyingMessageDiagnostics(true);
+    setMessageDiagnosticsStatus("");
+    try {
+      const domNodes = readDiagnosticDom(messagesRef.current?.closest("main") ?? messagesRef.current);
+      const connection = diagnosticJournalRef.current.snapshot();
+      const [report, environment] = await Promise.all([
+        makeMessageDiagnostics({ threadId, appVersionCode, runtime: activeRuntimeRef.current.messages, rendered: visibleMessages, domNodes, cache: readThreadMessageCacheForDiagnostics(scope, threadId) }),
+        readDiagnosticEnvironment({ signal, platform: Capacitor.getPlatform() === "android" ? "android" : "browser", webVersionCode: appVersionCode,
+          documentHotVersion: document.querySelector('meta[name="mobile-codex-hot-bundle"]')?.getAttribute("content") ?? null,
+          readNative: () => NativeHotUpdate.getStatus(), readGateway: abort => requestGet(buildUrl(endpoint, "/api/diagnostics"), token, abort) }),
+      ]);
+      if (!current()) return;
+      const output = makeDiagnosticsExport(report, environment, connection);
+      if (mode === "copy") {
+        await writeClipboard(output.summary);
+        if (current()) setMessageDiagnosticsStatus(`摘要已复制（${output.summaryBytes} 字节），可粘贴到排查会话。`);
+      } else {
+        const result = await saveDiagnosticFile(output.detail);
+        if (current()) setMessageDiagnosticsStatus(result === "cancelled" ? "已取消保存，可重新选择。" : result === "downloaded" ? "已发起报告文件下载，请在下载列表查看。" : "详细报告已保存为文件。");
+      }
+    } catch (error) {
+      if (current()) setMessageDiagnosticsStatus(error instanceof Error && error.message === "diagnostic_export_unsupported"
+        ? "当前 APK 尚不支持保存报告文件，请升级后重试；可先复制短摘要。"
+        : mode === "copy" ? "摘要复制失败，请重试。" : "报告保存失败，请重试。");
+    } finally {
+      messageDiagnosticsLock.current = false;
+      setCopyingMessageDiagnostics(false);
+    }
+  }
 
   async function copyText(text: string, key: string) {
     if (!text) return;

@@ -7,6 +7,7 @@ export type ReconciliationMessage = {
   clientMessageId?: string;
   sourceItemId?: string;
   nativeMessageId?: string;
+  replacesMessageId?: string;
   turnId?: string;
   phase?: "commentary" | "final_answer";
   attachments?: unknown;
@@ -15,14 +16,22 @@ export type ReconciliationMessage = {
 const mirrorWindowMs = 1_500;
 const optimisticMatchWindowMs = 120_000;
 
-export function reconcileMessages<T extends ReconciliationMessage>(current: T[], incoming: T[]): T[] {
+export type InputReplacement = {
+  turnId: string;
+  replacesMessageId: string;
+  nativeMessageId: string;
+  clientMessageId?: string;
+};
+
+export function reconcileMessages<T extends ReconciliationMessage>(current: T[], incoming: T[], inputReplacements: InputReplacement[] = []): T[] {
   const byId = new Map<string, T>();
   for (const message of [...current, ...incoming]) {
     const existing = byId.get(message.id);
     byId.set(message.id, existing ? mergeSameMessage(existing, message) : message);
   }
 
-  return collapseMirroredMessages(reconcileOptimisticMessages(sortMessages([...byId.values()])));
+  const messages = reconcileInitialInputReplacements([...byId.values()], inputReplacements);
+  return collapseMirroredMessages(reconcileOptimisticMessages(sortMessages(messages)));
 }
 
 export function collapseMirroredMessages<T extends ReconciliationMessage>(messages: T[]): T[] {
@@ -30,7 +39,7 @@ export function collapseMirroredMessages<T extends ReconciliationMessage>(messag
   const submissions = new Map<string, number>();
   const sourceItems = new Map<string, number>();
   const nativeItems = new Map<string, number>();
-  for (const message of sortMessages(messages)) {
+  for (const message of sortMessages(reconcileInitialInputReplacements(messages))) {
     const submission = clientMessageIdentity(message);
     const sourceItem = sourceItemIdentity(message);
     const nativeItem = nativeMessageIdentity(message);
@@ -50,6 +59,81 @@ export function collapseMirroredMessages<T extends ReconciliationMessage>(messag
   return sortMessages(reconcileDesktopUserSources(rendered));
 }
 
+function initialInputReplacement(message: ReconciliationMessage) {
+  if (message.role !== "user" || !message.turnId || message.replacesMessageId !== `${message.turnId}-input`) return null;
+  const nativeId = nativeMessageIdentity(message);
+  return nativeId?.startsWith(`desktop-${message.turnId}-`)
+    ? { predecessor: message.replacesMessageId, nativeId } : null;
+}
+
+// A provisional input is a projection of params.input, not another submission.
+// Carry the explicit relation through history/cache so a late provisional frame
+// cannot restore it after the formal native record has already been folded away.
+function reconcileInitialInputReplacements<T extends ReconciliationMessage>(messages: T[], inputReplacements: InputReplacement[] = []): T[] {
+  const successors = new Map<string, { relation: InputReplacement; message?: T } | null>();
+  function add(relation: InputReplacement, message?: T) {
+    if (!relation || typeof relation.turnId !== "string" || typeof relation.replacesMessageId !== "string" || typeof relation.nativeMessageId !== "string") return;
+    if (relation.replacesMessageId !== `${relation.turnId}-input` || !relation.nativeMessageId.startsWith(`desktop-${relation.turnId}-`)) return;
+    const existing = successors.get(relation.replacesMessageId);
+    if (existing === null) return;
+    if (message && relation.clientMessageId && clientMessageIdentity(message) && relation.clientMessageId !== clientMessageIdentity(message)) {
+      successors.set(relation.replacesMessageId, null);
+      return;
+    }
+    if (!existing) { successors.set(relation.replacesMessageId, { relation, message }); return; }
+    const conflict = existing.relation.nativeMessageId !== relation.nativeMessageId
+      || Boolean(existing.relation.clientMessageId && relation.clientMessageId && existing.relation.clientMessageId !== relation.clientMessageId)
+      || Boolean(existing.message && message && (existing.message.text.trim() !== message.text.trim() || conflictingClients(existing.message, message)));
+    successors.set(relation.replacesMessageId, conflict ? null : {
+      relation: { ...relation, clientMessageId: relation.clientMessageId ?? existing.relation.clientMessageId },
+      message: existing.message && message ? mergeSameMessage(existing.message, message) : message ?? existing.message,
+    });
+  }
+  for (const relation of Array.isArray(inputReplacements) ? inputReplacements.slice(-240) : []) add(relation);
+  for (const message of messages) {
+    const relation = initialInputReplacement(message);
+    if (!relation) continue;
+    add({ turnId: message.turnId!, replacesMessageId: relation.predecessor, nativeMessageId: relation.nativeId, clientMessageId: clientMessageIdentity(message) ?? undefined }, message);
+  }
+  // A formal item may have left the native tail but still exist in the cache.
+  // Use it to check body/client conflicts before rebinding its old history alias.
+  for (const message of messages) {
+    if (message.role !== "user" || !message.turnId) continue;
+    const entry = successors.get(`${message.turnId}-input`);
+    if (entry && nativeMessageIdentity(message) === entry.relation.nativeMessageId) add(entry.relation, message);
+  }
+  if (!successors.size) return messages;
+  return messages.map(message => {
+    if (message.role !== "user" || !message.turnId) return message;
+    const predecessor = `${message.turnId}-input`;
+    if (message.id !== predecessor && message.nativeMessageId !== predecessor) return message;
+    const successor = successors.get(predecessor);
+    if (!successor || (successor.message && (successor.message.text.trim() !== message.text.trim() || conflictingClients(message, successor.message)))) return message;
+    if (successor.relation.clientMessageId && clientMessageIdentity(message) && clientMessageIdentity(message) !== successor.relation.clientMessageId) return message;
+    return {
+      ...(successor.message ? mergeSameMessage(message, successor.message) : message),
+      nativeMessageId: successor.relation.nativeMessageId,
+      replacesMessageId: predecessor,
+      ...(successor.relation.clientMessageId ? { clientMessageId: successor.relation.clientMessageId } : {}),
+    };
+  });
+}
+
+function conflictingClients(current: ReconciliationMessage, incoming: ReconciliationMessage): boolean {
+  const left = clientMessageIdentity(current), right = clientMessageIdentity(incoming);
+  return Boolean(left && right && left !== right);
+}
+
+export function messageDisplayKey(message: ReconciliationMessage): string {
+  const relation = initialInputReplacement(message);
+  if (relation) return relation.predecessor;
+  if (message.role === "user" && message.turnId) {
+    const provisionalId = `${message.turnId}-input`;
+    if (message.id === provisionalId || message.nativeMessageId === provisionalId) return provisionalId;
+  }
+  return message.id;
+}
+
 function isDesktopUserItem(message: ReconciliationMessage): boolean {
   return message.role === "user" && message.kind === "userMessage" && Boolean(message.turnId)
     && (message.id.startsWith("desktop-") || message.id === `${message.turnId}-input`);
@@ -60,7 +144,9 @@ function reconcileDesktopUserSources<T extends ReconciliationMessage>(messages: 
   messages.forEach((message, index) => {
     if (message.role !== "user" || !message.turnId || isOptimisticUserMessage(message)) return;
     const native = isDesktopUserItem(message) && !message.sourceItemId;
-    const history = ["message", "user_message"].includes(message.kind) && message.sourceItemId && !clientMessageIdentity(message) && !message.nativeMessageId;
+    // HTTP confirmation can attach a client ID before the native item arrives.
+    // Only the native alias proves that this history occurrence is already bound.
+    const history = ["message", "user_message"].includes(message.kind) && message.sourceItemId && !message.nativeMessageId;
     if (!native && !history) return;
     const key = JSON.stringify([message.turnId, message.text.trim()]);
     const group = groups.get(key) ?? { native: [], history: [] };
@@ -73,6 +159,11 @@ function reconcileDesktopUserSources<T extends ReconciliationMessage>(messages: 
     // Both ordered sources must cover the same occurrences. A partial page is
     // ambiguous; keeping it is safer than assigning another input's identity.
     if (!group.native.length || group.native.length !== group.history.length) continue;
+    if (group.native.some((nativeIndex, occurrence) => {
+      const nativeClient = clientMessageIdentity(messages[nativeIndex]);
+      const historyClient = clientMessageIdentity(messages[group.history[occurrence]]);
+      return nativeClient && historyClient && nativeClient !== historyClient;
+    })) continue;
     group.native.forEach((nativeIndex, occurrence) => {
       const historyIndex = group.history[occurrence];
       removed.add(nativeIndex);
@@ -199,7 +290,9 @@ function mergeSameMessage<T extends ReconciliationMessage>(current: T, incoming:
   const clientMessageId = preferred.clientMessageId ?? incoming.clientMessageId ?? current.clientMessageId;
   const sourceItemId = preferred.sourceItemId ?? assistantItemIdentity(preferred) ?? incoming.sourceItemId ?? assistantItemIdentity(incoming) ?? current.sourceItemId ?? assistantItemIdentity(current);
   const turnId = preferred.turnId ?? incoming.turnId ?? current.turnId;
-  const nativeMessageId = nativeMessageIdentity(preferred) ?? nativeMessageIdentity(current) ?? nativeMessageIdentity(incoming);
+  const relation = initialInputReplacement(incoming) ?? initialInputReplacement(current);
+  const nativeMessageId = relation?.nativeId ?? nativeMessageIdentity(preferred) ?? nativeMessageIdentity(current) ?? nativeMessageIdentity(incoming);
+  const replacesMessageId = preferred.replacesMessageId ?? incoming.replacesMessageId ?? current.replacesMessageId;
   const phase = preferred.phase ?? incoming.phase ?? current.phase;
   return {
     ...preferred,
@@ -207,6 +300,7 @@ function mergeSameMessage<T extends ReconciliationMessage>(current: T, incoming:
     ...(sourceItemId ? { sourceItemId } : {}),
     ...(turnId ? { turnId } : {}),
     ...(nativeMessageId ? { nativeMessageId } : {}),
+    ...(replacesMessageId ? { replacesMessageId } : {}),
     ...(phase ? { phase } : {}),
     ...(attachments === undefined ? {} : { attachments }),
   } as T;
@@ -215,6 +309,8 @@ function mergeSameMessage<T extends ReconciliationMessage>(current: T, incoming:
 function preferredMessage<T extends ReconciliationMessage>(current: T, incoming: T): T {
   if (isOptimisticUserMessage(current) && !isOptimisticUserMessage(incoming)) return incoming;
   if (isOptimisticUserMessage(incoming) && !isOptimisticUserMessage(current)) return current;
+  if (initialInputReplacement(incoming)?.predecessor === current.id) return incoming;
+  if (initialInputReplacement(current)?.predecessor === incoming.id) return current;
   if (current.role === "user" && current.turnId && current.turnId === incoming.turnId) {
     if (isDesktopUserItem(current) && incoming.sourceItemId) return incoming;
     if (isDesktopUserItem(incoming) && current.sourceItemId) return current;

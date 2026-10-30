@@ -41,11 +41,14 @@ test('a newly written old Codex session returns to the recent catalog without re
   assert.equal((await f.store.listThreads(10, 0, '', f.now - 30 * day)).length, 0);
   await fs.appendFile(f.files[0], JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'synthetic new conversation' } }) + '\n');
   let recent;
-  for (let i = 0; i < 30; i++) {
-    await new Promise(resolve => setTimeout(resolve, 10));
+  // Native file notifications can be batched under the full suite's IO load.
+  // Wait for the observable catalog update, well below the 60s rescan fallback.
+  const deadline = Date.now() + 3000;
+  do {
+    await new Promise(resolve => setTimeout(resolve, 25));
     recent = await f.store.listThreads(10, 0, '', f.now - 30 * day);
     if (recent.length) break;
-  }
+  } while (Date.now() < deadline);
   assert.equal(recent.length, 1);
   assert.equal(recent[0].id, f.rows[0].id);
   assert.ok(Date.parse(recent[0].updatedAt) >= f.now);

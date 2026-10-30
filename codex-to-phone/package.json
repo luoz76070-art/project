@@ -22,7 +22,7 @@
     "typecheck": "pnpm --filter @mobile-codex/relay typecheck && pnpm --filter @mobile-codex/mobile typecheck",
     "test:transport": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/transport.test.mjs",
     "test:correctness": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/correctness.test.mjs",
-    "test:mobile": "node --test scripts/test-mobile-connection.mjs scripts/test-mobile-profiles.mjs scripts/test-mobile-voice.mjs",
+    "test:mobile": "node --test scripts/test-mobile-connection.mjs scripts/test-mobile-profiles.mjs scripts/test-mobile-voice.mjs scripts/test-mobile-input-transitions.mjs scripts/test-mobile-reliability.mjs scripts/test-mobile-diagnostics.mjs",
     "test:voice": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/voice.test.mjs scripts/test-mobile-voice.mjs",
     "test:hot-update": "node scripts/test-hot-update-paths.mjs && node --test scripts/test-hot-bundle.mjs",
     "test:apk-update": "node --test scripts/test-apk-update.mjs",
@@ -37,11 +37,19 @@
     "test:managed-gateway": "pnpm --filter @mobile-codex/relay build && pnpm build:plugin && node --test --test-timeout=15000 apps/relay/tests/managedGateway.test.mjs apps/relay/tests/macGatewayService.test.mjs",
     "test:opencode": "pnpm --filter @mobile-codex/relay build && node --test --test-timeout=12000 apps/relay/tests/openCode.test.mjs",
     "test:claude": "pnpm --filter @mobile-codex/relay build && node --test --test-timeout=12000 apps/relay/tests/claude.test.mjs",
-    "test:deepseek": "pnpm --filter @mobile-codex/relay build && node --test --test-timeout=12000 apps/relay/tests/deepSeek.test.mjs apps/relay/tests/deepSeekHistory.test.mjs"
+    "test:deepseek": "pnpm --filter @mobile-codex/relay build && node --test --test-timeout=12000 apps/relay/tests/deepSeek.test.mjs apps/relay/tests/deepSeekHistory.test.mjs",
+    "lint": "eslint . --max-warnings=0",
+    "verify": "node scripts/verify.mjs",
+    "verify:android": "node scripts/verify-android.mjs",
+    "verify:all": "node scripts/verify.mjs --android",
+    "test:verification": "node --test scripts/test-verification.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
-    "typescript": "5.9.3"
+    "eslint": "10.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1"
   },
   "packageManager": "pnpm@10.20.0"
 }

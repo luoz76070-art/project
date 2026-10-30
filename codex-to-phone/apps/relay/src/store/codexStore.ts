@@ -19,6 +19,7 @@ export type CodexMessage = {
   id: string;
   clientMessageId?: string;
   sourceItemId?: string;
+  replacesMessageId?: string;
   turnId?: string;
   phase?: "commentary" | "final_answer";
   timestamp: string;
@@ -466,8 +467,7 @@ function isContextOrGeneratedThreadName(value: string): boolean {
     value.startsWith("<personality_spec>") ||
     value.startsWith("<skills_instructions>") ||
     value.startsWith("<plugins_instructions>") ||
-    value.startsWith("Knowledge cutoff:") ||
-    value.startsWith("You are ")
+    value.startsWith("<send_user_message_question_reply>")
   );
 }
 
@@ -479,6 +479,8 @@ function extractThreadIdFromRolloutName(file: string): string | null {
 function isDisplayableUserText(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
+  // Legacy rollouts encode injected context as user text. Recognize only
+  // reserved envelopes, never prose such as "You are" or "Knowledge cutoff".
   return !(
     trimmed.startsWith("<environment_context>") ||
     trimmed.startsWith("<permissions instructions>") ||
@@ -487,10 +489,9 @@ function isDisplayableUserText(text: string): boolean {
     trimmed.startsWith("<personality_spec>") ||
     trimmed.startsWith("<skills_instructions>") ||
     trimmed.startsWith("<plugins_instructions>") ||
+    trimmed.startsWith("<send_user_message_question_reply>") ||
     trimmed.startsWith("# AGENTS.md instructions") ||
-    trimmed.startsWith("<INSTRUCTIONS>") ||
-    trimmed.startsWith("Knowledge cutoff:") ||
-    trimmed.startsWith("You are ")
+    trimmed.startsWith("<INSTRUCTIONS>")
   );
 }
 

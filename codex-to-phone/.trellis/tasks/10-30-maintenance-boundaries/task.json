@@ -1,0 +1,8 @@
+{
+  "name": "maintenance-boundaries",
+  "title": "阶段五状态模块与统一验证入口",
+  "status": "completed",
+  "createdAt": "2026-10-30",
+  "scope": "mobile,scripts",
+  "autoCommit": false
+}

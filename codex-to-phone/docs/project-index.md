@@ -1,6 +1,6 @@
 # Mobile Codex 工程档案入口
 
-更新时间：2026-10-23
+更新时间：2026-10-30
 
 ## 作用
 
@@ -15,7 +15,7 @@
 当前主入口：
 
 - Android APK：`dist-apk/mobile-codex-1.2.2-update-restore-debug.apk`（versionCode 18，已恢复原手机更新通道并发布，待真机验收）
-- Android独立预览：`dist-apk/mobile-codex-1.3.11-compact-composer-preview-debug.apk`（versionCode32，紧凑运行中输入区及按需待发详情；preview32/previous31，正式18/hot保持，网关与DeepSeek插件沿用APK30配套。手机69/69、浏览器19项、公网19项通过；真机触摸/键盘及原重复截图待升级复核。包含APK31输入镜像与旧正文缓存补修；此前用户确认APK29识别/整理/回填成功，语音供应商及异常场景另验）。
+- Android独立预览：`dist-apk/mobile-codex-1.3.15-reliability-preview-debug.apk`（versionCode36，集成可靠性阶段一至五与Android系统诊断保存；preview36/previous35已发布，完整公网19项核验通过。统一verify:all通过，手机121/后端377，Android lint0错误8警告。网关切换、DeepSeek rc.3兼容与原手机验收进行中，见[本轮交付](audits/2026-10-30/preview-validation.md)）。
 - Mac 原生网关：`~/Library/Application Support/Mobile Codex Gateway/releases/<固定版本>/mobile-codex/lib/gateway.mjs`，当前单Node进程、native IPC；[插件管理入口](../plugins/mobile-codex/README.md)。
 - 旧 Mac Relay/Input App：生成App已压缩归档并移除，源码与构建入口保留；[清理及恢复记录](audits/2026-10-21/legacy-mac-app-cleanup.md)。
 - Relay/Broker：`apps/relay`
@@ -23,6 +23,24 @@
 - 协议类型：`generated-protocol`
 
 ## Trellis 与当前优化
+
+最新[阶段五状态模块与统一验证入口](audits/2026-10-30/maintenance-boundaries.md)：五个状态/轮询函数迁入runtimeSync，关键回归直接导入生产模块，真实App effect和浏览器接线保持覆盖。新增verify/verify:android/verify:all与明确JS/TS lint规则；Android兼容脚本正式入库。完整入口通过，手机121/121、后端377/377，最终入口自测6/6，Android编译/lint为0错误、8警告。390px合成临时→历史→正式→结束→重连/重开均单气泡且草稿保持。未发布、未Git写入，原手机双气泡与系统保存仍独立待验。[可靠性计划](plans/2026-10-29-reliability.md)本地五项已完成，[预览与真机验收](plans/2026-10-30-preview-validation.md)已由用户启动，APK36已发布，其余进展见本轮交付；命令见[验证入口](verification.md)。
+
+最新[阶段四短诊断与版本/DOM定位](audits/2026-10-29/compact-diagnostics.md)：设置新增“复制诊断摘要”（2048 UTF-8字节上限）与“保存详细报告”（64KiB），区分原生APK/实际Web/活动与已加载热更新/网关版本，关联DOM身份及有界连接代次。手机121/121、后端377/377、消息/更新/类型/构建通过；Android编译与lint通过（0错误、8警告）。360px浏览器复制、取消/失败/恢复、旧APK/网关兼容、断线恢复及真实文件下载通过。未发布、未Git写入，系统文件保存真机待验，既有双气泡仍未宣称解决。阶段五随后完成，见上方记录。
+
+最新[阶段三正常提示词过滤修复](audits/2026-10-29/prompt-visibility.md)：手机/历史/Desktop/app-server移除“You are …”与“Knowledge cutoff: …”宽泛前缀，会话标题同步修复；保留专用上下文包络和问答回执排除。新增8项回归先失败后通过；手机108/108、后端374/374、消息/类型/构建和390px浏览器发送/完成/在线离线重开通过。未发布、未Git写入、未操作真实模型；Android与双气泡独立待验。阶段四随后完成，见上方记录。
+
+最新[同步与输入可靠性阶段一、二](audits/2026-10-29/reliability-fix.md)：按用户选择完成旧回包取消/写入保护、同generation游标守卫、输入独立缓存和配额反馈/重试；手机105/105、后端369/369（首次1项连接超时，单独与限并发全量复测通过）、消息/类型/构建通过。真实浏览器验证25草稿、大正文配额、保存失败/重试、360px与150%字号、重开恢复。未发布、未Git写入、未操作真实任务；Android另验，APK35双气泡问题不因此宣布解决。阶段三现已完成，见上方记录。
+
+最新[2026-10-29代码复审](audits/2026-10-29/code-review.md)：后端369/369、手机84/84、消息/更新/发布/类型/构建通过；独立复现迟到轮询覆盖新任务与游标、缓存配额失败丢失新草稿、普通“You are …”提示词误过滤。另列有界诊断与模块/验证入口优化，已形成[待选择计划](plans/2026-10-29-reliability.md)。本轮未改产品或发布，APK35真机双气泡仍未解决，新增缺陷不冒充其已确认根因。
+
+最新[重复输入完整过渡测试与方案](audits/2026-10-23/input-transition-test-plan.md)：消息回归、手机75/75及类型检查通过；提取App实际更新函数做48种临时→正式过渡，28种合成序列保留重复，连续3轮一致。确认snapshot reducer已删临时项而App合并仍保留旧别名，缓存/重连未消除；真实React组件复现“用户气泡—task_started—相同气泡”，无警告。该过渡尚未与手机20:43早期状态对应，不宣称根因已全部证明。已给出临时项退役/正式身份继承、同步处理移除/历史别名、现存缓存修复及入口/真机验收方案；本轮未改产品、构建或发布。
+
+20:43[重复气泡新截图](audits/2026-10-23/input-persistent-diagnosis.md)：用户自行做无工具测试，截图确认相同用户气泡在task_started前后各一份，过程块无用户正文。原始输入一次，native/history同turn相差70ms，公网/本地一致，完整字段6种顺序及浏览器仍一份；临时turn-input合成失败尚无手机对应证据，不认定根因。已请求这条新输入的手机诊断，12:32旧输入报告不能代替；本轮未改产品或发布，问题未解决。
+
+最新[APK33真机重复反馈与手机诊断](audits/2026-10-23/input-persistent-diagnosis.md)：用户已装APK33，目标“重复显示还是存在”仍重复；native/指定历史页各一次、同turn、相差168ms，双向/重放一份，手机实际缓存未取得，问题未解决。APK34已发布只读手动指纹诊断，比较runtime/实际渲染/原缓存/DOM；补齐原生Clipboard.write及注册。手机75/75、类型/消息/构建/更新、浏览器复制/失败重试/三种窄屏及150%字号通过，lint0错误/8警告，同签名/资源/原生插件核验及公网19项通过。preview34/previous33，正式18/hot保持，网关与原任务未改；已收到手机报告，三层与DOM各一条用户消息，用户仍看到两处并指出第二处在执行过程；原投影发现进度引用/工具详情含原句，实际第二处尚待对应，不归档，不做Git写入。
+
+最新[输入三路时序及现存缓存补修](audits/2026-10-23/input-source-transition.md)：用户确认18:21重复重开后仍存在；原会话native/rollout各一次，完整字段回放一份，独立复现历史→HTTP确认→缺client的早期native产生两份。合并器改以native别名判断历史是否绑定，显式client冲突保守保留；全部6种顺序及版本3缓存/实际渲染回归通过，草稿/待确认和真实重复保持。APK33已发布preview，previous32，正式18/hot保持；手机70/70、浏览器12项、公网19项及完整lint0错误/7警告。未改或重启网关，未取得截图瞬间手机缓存，真机仍待升级复核；本轮未做Git写入。
 
 最新[APK32预览源码同步](audits/2026-10-23/apk32-version-sync.md)：按用户明确要求，将APK31输入修复及APK32紧凑输入区整理为源码提交0061107，并随交付记录同步现有GitHub main及APK32 preview标签。手机69/69、消息/两端类型/构建重新通过，提交范围仅本项目；真机待验项保持，远端OID以ignored交付核验记录为准。
 

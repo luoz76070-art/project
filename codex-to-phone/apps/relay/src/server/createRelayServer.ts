@@ -24,11 +24,12 @@ import { claudeConfigSchema } from "../agents/claudeProtocol.js";
 import { VoiceCredentialStore } from "../voice/credentials.js";
 import { VoiceService } from "../voice/service.js";
 import { registerVoiceRoutes } from "./voiceRoutes.js";
+import { gatewayBuildId, type createGatewayDiagnostics } from "../gateway/diagnostics.js";
 
 export type RelayServerOptions = {
   config?: RelayConfig;
   logger?: boolean;
-  gateway?: { snapshot: () => GatewayRuntimeStatus; managerKey: string; requestStop: () => void };
+  gateway?: { snapshot: () => GatewayRuntimeStatus; diagnostics?: ReturnType<typeof createGatewayDiagnostics>["snapshot"]; managerKey: string; requestStop: () => void };
   services?: Partial<{
     store: CodexStore;
     live: LiveCodex;
@@ -138,6 +139,8 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   });
 
   app.get("/api/connection", async () => ({ ok: true, authenticated: true }));
+  app.get("/api/diagnostics", async () => ({ schema: "mobile-codex-gateway-diagnostics-v1", buildId: gatewayBuildId,
+    tunnel: options.gateway?.diagnostics?.() ?? { enabled: false, omitted: 0, events: [] } }));
   registerVoiceRoutes(app, { owners, devices, credentials: voiceCredentials, service: voice });
   if (config.claude && claudeBridge) registerClaudeBridgeRoutes(app, claudeBridge);
 

@@ -3,6 +3,7 @@
 - `src/main.tsx`：仅挂载 React 与引入全局样式。
 - `src/app/`：App 编排、运行参数和类型。
 - `src/features/chat/`：消息组件、附件、工具输出、消息合并及线程运行态缓存。
+- `features/chat/messageDiagnostics`仅在手动导出时比较runtime、实际渲染数组、原缓存和DOM身份；不经过缓存迁移、不改变合并结果。正文/不透明身份只输出SHA256；`diagnosticExport`白名单投影版本及有界连接事件，不导出地址、草稿或控制信息。默认摘要≤2048 UTF-8字节，详细文件≤65536字节；Android分别依赖注册的ClipboardPlugin与DiagnosticExportPlugin。完整签名、错误与验收见[短诊断契约](diagnostics-contract.md)。
 - `src/features/connection/`：HTTP 请求、连接档案与诊断；保留 CapacitorHttp 原生请求路径。
 - `src/features/threads/`：线程与项目分组的展示模型。
 - `src/features/updates/`：APK清单校验、原生下载/安装状态和热更新插件适配；原生契约见[APK更新](apk-update-contract.md)。
@@ -16,6 +17,12 @@
 执行过程展示共用`MessageTimeline`和纯函数`groupMessageProcesses(messages: CodexMessage[]): MessageGroup[]`。`isProcessMessage`仅接受assistant/commentary或已知工具kind（plan、commandExecution、fileChange、function_call、function_call_output、custom_tool_call、custom_tool_call_output、mcpToolCall、webSearch、task_started）；`messagesForRender`必须保留这些工具，否则折叠区展开也无法查看。同段后续明确final_answer到达才默认折叠；已知同turn可跨引导输入匹配，缺turn则以用户输入为边界，不把不同已知turn合成一组。最终/未知阶段正文、用户和交互卡片独立可见，不按空闲状态或最后一条正文猜测完成。折叠状态只在组件内按稳定首消息ID绑定，进入终稿阶段自动收起一次，后续增量保持手动选择；重开默认按阶段展示。Codex保留原phase及真实turnId；DeepSeek插件0.2.1在原生成功turn结束时提升末步为final_answer，实时/历史同源，协议缺字段时保留原文，不由手机猜测。只投影显示，不改控制/原消息；协议边界见Relay的deepseek-contract。
 
 ## 已实施的状态契约
+
+`features/chat/runtimeSync.ts`的`createRuntimeSync({getRuntime,getSignal,updateRuntime,read})`统一提供applyLiveTurnSnapshot、applyDesktopStreamSnapshot、applyDesktopDelta、watchDesktopDelta、pollLiveTurn。App在调用时读取ref并注入带endpoint/token的HTTP读函数，继续拥有effect/订阅生命周期。工厂不依赖React，不捕获创建时的runtime或signal副本；时效检查须同时保留在回包处和React updater内部。直接导入生产工厂测试状态/轮询，实际App effect及浏览器另验接线，不能复制一份状态算法到测试中。
+
+2026-10-29同步保护：Codex两类fallback poll各持有独立AbortController，绑定Workspace取消并在effect清理/SSE online时立即失效。`features/chat/sync.ts`捕获内存syncRevision、turn、cursor/generation等同步字段；成功及错误在回调与React updater内校验，普通草稿编辑不废弃读取。SSE用订阅signal/turn保护，不使用旧render的同步版本逐条过滤，避免同批事件被误丢。完成反馈由已提交到React的运行态触发，不能由待校验回包先报完成。同generation普通delta游标不后退；显式reset允许文件轮换或同文件截断。syncRevision不持久化。
+
+2026-10-29缓存保护：Codex输入保存至`mobileCodexThreadInputCacheV1:${scope}`，包含普通草稿、pendingMessageId/Text及本地未确认消息，不随正文LRU淘汰；关键输入JSON按UTF-16计最多1MiB，超限明确返回input-failed，不截断。正文沿用V2键与messageIdentityVersion=3，最多24线程×120消息、总JSON最多2MiB，优先最近访问，配额不足可只清理本scope正文。先写输入，成功后才替换正文；迁移重试先压缩旧正文，保留唯一的旧输入副本。新输入键存在时（包括空对象）是权威，不能从失败残留的旧正文恢复已清空输入。700ms/隐藏/pagehide/卸载flush保持；App单独展示保存失败与重试，普通进度不可覆盖。题目答案、审批/控制能力与令牌不新增持久化。
 
 APK32将Codex运行状态/普通发送反馈收进`.composer-toolbar`，空草稿仅显示主停止按钮；有文本或附件才显示紧凑的引导/排队直接发送及独立停止。`hasMessageContent`只表示内容是否存在，能力/提交锁仍使用原`canSubmitMessage`/`canSend`/`canInterrupt`，不能借布局重算控制权限或静默切mode。待发由原生details默认收起并按线程key隔离，数量与uncertain/paused/sending/waiting优先摘要在收起时仍可见；明细与取消仍来自原权威队列。待确认/网络/错误不因紧凑布局被隐藏，旧网关禁用queue时仍显示兼容说明。
 
@@ -49,3 +56,11 @@ Codex原生运行中“引导发送/排队发送”直接提交当前草稿，�
 
 
 APK31消息合并在手机内部保留`nativeMessageId`（原native消息完整ID），与历史`sourceItemId`分开；选择历史时间/ID后仍保存原生别名，用于重放及缓存恢复。未绑定native缺少clientMessageId也可参与原有同turn、完整正文、等数量的一一配对，缺页数量不等继续保守保留；已带nativeMessageId的历史项不得再次参与未绑定配对，防止吃掉新的真实同文输入。HTTP/SSE/渲染仍经同一合并入口，原生别名不是服务端接收证据，不改变发送或控制权限。
+
+APK33补齐HTTP确认/历史/早期native三路时序：历史上的clientMessageId可能仅来自本地确认占位，不表示它已绑定native。未带nativeMessageId的历史仍参与同turn、完整正文、等数量配对；对应项明确client身份冲突则整组保守保留。版本3缓存及messagesForRender使用同一修复入口，不能靠更换缓存版本或清空草稿掩盖顺序缺陷。
+
+APK35的原始输入按明确`replacesMessageId=turnId-input`继承显示身份。snapshot的`inputReplacements`独立于最近120条正文，最多240条，仅带turn/临时/native/client身份；App合并旧runtime时同步迁移临时项和历史native别名，不能只依赖snapshot reducer的removedIds。索引与已知正式正文/client冲突、多个successor争同一predecessor时保守保留；正文完整trim比较，不把同文accepted steering作为初始输入。关系保存到版本3缓存并在加载/保存/渲染共用归一化，保留草稿/待确认/历史游标。Timeline按初始输入链保持key，冲突项回退真实ID。缺权威关系的旧记录不猜测删除，不用全量snapshot覆盖分页。
+
+## 普通提示词显示边界（2026-10-29）
+
+普通user正文不能因为`You are `、`Knowledge cutoff:`等自然语言开头被隐藏。role/item type已有系统/工具来源则按原语义处理；旧user缺来源时只沿用专用上下文包络前缀兼容规则（含问答reply），不凭语言猜来源，不虚构metadata。引用/代码块中的标记仍可见；直接以保留包络开头的正文仍受兼容过滤。保持消息身份、合并器、cache schema与问答答案不落缓存。Relay历史/native/app-server和手机使用相同合成矩阵验证。

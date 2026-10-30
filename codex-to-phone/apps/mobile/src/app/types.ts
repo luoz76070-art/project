@@ -14,6 +14,7 @@ export type CodexMessage = {
   clientMessageId?: string;
   sourceItemId?: string;
   nativeMessageId?: string;
+  replacesMessageId?: string;
   turnId?: string;
   phase?: "commentary" | "final_answer";
   timestamp: string;
@@ -97,6 +98,8 @@ export type ThreadRuntime = {
   loaded: boolean;
   cursor: number;
   generation?: string;
+  syncRevision?: number;
+  lastAccessedAt?: number;
   historyBefore?: number;
   loadingHistory?: boolean;
   historyBrowsing?: boolean;
@@ -165,6 +168,7 @@ export type DesktopStreamSnapshot = {
   threadId: string;
   status: LiveTurnStatus;
   messages: CodexMessage[];
+  inputReplacements?: import("../features/chat/messageReconciliation").InputReplacement[];
   messageCount: number;
   eventCount: number;
   updatedAt: string;

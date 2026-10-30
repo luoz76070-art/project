@@ -1,5 +1,25 @@
 # 前端验证与轻量约束
 
+## 正式验证入口契约
+
+1. 范围：本地源码及隔离测试，核心入口 `corepack pnpm verify`；Android用 `verify:android`；组合用 `verify:all`。详见 `docs/verification.md`。
+2. 签名：`runSteps(steps, execute?, log?)`逐步await，`verificationSteps()`列出核心步骤；CLI `--list`只列计划，`--android`追加Android。未知参数失败。
+3. 契约：先lint/typecheck/build/build:plugin，后运行读dist的测试；后端并发4。Android通过正式init脚本分开JDK17 runner与JDK21+ compiler，不改系统配置。
+4. 错误：任一步非零或启动失败立即停止；缺JDK/SDK/Gradle明确失败；lint XML含Error/Fatal拒绝成功；Warning如实报告。
+5. 示例：正常verify:all全部通过；缺Android工具仍可只运行符合本机前置条件的verify；不能在verify:all中静默跳过Android后报全通过。
+6. 测试：`test:verification`验证步骤依赖、失败停止、真实子进程退出传播、实际lint规则拒绝、Java角色/报告计数与缺工具提示；浏览器和Android真机另记。
+7. 易错：不要调用单项会clean-dist的测试并行破坏构建；不要继续依赖ignored output中的init脚本。先构建一次、后顺序消费，正式脚本入库。
+
+`runtimeSync`以getter读取调用时的runtime/signal，request.expected同时在HTTP返回处和React updater内校验；回归须包含排队状态更新后迟到回包、effect清理、SSE恢复立即取消fallback，以及独立同文输入保持。不能只断言工厂内部实现结构。
+
+短诊断使用`test:mobile`内的`test-mobile-diagnostics.mjs`验证生产模块及真实App导出函数：身份/DOM差异、附件-only、异步快照、版本混用、UTF-8 2KiB/64KiB、脱敏、取消/超时、并发与失败重试。浏览器须检查真实文件下载、旧APK缺插件提示和按钮命中；合成Native bridge不能代替Android系统创建文档，编译/lint与真机保存分开记录。详见[短诊断契约](diagnostics-contract.md)。
+
+同步与缓存修改须运行`test:mobile`中的`test-mobile-reliability.mjs`：直接导入生产runtimeSync工厂，保留实际App四组poll/SSE effect的生命周期接线覆盖，验证迟到turn/cursor/reset/错误、相同cursor的新native状态、React批处理、切换/卸载取消、SSE恢复立即废止轮询，以及批次内多个正常事件不丢。缓存覆盖25草稿、6×120×8KiB正文、待确认身份、迁移失败保留旧输入、清空后旧正文不复活、输入配额反馈/重试、scope隔离和最近访问淘汰。
+
+真实浏览器容量回归：运行`node scripts/test-mobile-cache-browser.mjs`，在120秒内用浏览器打开打印的loopback URL；只用独立origin合成存储，结果落在`output/audit/2026-10-29/reliability/browser-cache.json`。断言浏览器真实QuotaExceededError、正文预算、释放自有正文救回新输入、其他数据保持和恢复空间后可重试。UI夹具`serve-ui-fixture.mjs`的`?cacheFixture=1`注入关键输入写入失败，页面测试按钮可恢复存储；检查提示不被刷新覆盖、重试后消失、重开草稿保持，360px/150%字号重试按钮至少44px且命中。合成通过不能替代Android原生存储、键盘和真实任务验收。
+
+初始输入过渡运行`test:mobile`中的`test-mobile-input-transitions.mjs`：直接导入runtimeSync生产工厂的snapshot/delta更新函数，覆盖临时/正式/历史/HTTP的48种顺序并逐步断言单次数量、完整身份/附件和稳定key；另验removedIds、仅身份索引partial、120条尾窗外、版本3旧缓存/离线/迟到帧、草稿和待确认保持、真实同文多次及身份/正文冲突。`/fixture/input-replacement?phase=provisional|history|formal|long|final|repeat`仅操作合成数据，浏览器检查运行/完成/重开单次为1、真实同文两次为2；不能作为原手机缓存或Android安装已验的依据。
+
 APK32紧凑footer需比较同viewport、同运行/草稿状态的前后高度；空草稿不渲染禁用双按钮，有文本或附件才显示原steer/queue直接动作。检查折叠队列数量、暂停/未知摘要、展开全文/取消、快捷键默认queue及停止保留草稿。`/fixture/native?active=1&queueStatus=waiting|paused|sending|uncertain`提供3条合成待发；测量命中时排除关闭的原生details隐藏子项，不能仅凭getBoundingClientRect非零算可见。原生fixture凭证位于sessionStorage，另开tab没有它，不能将其401视为真实手机连接证据。
 
 过程折叠回归覆盖commentary运行展开、明确final_answer流开始自动收起、手动重开后更新稳定、新任务重新展开、中断无终稿仍展开、跨用户边界与已知turn引导、未知phase保持正文和附件/原文不变；从真实messagesForRender入口断言已知工具保留且未知工具不误入组。fixture的`/fixture/process?phase=working|final|completed|next|interrupted|legacy|steering&agent=deepseek`只操作合成消息。DeepSeek在final流仍commentary，completed才提升；同ID更新必须改变分组，不重复最终正文。浏览器核对44px按钮的aria-expanded/aria-controls、终稿始终在过程区外、复制入口、深色/150%字号、三种窄屏及周边按钮命中；DeepSeek未知阶段旧正文和完整权限卡始终独立。麦克风/引导/排队/停止及允许/拒绝须检查中心与四边命中，点击麦克风只打开语音面板。不得把合成显示或复制反馈当Android原生验收。
@@ -42,26 +62,7 @@ Desktop审批绑定source/threadId/随机id，和Relay分别路由。提交状�
 
 App内APK更新须运行`corepack pnpm test:apk-update`，覆盖合成下载故障、缓存重验、包身份与签名，以及bridge迟到状态。浏览器使用`serve-ui-fixture`的`?apkFixture=1`合成Capacitor，严禁当作系统授权/安装成功。APK24起安装权限/插件必须检查，原生与Web版本递增，预览构建实际绑定preview源。详见[APK更新契约](apk-update-contract.md)。
 
-原生交付须跑完整`:app:lintDebug`，assembleDebug成功不能替代兼容性分析。当前旧lint分析器不能直接运行在JDK25；本机使用JDK17 runner，JavaCompile fork到已有JDK25（Capacitor编译需要较新JDK）。不得关闭规则/加baseline或提高minSdk绕过。可重建临时init配置后运行，路径依机器调整：
-
-```sh
-taskLintInit=$(mktemp /tmp/mobile-codex-lint.XXXXXX)
-cat > "$taskLintInit" <<'EOF'
-allprojects {
-    tasks.withType(JavaCompile).configureEach {
-        options.fork = true
-        options.forkOptions.javaHome = file("/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home")
-    }
-}
-EOF
-(cd apps/mobile/android && \
- JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home \
- ANDROID_HOME="$HOME/Library/Android/sdk" \
- gradle -I "$taskLintInit" :app:lintDebug --no-daemon)
-taskLintStatus=$?
-rm -f "$taskLintInit"
-test "$taskLintStatus" -eq 0
-```
+原生交付使用正式 `corepack pnpm verify:android`：执行Java编译与完整lintDebug，JDK17 runner配JDK21+编译器。脚本在 `scripts/verify-android.mjs` 与 `scripts/android/lint-jdk.gradle`，工具链覆盖及SDK发现见 `docs/verification.md`。缺工具/非零退出/Error或Fatal明确失败，不能用assembleDebug代替、不能关闭规则或依赖output里的旧init脚本。
 
 2026-10-22基线为0 Error/Fatal、5 Warning；警告与未验真机分支如实记录。完整报告及人工反馈分开保留，不把成品核验脚本的deviceInstallationTested改成手机已验；用户确认只覆盖其明确操作的路径，实际授权拒绝/取消后继续等需独立证据。
 
@@ -71,3 +72,11 @@ test "$taskLintStatus" -eq 0
 
 
 输入去重另覆盖无clientMessageId的早期/旧投影，中间插入7条不同工具记录，实时与历史时间只差75ms及相差33秒；双向到达、JSON缓存往返、已绑定项收到缺client的native重放均只显示1次。已有native别名不能匹配新的独立native ID，增加第二条历史后仍为2；部分来源数量不等保留，原始ID不同/跨turn/正文内部空白不同不误删。fixture的`/fixture/mirrored-steering?phase=native|history|repeat&client=0`检查缺身份路径，每个控制请求必须HTTP200，不能只因服务端已部分改变状态而忽略404。真实完整字段样本原先通过，必须记录实机缓存/版本未取得的证据边界，不能用附近合成失败直接认定截图根因。
+
+APK33消息回归覆盖历史、HTTP确认占位、早期无client native的全部6种到达顺序，并检查附件与三个身份保留、重放、真实第二次输入和明确client冲突保护。缓存回归直接构造版本3中已保存的双份记录，保留cursor/generation/草稿/另一待确认输入，通过真实messagesForRender与过程分组验证只显示一份；不能只测试一次性载入完整双路数据。fixture新增receipt=1及started=1，配合client=0与phase=repeat验证已带HTTP身份的历史以及任务开始记录；第二条真实输入须有独立client身份。
+
+真实升级后仍失败而当前投影回放通过时，先取得手机原缓存/实际显示差异，不再用附近合成漏洞代替实机根因。手动消息诊断覆盖旧身份版本的原缓存、不修改输入/存储、原文/附件/凭证过滤、独立同文、DOM数量差异及有界截断；报告只含SHA256身份/正文和白名单元数据。浏览器Clipboard替身可测传入报告与失败重试，但必须另核对APK包含原生类且MainActivity注册；JS registerPlugin代理不代表已有Android实现。实际Android复制及原重复恢复仍需真机反馈。
+
+临时输入替换须检查完整接入链：`${turnId}-input`、HTTP确认、历史及正式native身份到达顺序，snapshot removedIds在App最终runtime中的效果，已吸收临时native别名的历史记录，以及缓存恢复与重连。仅snapshot reducer单测通过或最终完整字段合并通过不能代表该链通过。2026-10-23专项隔离测试已有48种序列/28种保留重复及真实组件双气泡证据（input-transition-test-plan.md）；这是尚待修复的缺口，修复须增加入口回归且不误删独立同文输入，不能把合成复现当作手机原图早期状态已取得。
+
+提示词显示回归共享`scripts/fixtures/user-prompts.mjs`合成矩阵，在`test-mobile-connection.mjs`调用真实渲染/缓存入口，覆盖local/native/history、重开、真实同文不同source/turn、附件文本、英文角色/知识截止说明/中文及引用代码块；明确system/developer/hook和专用上下文包络保持隐藏。`serve-ui-fixture`的`/fixture/prompt-visibility`支持实际发送与completed场景，配合offline检查缓存重开。仅合成验收不能代替真机双气泡根因。

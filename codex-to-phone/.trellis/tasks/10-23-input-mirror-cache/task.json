@@ -2,7 +2,7 @@
   "id": "input-mirror-cache",
   "name": "input-mirror-cache",
   "title": "修正手机用户输入镜像与缓存重复",
-  "description": "核对16:23真实单次输入，复现缺少提交身份的历史/实时合并边界，保留真实重复输入并交付手机预览修复。",
+  "description": "核对16:23及18:21真实单次输入，修复缺身份及HTTP确认/历史/早期native三路时序导致的重复；覆盖现存缓存并交付手机预览。",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,
@@ -25,8 +25,19 @@
     "apps/mobile/src/features/chat/runtime.ts",
     "scripts/test-message-reconciliation.mjs",
     "scripts/test-mobile-connection.mjs",
-    "docs/audits/2026-10-23/input-mirror-cache.md"
+    "docs/audits/2026-10-23/input-mirror-cache.md",
+    "scripts/serve-ui-fixture.mjs",
+    "docs/audits/2026-10-23/input-source-transition.md",
+    "apps/mobile/src/features/chat/messageDiagnostics.ts",
+    "apps/mobile/android/app/src/main/java/com/mobilecodex/app/ClipboardPlugin.java",
+    "docs/audits/2026-10-23/input-persistent-diagnosis.md",
+    "docs/audits/2026-10-23/input-transition-test-plan.md",
+    "apps/relay/src/desktop/desktopControl.ts",
+    "apps/mobile/src/features/chat/messages.ts",
+    "apps/mobile/src/features/chat/components.tsx",
+    "scripts/test-mobile-input-transitions.mjs",
+    "docs/audits/2026-10-24/input-replacement.md"
   ],
-  "notes": "APK31已发布preview/previous30；缺client旧/早期投影复现后补修，手机69/69、浏览器15/15、公网19项通过。完整字段真实样本原先通过，未取得手机版本/缓存；真实重复截图待用户升级复核，不归档。",
+  "notes": "APK34诊断包已发布，重复问题未解决。12:32旧输入报告三层与DOM各1条，用户确认仍两处。20:43新无工具测试截图明确相同灰色用户气泡在task_started前后各一份；不是助手引用或工具原文。原始输入一次，native/history同turn相差70ms，公网/本地一致，完整字段6种顺序与浏览器真实组件仍一份。临时缺client turn-input合成序列可复现但未取得手机对应状态，不认定根因；canonical完整态params/item同client，不能倒推临时态。已请求这条新输入对应手机诊断，无需重发任务。新证据在input-persistent-diagnosis ignored目录及专项文档；本轮未改产品/构建/发布，临时tab/fixture及IPC订阅已释放。任务不归档，不做Git写入。\n用户追加测试并给方案：消息回归、手机75/75及类型检查通过；实际App入口提取回放48种临时→正式序列28种保留重复，连续3轮一致。snapshot reducer已删除临时项而App旧列表及历史临时别名残留，真实React组件DOM复现用户—过程—用户且无警告。已保存测试脚本/JSON/截图及专项修正方案，未改产品/构建/发布；缺手机早期身份对应，不宣称已完全锁定原图根因，任务保持in_progress。\n2026-10-24按用户三步方案实施：Relay初始userMessage明确替换turn-input，并提供最多240条纯身份索引，脱离120条正文尾窗；手机迁移临时项/历史native别名，关系保留至版本3缓存并稳定显示key，保留草稿/待确认/真实同文多次与冲突项。实际App入口回归新增9项及48种顺序、消息/手机84/84、后端相关113/113、类型/构建/浏览器通过；完整lint 0错误/8警告，同签名APK35已发布preview35/previous34，正式18/hot保持。固定网关原实例自然退出后已切换，86项只读健康与Codex/DeepSeek首帧/重连通过，配置/设备/语音Key/原插件/Harness保持。手机原记录与覆盖安装仍待真机，任务保持in_progress，不宣称已解决实机全部情况；无需长诊断，不做Git写入。交付见docs/audits/2026-10-24/input-replacement.md。\n2026-10-24 10:52用户报告已更新并要求测试。本轮真实输入只读联测14项通过：本地/公网native及历史各1，真实手机合并入口正反顺序均1，替换链齐全，运行中状态正常。无新模型任务或真实控制写入。手机DOM、结束/重开仍待用户确认，保持in_progress。\n2026-10-24 用户截图确认APK35仍显示两条，曾要求停止；随后明确重新授权排查。新一轮只读及完整App浏览器复核尚未复现实机异常：原记录1条，双路同turn且相差87ms；完整页面各阶段1条、实际同文两次2条；带真实HTTP占位形状和8条过程的48种回放仍1条。本机ADB无设备，已询问USB读取手机原DOM/缓存，等待答复。未修改产品、构建发布、重启或做Git写入，不能宣称修复。详见docs/audits/2026-10-24/input-display-recheck.md。",
   "meta": {}
 }

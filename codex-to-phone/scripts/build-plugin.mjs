@@ -1,4 +1,5 @@
 import { build } from 'esbuild';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +14,7 @@ await fs.copyFile(path.join(root, 'LICENSE'), path.join(plugin, 'LICENSE'));
 await build({
   entryPoints: [path.join(root, 'apps/relay/src/gateway/main.ts')], outfile: path.join(plugin, 'lib/gateway.mjs'),
   bundle: true, platform: 'node', target: 'node20', format: 'esm', minify: true,
+  define: { __GATEWAY_BUILD_ID__: JSON.stringify(`gateway-${randomUUID()}`) },
   banner: { js: "import { createRequire as _createRequire } from 'node:module'; const require = _createRequire(import.meta.url);" },
 });
 const marketplace = { name: 'mobile-codex-local', interface: { displayName: 'Mobile Codex 本地预览' }, plugins: [{ name: 'mobile-codex', source: { source: 'local', path: './mobile-codex' }, policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' }, category: 'Productivity' }] };

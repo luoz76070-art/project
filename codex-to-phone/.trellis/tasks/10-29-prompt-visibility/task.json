@@ -1,0 +1,8 @@
+{
+  "name": "prompt-visibility",
+  "title": "修复正常角色提示词误隐藏",
+  "status": "completed",
+  "createdAt": "2026-10-29",
+  "scope": "mobile,relay",
+  "autoCommit": false
+}

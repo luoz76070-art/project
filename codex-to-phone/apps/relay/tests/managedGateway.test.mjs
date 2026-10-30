@@ -14,6 +14,16 @@ import { startManagedGateway } from '../dist/gateway/managedGateway.js';
 import { inspectGateway, gatewayErrorMessage } from '../dist/gateway/cli.js';
 
 const execute = promisify(execFile);
+test('manual gateway diagnostics require authentication and expose only bounded runtime metadata', async t => {
+  const f = await fixture(t); await f.start();
+  assert.equal((await f.call('/api/diagnostics', { token: 'wrong' })).status, 401);
+  const response = await f.call('/api/diagnostics'); assert.equal(response.status, 200);
+  const report = await response.json();
+  assert.match(report.buildId, /^gateway-[a-f0-9-]{36}$/);
+  assert.deepEqual(Object.keys(report).sort(), ['buildId', 'schema', 'tunnel']);
+  assert.deepEqual(report.tunnel, { enabled: false, omitted: 0, events: [] });
+  for (const value of [f.config.token, f.config.managerKey, f.config.workspace, f.config.codexHome]) assert.equal(JSON.stringify(report).includes(value), false);
+});
 async function port() {
   const server = http.createServer(); server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const value = server.address().port; await new Promise(resolve => server.close(resolve)); return value;
@@ -217,6 +227,9 @@ test('only a successful port owner starts Tunnel; duplicate/occupied startups ne
   await until(() => first.snapshot().tunnel.state === 'connected');
   await assert.rejects(startManagedGateway(config), { code: 'EADDRINUSE' });
   assert.equal(b.connections(), 1);
+  const diagnostics = await (await f.call('/api/diagnostics')).json();
+  assert.match(diagnostics.buildId, /^gateway-[a-f0-9-]{36}$/);
+  assert.ok(diagnostics.tunnel.events.some(event => event.reason === 'open'));
   await first.stop();
   await until(() => b.server.clients.size === 0);
   const unknown = http.createServer((_, response) => { response.writeHead(401); response.end(); });

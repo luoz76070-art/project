@@ -7,12 +7,23 @@
   const apk = async action => (await fetch(`/fixture/apk${action ? `?action=${action}` : ''}`)).json();
   window.Capacitor = {
     PluginHeaders: [header('SecureCredentials', ['load', 'save']), header('ApkUpdate', ['getStatus', 'downloadAndInstall', 'install', 'addListener', 'removeListener']),
-      header('HotUpdate', ['getStatus', 'markReady', 'install', 'rollback']), header('CapacitorHttp', ['request']),
+      header('HotUpdate', ['getStatus', 'markReady', 'install', 'rollback']), header('CapacitorHttp', ['request']), header('Clipboard', ['write']),
+      ...new URLSearchParams(location.search).has('legacyDiagnostic') ? [] : [header('DiagnosticExport', ['save'])],
       ...(new URLSearchParams(location.search).get('voiceFixture') === '1' ? [header('VoiceRecorder', ['start', 'stop', 'cancel', 'addListener', 'removeListener'])] : [])],
     nativeCallback: async (plugin, method, options, callback) => {
       const id = String(++nextId); listeners.set(id, { plugin, callback }); return id;
     },
     nativePromise: async (plugin, method, options) => {
+      if (plugin === 'DiagnosticExport') {
+        const response = await fetch('/fixture/diagnostic-file', { method: 'POST', body: JSON.stringify({ text: options.text }) });
+        if (!response.ok) throw new Error('Synthetic file save failure');
+        return response.json();
+      }
+      if (plugin === 'Clipboard') {
+        const response = await fetch('/fixture/clipboard', { method: 'POST', body: JSON.stringify({ string: options.string }) });
+        if (!response.ok) throw new Error('Synthetic clipboard failure');
+        return {};
+      }
       if (plugin === 'VoiceRecorder') {
         if (method === 'removeListener') { listeners.delete(options.callbackId); return {}; }
         if (method === 'start') {
@@ -36,7 +47,10 @@
         if (method === 'removeListener') { listeners.delete(options.callbackId); return {}; }
         return apk(method === 'downloadAndInstall' ? 'download' : method === 'install' ? 'install' : '');
       }
-      if (plugin === 'HotUpdate') return { supported: true, activeVersion: '', pendingVersion: '', previousVersion: 'fixture-web', nativeVersionCode: (await apk()).nativeVersionCode };
+      if (plugin === 'HotUpdate') {
+        const diagnostics = await (await fetch('/fixture/diagnostics')).json();
+        return { supported: true, activeVersion: diagnostics.activeVersion, pendingVersion: diagnostics.pendingVersion, previousVersion: 'fixture-web', nativeVersionCode: diagnostics.nativeVersionCode ?? (await apk()).nativeVersionCode };
+      }
       if (plugin === 'CapacitorHttp') {
         const url = new URL(options.url);
         if (url.pathname.includes('/releases/android/')) {

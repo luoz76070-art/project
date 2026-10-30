@@ -1,5 +1,6 @@
 import { Fragment, useState, useEffect, useId, type ReactNode } from "react";
 import { groupMessageProcesses } from "./processGroups";
+import { messageDisplayKey } from "./messageReconciliation";
 import { takeSmoothChunk, roleClass, isToolMessage, roleLabel, summarizeToolMessage, toolRawText } from "./messages";
 import { smoothTextFrameMs } from "../../app/config";
 import { type PendingAttachment, type CodexMessage, type LiveApproval, type LiveApprovalDecision } from "../../app/types";
@@ -115,7 +116,7 @@ export function MessageBubble({
   const parsed = parseMessageAttachments(message);
 
   return (
-    <article className={`message-bubble ${roleClass(message.role)}`}>
+    <article className={`message-bubble ${roleClass(message.role)}`} data-message-id={message.id} data-message-role={message.role}>
       {parsed.text && (message.role === "assistant"
         ? <SmoothText text={parsed.text} active={smooth} pending={smoothPending} onDone={onSmoothDone} />
         : <p className="user-message-text">{parsed.text}</p>)}
@@ -129,8 +130,13 @@ export function MessageBubble({
 }
 
 export function MessageTimeline({ messages, renderMessage }: { messages: CodexMessage[]; renderMessage: (message: CodexMessage) => ReactNode }) {
+  const keyCounts = new Map<string, number>();
+  for (const message of messages) {
+    const key = messageDisplayKey(message);
+    keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
+  }
   return groupMessageProcesses(messages).map(group => group.kind === "message"
-    ? <Fragment key={`message:${group.message.id}`}>{renderMessage(group.message)}</Fragment>
+    ? <Fragment key={`message:${(keyCounts.get(messageDisplayKey(group.message)) ?? 0) > 1 ? group.message.id : messageDisplayKey(group.message)}`}>{renderMessage(group.message)}</Fragment>
     : <MessageProcess key={`process:${group.id}`} messages={group.messages} completed={group.completed} renderMessage={renderMessage} />);
 }
 

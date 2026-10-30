@@ -1,8 +1,25 @@
 import { type ThreadRuntime, type CodexMessage, type DesktopControlCapability, type DesktopControlResponse, type LiveApproval } from "../../app/types";
 import { composeMessageWithAttachments } from "./attachments";
+import { reconcileMessages } from "./messageReconciliation";
 const threadRuntimeCacheKey = "mobileCodexThreadRuntimeCacheV2";
 const cachedMessagesPerThread = 120;
 const cachedThreadLimit = 24;
+const threadInputCacheKey = "mobileCodexThreadInputCacheV1";
+const inputCacheByteBudget = 1024 * 1024;
+const messageCacheByteBudget = 2 * 1024 * 1024;
+
+type CachedInput = Pick<ThreadRuntime, "draft" | "pendingMessageId" | "pendingMessageText"> & { localMessages?: CodexMessage[] };
+type CachedThread = Partial<CachedInput> & {
+  messageIdentityVersion?: number; messages?: CodexMessage[]; cursor?: number;
+  generation?: string; historyBefore?: number; lastAccessedAt?: number;
+};
+export type ThreadCacheSaveResult = { status: "saved" | "history-reduced" | "input-failed" };
+
+export function threadCacheSaveNotice(result: ThreadCacheSaveResult): string {
+  if (result.status === "input-failed") return "草稿或待确认输入尚未保存，请保留当前页面并重试。";
+  if (result.status === "history-reduced") return "草稿与待确认输入已保存，部分历史将在联网后重新加载。";
+  return "";
+}
 
 export function defaultRuntime(): ThreadRuntime {
   return {
@@ -139,59 +156,166 @@ export function desktopInterruptResponsePatch(runtime: ThreadRuntime, response: 
   };
 }
 
-export function loadThreadRuntimeCache(scope = "legacy-disabled"): Record<string, ThreadRuntime> {
+export type ThreadMessageCacheSnapshot = {
+  status: "available" | "missing" | "unreadable";
+  messageIdentityVersion: number | null;
+  messages: CodexMessage[];
+  invalidMessageCount: number;
+};
+
+export function readThreadMessageCacheForDiagnostics(scope: string, threadId: string): ThreadMessageCacheSnapshot {
+  const empty = { messageIdentityVersion: null, messages: [], invalidMessageCount: 0 };
   try {
-    const parsed = JSON.parse(localStorage.getItem(`${threadRuntimeCacheKey}:${scope}`) ?? "{}") as Record<string, { messageIdentityVersion?: number; messages?: CodexMessage[]; cursor?: number; generation?: string; draft?: string; historyBefore?: number; pendingMessageId?: string; pendingMessageText?: string }>;
-    const result: Record<string, ThreadRuntime> = {};
-    for (const [threadId, item] of Object.entries(parsed)) {
-      // Re-read pre-identity server caches once; preserve drafts and unconfirmed local input.
-      const refresh = item.messageIdentityVersion !== 3;
-      const messages = Array.isArray(item.messages) ? item.messages.filter(message => cacheableMessage(message) && (!refresh || (message.role === "user" && (message.kind === "local" || message.kind === "steeringUserMessage" || /^(local-|desktop-local-|steer-local-)/u.test(message.id))))).slice(-cachedMessagesPerThread) : [];
-      if (messages.length === 0 && !item.draft && !item.pendingMessageText) continue;
-      result[threadId] = {
-        ...defaultRuntime(),
-        messages,
-        draft: item.draft ?? "",
-        generation: refresh ? undefined : item.generation,
-        historyBefore: refresh ? undefined : item.historyBefore,
-        pendingMessageId: item.pendingMessageId, pendingMessageText: item.pendingMessageText,
-        loaded: true,
-        cursor: !refresh && Number.isFinite(item.cursor) ? Number(item.cursor) : 0,
-        status: `已载入最近 ${messages.length} 条缓存`,
-      };
-    }
-    return result;
+    const parsed = JSON.parse(localStorage.getItem(`${threadRuntimeCacheKey}:${scope}`) ?? "{}");
+    const item = parsed?.[threadId];
+    if (!item) return { ...empty, status: "missing" };
+    if (!Array.isArray(item.messages)) return { ...empty, status: "unreadable" };
+    const messages = item.messages.filter((message: unknown): message is CodexMessage => Boolean(message) &&
+      typeof message === "object" && ["id", "timestamp", "role", "text", "kind"].every(key => typeof (message as Record<string, unknown>)[key] === "string"));
+    return {
+      status: "available",
+      messageIdentityVersion: Number.isSafeInteger(item.messageIdentityVersion) ? item.messageIdentityVersion : null,
+      messages,
+      invalidMessageCount: item.messages.length - messages.length,
+    };
   } catch {
-    return {};
+    return { ...empty, status: "unreadable" };
   }
 }
 
-export function saveThreadRuntimeCache(state: Record<string, ThreadRuntime>, scope = "legacy-disabled") {
+function readCacheObject<T>(key: string): Record<string, T> {
   try {
-    const entries = Object.entries(state)
-      .filter(([, runtime]) => (runtime.messages.length > 0 || runtime.draft.length > 0 || Boolean(runtime.pendingMessageText)))
-      .sort(([, left], [, right]) => Number(Boolean(right.draft || right.pendingMessageText)) - Number(Boolean(left.draft || left.pendingMessageText)) || (Date.parse(right.messages.at(-1)?.timestamp ?? "") || 0) - (Date.parse(left.messages.at(-1)?.timestamp ?? "") || 0))
-      .slice(0, cachedThreadLimit);
-    const payload = Object.fromEntries(
-      entries.map(([threadId, runtime]) => [
-        threadId,
-        {
-          messageIdentityVersion: 3,
-          cursor: runtime.cursor,
-          draft: runtime.draft,
-          generation: runtime.generation,
-          historyBefore: runtime.historyBefore,
-          pendingMessageId: runtime.pendingMessageId, pendingMessageText: runtime.pendingMessageText,
-          messages: runtime.historyBrowsing ? [] : runtime.messages.filter(cacheableMessage).slice(-cachedMessagesPerThread),
-        },
-      ]),
-    );
-    localStorage.setItem(`${threadRuntimeCacheKey}:${scope}`, JSON.stringify(payload));
+    const value = JSON.parse(localStorage.getItem(key) ?? "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
+
+function localInputMessage(message: CodexMessage): boolean {
+  return message.role === "user" && (message.kind === "local" || message.kind === "steeringUserMessage" || /^(local-|desktop-local-|steer-local-)/u.test(message.id));
+}
+
+function inputFromRuntime(runtime: Partial<ThreadRuntime>): CachedInput {
+  return {
+    draft: typeof runtime.draft === "string" ? runtime.draft : "",
+    pendingMessageId: typeof runtime.pendingMessageId === "string" ? runtime.pendingMessageId : undefined,
+    pendingMessageText: typeof runtime.pendingMessageText === "string" ? runtime.pendingMessageText : undefined,
+    localMessages: reconcileMessages([], (Array.isArray(runtime.messages) ? runtime.messages : []).filter(message => cacheableMessage(message) && localInputMessage(message))),
+  };
+}
+
+function hasInput(input: CachedInput): boolean {
+  return Boolean(input.draft || input.pendingMessageId || input.pendingMessageText || input.localMessages?.length);
+}
+
+export function loadThreadRuntimeCache(scope = "legacy-disabled"): Record<string, ThreadRuntime> {
+  const body = readCacheObject<CachedThread>(`${threadRuntimeCacheKey}:${scope}`);
+  const inputKey = `${threadInputCacheKey}:${scope}`;
+  let hasSeparateInputs = false;
+  try { hasSeparateInputs = localStorage.getItem(inputKey) !== null; } catch { /* Storage may be disabled. */ }
+  const inputs = hasSeparateInputs ? readCacheObject<CachedInput>(inputKey) : {};
+  const result: Record<string, ThreadRuntime> = {};
+  for (const threadId of new Set([...Object.keys(body), ...Object.keys(inputs)])) {
+    const stored = body[threadId];
+    const item = stored && typeof stored === "object" ? stored : {};
+    // An empty independent snapshot is authoritative too: never revive cleared
+    // drafts/pending identities from an older body write that failed afterwards.
+    const input = hasSeparateInputs ? inputs[threadId] ?? { draft: "" } : inputFromRuntime(item);
+    if (!input || typeof input !== "object") continue;
+    const refresh = item.messageIdentityVersion !== 3;
+    const cached = Array.isArray(item.messages) ? item.messages.filter(message => cacheableMessage(message) &&
+      (!refresh || localInputMessage(message)) && (!hasSeparateInputs || !localInputMessage(message))) : [];
+    const local = (Array.isArray(input.localMessages) ? input.localMessages : []).filter(message => cacheableMessage(message) && localInputMessage(message));
+    const messages = reconcileMessages([], [...cached.slice(-cachedMessagesPerThread), ...local]);
+    if (!messages.length && !hasInput(input)) continue;
+    result[threadId] = {
+      ...defaultRuntime(), messages,
+      draft: typeof input.draft === "string" ? input.draft : "",
+      pendingMessageId: input.pendingMessageId, pendingMessageText: input.pendingMessageText,
+      generation: refresh ? undefined : item.generation,
+      historyBefore: refresh ? undefined : item.historyBefore,
+      lastAccessedAt: item.lastAccessedAt,
+      loaded: true,
+      cursor: !refresh && Number.isFinite(item.cursor) ? Number(item.cursor) : 0,
+      status: `已载入最近 ${messages.length} 条缓存`,
+    };
+  }
+  return result;
+}
+
+function bodyCachePayload(state: Record<string, ThreadRuntime>): { text: string; reduced: boolean } {
+  const entries = Object.entries(state).filter(([, runtime]) => runtime.messages.length && !runtime.historyBrowsing)
+    .sort(([, left], [, right]) => (right.lastAccessedAt ?? (Date.parse(right.messages.at(-1)?.timestamp ?? "") || 0)) - (left.lastAccessedAt ?? (Date.parse(left.messages.at(-1)?.timestamp ?? "") || 0)))
+    .slice(0, cachedThreadLimit);
+  const payload: Record<string, CachedThread> = {};
+  let bytes = 4, reduced = false;
+  for (const [threadId, runtime] of entries) {
+    const item: CachedThread = { messageIdentityVersion: 3, cursor: runtime.cursor, generation: runtime.generation, historyBefore: runtime.historyBefore, lastAccessedAt: runtime.lastAccessedAt, messages: [] };
+    // localStorage uses strings; count UTF-16 bytes including JSON overhead.
+    const overhead = 2 * (JSON.stringify(threadId).length + JSON.stringify(item).length + 2);
+    const messages = reconcileMessages([], runtime.messages.filter(cacheableMessage)).slice(-cachedMessagesPerThread);
+    const kept: CodexMessage[] = [];
+    let size = overhead;
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const cost = 2 * (JSON.stringify(messages[index]).length + (kept.length ? 1 : 0));
+      if (bytes + size + cost > messageCacheByteBudget) { reduced = true; break; }
+      kept.unshift(messages[index]); size += cost;
+    }
+    if (!kept.length) continue;
+    payload[threadId] = { ...item, messages: kept };
+    bytes += size;
+  }
+  return { text: JSON.stringify(payload), reduced };
+}
+
+function isQuotaError(error: unknown): boolean {
+  return error instanceof Error && (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED");
+}
+
+function releaseBodyCache(scope: string) {
+  const key = `${threadRuntimeCacheKey}:${scope}`;
+  if (localStorage.getItem(`${threadInputCacheKey}:${scope}`) !== null) {
+    localStorage.removeItem(key);
+    return;
+  }
+  // During migration the old body may still be the only saved copy of inputs.
+  // Compact it in place before retrying; a failed retry leaves those inputs intact.
+  const compact = Object.fromEntries(Object.entries(readCacheObject<CachedThread>(key)).flatMap(([id, item]) => {
+    if (!item || typeof item !== "object") return [];
+    const input = inputFromRuntime(item);
+    return hasInput(input) ? [[id, { messageIdentityVersion: 3, ...input, messages: input.localMessages }]] : [];
+  }));
+  localStorage.setItem(key, JSON.stringify(compact));
+}
+
+export function saveThreadRuntimeCache(state: Record<string, ThreadRuntime>, scope = "legacy-disabled"): ThreadCacheSaveResult {
+  let releasedBody = false;
+  try {
+    const inputs = Object.fromEntries(Object.entries(state).flatMap(([id, runtime]) => {
+      const input = inputFromRuntime(runtime);
+      return hasInput(input) ? [[id, input]] : [];
+    }));
+    const serialized = JSON.stringify(inputs);
+    if (serialized.length * 2 > inputCacheByteBudget) return { status: "input-failed" };
+    try { localStorage.setItem(`${threadInputCacheKey}:${scope}`, serialized); }
+    catch (error) {
+      if (!isQuotaError(error)) return { status: "input-failed" };
+      releaseBodyCache(scope);
+      releasedBody = true;
+      localStorage.setItem(`${threadInputCacheKey}:${scope}`, serialized);
+    }
+  } catch { return { status: "input-failed" }; }
+
+  try {
+    const body = bodyCachePayload(state);
+    localStorage.setItem(`${threadRuntimeCacheKey}:${scope}`, body.text);
+    return { status: body.reduced || releasedBody ? "history-reduced" : "saved" };
   } catch {
-    // Cache is a best-effort mobile UX layer.
+    // Inputs are already durable. Only this scope's rebuildable body may be dropped.
+    try { localStorage.removeItem(`${threadRuntimeCacheKey}:${scope}`); } catch { /* Best effort. */ }
+    return { status: "history-reduced" };
   }
 }
 
 function cacheableMessage(message: CodexMessage): boolean {
-  return !message.text.includes("<send_user_message_question_reply>") && !/userInputResponse/i.test(message.kind);
+  return Boolean(message) && typeof message.text === "string" && !message.text.includes("<send_user_message_question_reply>") && !/userInputResponse/i.test(message.kind);
 }

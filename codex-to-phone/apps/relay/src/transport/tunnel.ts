@@ -5,6 +5,8 @@ import { canForwardHeader, chunkBytes, decodeBrokerMessage, maxFrameBytes, maxRe
 type TunnelConfig = ReturnType<typeof loadTunnelConfig>;
 type ActiveRequest = { controller: AbortController; acknowledge?: { seq: number; resolve: () => void } };
 export type TunnelState = "connecting" | "connected" | "reconnecting" | "stopped";
+export type TunnelDiagnosticEvent = { at: string; generation: number; state: TunnelState;
+  reason: "connect" | "open" | "closed" | "socket-error" | "heartbeat-timeout" | "retry" | "stop"; closeCode?: number };
 
 export function loadTunnelConfig() {
   return {
@@ -18,27 +20,33 @@ export function loadTunnelConfig() {
   };
 }
 
-export function startTunnel(config: TunnelConfig, options: { onState?: (state: TunnelState) => void; log?: (level: "info" | "error", message: string) => void } = {}) {
+export function startTunnel(config: TunnelConfig, options: { onState?: (state: TunnelState) => void; onDiagnostic?: (event: TunnelDiagnosticEvent) => void; log?: (level: "info" | "error", message: string) => void } = {}) {
   if (!config.brokerUrl || !config.relayId || !config.relaySecret) {
     throw new Error("Set MOBILE_CODEX_BROKER_URL, MOBILE_CODEX_RELAY_ID and MOBILE_CODEX_RELAY_SECRET.");
   }
   const lifetime = new AbortController();
   const log = options.log ?? ((level, message) => level === "error" ? console.error(message) : console.log(message));
   let current: WebSocket | null = null;
+  let generation = 0;
+  const record = (state: TunnelState, reason: TunnelDiagnosticEvent["reason"], closeCode?: number) =>
+    options.onDiagnostic?.({ at: new Date().toISOString(), generation, state, reason, ...(closeCode === undefined ? {} : { closeCode }) });
   const done = (async () => {
     let failures = 0;
     while (!lifetime.signal.aborted) {
       const started = Date.now();
+      generation++;
+      record("connecting", "connect");
       options.onState?.("connecting");
       try { await connectOnce(); } catch (error) { log("error", `[remote-tunnel] ${toErrorMessage(error)}`); }
       if (lifetime.signal.aborted) break;
       options.onState?.("reconnecting");
+      record("reconnecting", "retry");
       if (Date.now() - started >= 30_000) failures = 0;
       const budget = Math.min(30_000, config.reconnectMs * 2 ** Math.min(failures++, 6));
       await delay(Math.max(10, Math.random() * budget), lifetime.signal);
     }
   })();
-  return { done, stop() { lifetime.abort(); current?.terminate(); options.onState?.("stopped"); } };
+  return { done, stop() { if (lifetime.signal.aborted) return; lifetime.abort(); current?.terminate(); options.onState?.("stopped"); record("stopped", "stop"); } };
 
   function connectOnce(): Promise<void> {
     const url = buildBrokerWebSocketUrl(config.brokerUrl, config.relayId);
@@ -52,10 +60,12 @@ export function startTunnel(config: TunnelConfig, options: { onState?: (state: T
       socket.once("open", () => {
         log("info", `[remote-tunnel] connected relayId=${config.relayId}`);
         options.onState?.("connected");
-        attachHeartbeat(socket, config.heartbeatMs);
+        record("connected", "open");
+        attachHeartbeat(socket, config.heartbeatMs, () => record("reconnecting", "heartbeat-timeout"));
       });
-      socket.on("error", (error) => { log("error", `[remote-tunnel] ${toErrorMessage(error)}`); socket.terminate(); });
-      socket.once("close", () => {
+      socket.on("error", (error) => { if (!lifetime.signal.aborted) record("reconnecting", "socket-error"); log("error", `[remote-tunnel] ${toErrorMessage(error)}`); socket.terminate(); });
+      socket.once("close", (code) => {
+        if (!lifetime.signal.aborted) record("reconnecting", "closed", code);
         for (const request of active.values()) request.controller.abort();
         active.clear(); if (current === socket) current = null; resolve();
       });

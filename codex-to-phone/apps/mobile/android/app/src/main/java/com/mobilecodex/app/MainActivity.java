@@ -12,6 +12,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ApkUpdatePlugin.class);
         registerPlugin(SecureCredentialsPlugin.class);
         registerPlugin(VoiceRecorderPlugin.class);
+        registerPlugin(ClipboardPlugin.class);
+        registerPlugin(DiagnosticExportPlugin.class);
         super.onCreate(savedInstanceState);
     }
 

@@ -9,6 +9,7 @@ import { once } from 'node:events';
 import { DesktopIpcClient } from '../dist/desktop/desktopIpcClient.js';
 import { DesktopControl } from '../dist/desktop/desktopControl.js';
 import { createRelayServer } from '../dist/server/createRelayServer.js';
+import { ordinaryPrompts, contextEnvelopes } from '../../../scripts/fixtures/user-prompts.mjs';
 
 const threadId = 'synthetic-native-thread';
 const frame = value => { const body = Buffer.from(JSON.stringify(value)); const header = Buffer.alloc(4); header.writeUInt32LE(body.length); return Buffer.concat([header, body]); };
@@ -79,6 +80,26 @@ async function fixture(t, active = false) {
   return f;
 }
 
+test('ordinary role prompts remain visible in native provisional, canonical and accepted steering inputs', async t => {
+  const f = await fixture(t, true), history = f.state.turnHistory.history;
+  const texts = [...contextEnvelopes, ...ordinaryPrompts];
+  history.entitiesByKey = Object.fromEntries(texts.map((text, index) => [`entry-${index}`, { turnId: `turn-${index}`, status: 'inProgress', params: { input: [{ type: 'text', text }] }, items: [] }]));
+  history.islands[0].entries = Object.keys(history.entitiesByKey).map(value => ({ value }));
+  await f.follow();
+  assert.deepEqual(f.control.getStreamSnapshot(threadId).messages.map(m => m.text), ordinaryPrompts.map(text => text.trim()));
+  Object.values(history.entitiesByKey).forEach((turn, index) => {
+    turn.items = [
+      { type: 'userMessage', id: `user-${index}`, content: [{ type: 'text', text: texts[index] }] },
+      { type: 'steeringUserMessage', id: `steer-${index}`, status: 'accepted', input: [{ type: 'text', text: texts[index] }] },
+      { type: 'hookPrompt', id: `hook-${index}`, fragments: [{ text: 'synthetic hook' }] },
+    ];
+  });
+  f.snapshot();
+  await until(() => f.control.getStreamSnapshot(threadId).messages.some(m => m.id.endsWith('-steer-10')));
+  assert.deepEqual(f.control.getStreamSnapshot(threadId).messages.map(m => m.text), ordinaryPrompts.flatMap(text => [text.trim(), text.trim()]));
+  assert.equal(f.controls.length, 0, 'synthetic projection never dispatches a model task');
+});
+
 test('native start uses canonical history, v2 request/context and confirms a client message identity', async t => {
   const f = await fixture(t); await f.follow(); const input = f.input();
   const r = await f.control.sendMessage(input);
@@ -113,6 +134,43 @@ test('canonical user items retain only their own identity; pending and rejected 
   const messages = f.control.getStreamSnapshot(threadId).messages;
   assert.deepEqual(messages.filter(message => message.role === 'user').map(message => [message.text, message.clientMessageId]),
     [['canonical user', 'canonical-client'], ['input-accepted', 'client-accepted']]);
+});
+
+test('initial user item explicitly replaces only its provisional input, including same-text accepted steering', async t => {
+  const f = await fixture(t, true);
+  turns(f).initial.params = { input: [{ type: 'text', text: 'same input' }] };
+  await f.follow();
+  assert.equal(f.control.getStreamSnapshot(threadId).messages.find(message => message.role === 'user').id, 'initial-turn-input');
+  turns(f).initial.items = [
+    { type: 'steeringUserMessage', id: 'steer-one', status: 'accepted', clientId: 'steer-client', input: [{ type: 'text', text: 'same input' }] },
+    { type: 'userMessage', id: 'initial-user', content: [{ type: 'text', text: 'same input' }] },
+  ];
+  f.snapshot();
+  await until(() => f.control.getStreamSnapshot(threadId)?.messages.some(message => message.id.endsWith('-initial-user')));
+  const projected = f.control.getStreamSnapshot(threadId).messages;
+  assert.equal(projected.find(message => message.id.endsWith('-initial-user')).replacesMessageId, 'initial-turn-input');
+  assert.equal(projected.find(message => message.id.endsWith('-steer-one')).replacesMessageId, undefined);
+  assert.equal(projected.some(message => message.id === 'initial-turn-input'), false);
+  assert.equal(f.controls.length, 0, 'projection test must not dispatch any input');
+});
+
+test('initial-input identity index survives a long message tail and is bounded without user text', async t => {
+  const f = await fixture(t, true);
+  const history = f.state.turnHistory.history;
+  history.entitiesByKey = Object.fromEntries(Array.from({ length: 245 }, (_, index) => [`turn-${index}`, {
+    turnId: `turn-${index}`, status: 'completed', items: [{ type: 'userMessage', id: 'input', content: [{ type: 'text', text: `synthetic body ${index}` }] }],
+  }]));
+  history.islands[0].entries = Object.keys(history.entitiesByKey).map(value => ({ value }));
+  history.entitiesByKey['turn-244'].items.push(...Array.from({ length: 130 }, (_, index) => ({ type: 'agentMessage', id: `progress-${index}`, text: `progress ${index}` })));
+  await f.follow();
+  const snapshot = f.control.getStreamSnapshot(threadId);
+  assert.equal(snapshot.messages.length, 120);
+  assert.equal(snapshot.messages.some(message => message.role === 'user'), false);
+  assert.equal(snapshot.inputReplacements.length, 240);
+  assert.deepEqual(snapshot.inputReplacements.at(-1), { turnId: 'turn-244', replacesMessageId: 'turn-244-input', nativeMessageId: 'desktop-turn-244-input' });
+  assert.equal(snapshot.inputReplacements[0].turnId, 'turn-5');
+  assert.equal(JSON.stringify(snapshot.inputReplacements).includes('synthetic body'), false);
+  assert.equal(f.controls.length, 0);
 });
 
 test('writes require a current owner subscription, generation token, message identity and expected turn', async t => {

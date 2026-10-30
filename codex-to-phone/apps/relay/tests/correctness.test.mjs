@@ -8,6 +8,7 @@ import { CodexStore } from '../dist/store/codexStore.js';
 import { LiveTurnController } from '../dist/codex/liveTurnController.js';
 import { turnProgress } from '../dist/store/turnActivity.js';
 import { createRelayServer } from '../dist/server/createRelayServer.js';
+import { ordinaryPrompts, contextEnvelopes } from '../../../scripts/fixtures/user-prompts.mjs';
 
 const id = '11111111-1111-1111-1111-111111111111';
 const record = (text, type = 'agent_message') => JSON.stringify({ type: 'event_msg', timestamp: '2026-10-20T00:00:00Z', payload: { type, message: text } }) + '\n';
@@ -20,6 +21,30 @@ async function fixture(t, content) {
   await fs.writeFile(file, content);
   return { file, store: new CodexStore(root) };
 }
+
+for (const source of ['response_item', 'event_msg']) test(`ordinary role prompts survive ${source} history, delta and reopen`, async t => {
+  const input = [...ordinaryPrompts, ordinaryPrompts[0]];
+  const line = (text, index) => JSON.stringify({ type: source, timestamp: `2026-10-29T00:00:${String(index).padStart(2, '0')}Z`, payload: source === 'event_msg'
+    ? { type: 'user_message', message: text }
+    : { type: 'message', id: `source-${index}`, role: 'user', content: [{ type: 'input_text', text }] } }) + '\n';
+  const { store, file } = await fixture(t, [...contextEnvelopes, ...input].map(line).join(''));
+  t.after(() => store.close());
+  for (const page of [await store.readThreadWithCursor(id), await store.readThreadLatest(id), await store.readThreadDelta(id)]) {
+    assert.deepEqual(page.messages.map(m => m.text), input);
+  }
+  assert.equal((await store.getThreadSummary(id)).threadName, input[0]);
+  const latest = await store.readThreadLatest(id);
+  await fs.appendFile(file, line(input[0], 40));
+  assert.deepEqual((await store.readThreadDelta(id, latest.cursor, undefined, latest.generation)).messages.map(m => m.text), [input[0]]);
+  const reopened = new CodexStore(path.dirname(path.dirname(file))); t.after(() => reopened.close());
+  assert.deepEqual((await reopened.readThreadLatest(id)).messages.map(m => m.text), [...input, input[0]]);
+});
+
+test('ordinary role prompt titles from the index are retained over a fallback', async t => {
+  const { store, file } = await fixture(t, record('Fallback title', 'user_message')); t.after(() => store.close());
+  await fs.writeFile(path.join(path.dirname(path.dirname(file)), 'session_index.jsonl'), JSON.stringify({ id, thread_name: ordinaryPrompts[0] }) + '\n');
+  assert.equal((await store.getThreadSummary(id)).threadName, ordinaryPrompts[0]);
+});
 
 test('latest cursor preserves an incomplete UTF-8 record for the next delta', async t => {
   const bytes = Buffer.from(record('中文不能丢失'));
@@ -179,6 +204,31 @@ class FakeClient extends EventEmitter {
   isConnected() { return this.ready; }
   async stop() { this.stops++; this.ready = false; }
 }
+
+test('ordinary role prompts survive app-server notifications and completed thread refresh', async t => {
+  const client = new EventEmitter();
+  let connected = false;
+  client.start = async () => { connected = true; };
+  client.isConnected = () => connected;
+  client.stop = async () => { connected = false; };
+  const input = [...ordinaryPrompts, ordinaryPrompts[0]], turnId = 'synthetic-prompt-turn';
+  const items = [...contextEnvelopes, ...input].map((text, index) => ({ type: 'userMessage', id: `item-${index}`, content: [{ type: 'text', text }] }));
+  items.push({ type: 'hookPrompt', id: 'hook', fragments: [{ text: 'synthetic hook' }] });
+  client.request = async method => {
+    if (method === 'thread/resume') return {};
+    if (method === 'turn/start') return { turn: { id: turnId, status: 'inProgress' } };
+    if (method === 'thread/read') return { thread: { id, name: 'Synthetic prompts', updatedAt: 1, cwd: '/synthetic', turns: [{ id: turnId, items, startedAt: 1 }] } };
+    assert.fail(`unexpected synthetic RPC: ${method}`);
+  };
+  const controller = new LiveTurnController('/synthetic', () => client);
+  t.after(() => controller.stop());
+  await controller.startTurn({ threadId: id, message: 'Synthetic seed' });
+  for (const item of items) client.emit('notification', { method: 'item/completed', params: { threadId: id, turnId, item } });
+  assert.deepEqual(controller.getTurn(turnId).messages.filter(m => m.id.startsWith(`${turnId}-item-`)).map(m => m.text), input);
+  client.emit('notification', { method: 'turn/completed', params: { threadId: id, turn: { id: turnId, status: 'completed' } } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(controller.getTurn(turnId).messages.map(m => m.text), input);
+});
 
 test('concurrent status calls await one initialized client and reconnect after loss', async t => {
   const clients = [];

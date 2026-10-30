@@ -63,6 +63,30 @@ try {
   // Initial/older native items may lack a submission ID. Progress records also
   // put the history copy beyond the four-neighbour fallback search.
   const noClientNative = { ...acceptedSteer, clientMessageId: undefined };
+  // A confirmed HTTP placeholder may bind to history before the first native
+  // item arrives. A client identity alone does not mean native is already bound.
+  const confirmedLocal = { ...acceptedSteer, id: `desktop-local-${acceptedSteer.clientMessageId}`, kind: 'local', timestamp: '2026-10-23T05:51:35.400Z', attachments: [{ id: 'synthetic-confirmed-upload' }] };
+  const sourceOrders = [
+    [persistedSteer, confirmedLocal, noClientNative], [confirmedLocal, persistedSteer, noClientNative],
+    [noClientNative, persistedSteer, confirmedLocal], [noClientNative, confirmedLocal, persistedSteer],
+    [persistedSteer, noClientNative, confirmedLocal], [confirmedLocal, noClientNative, persistedSteer],
+  ];
+  for (const order of sourceOrders) {
+    let result = [];
+    for (const item of order) result = reconcileMessages(result, [item]);
+    assert.equal(result.length, 1, 'all HTTP/history/early-native arrival orders must keep a single confirmed input');
+    assert.equal(result[0].nativeMessageId, noClientNative.id);
+    assert.equal(result[0].sourceItemId, persistedSteer.sourceItemId);
+    assert.equal(result[0].clientMessageId, confirmedLocal.clientMessageId);
+    assert.deepEqual(result[0].attachments, confirmedLocal.attachments);
+    assert.equal(reconcileMessages(JSON.parse(JSON.stringify(result)), order).length, 1);
+    const independentNative = { ...noClientNative, id: `desktop-${steeringTurn}-independent-third-source`, clientMessageId: 'synthetic-independent-client' };
+    const independentHistory = { ...historyRepeated };
+    assert.equal(reconcileMessages(result, [independentNative, independentHistory]).length, 2, 'a second real same-text input survives after binding the first three-source input');
+  }
+  const historyWithReceipt = { ...persistedSteer, clientMessageId: confirmedLocal.clientMessageId };
+  assert.equal(reconcileMessages([historyWithReceipt], [nativeRepeated]).length, 2, 'explicit conflicting submission identities must never be paired by text and turn');
+  assert.equal(reconcileMessages([historyWithReceipt], [{ ...noClientNative, turnId: 'different-turn' }]).length, 2);
   const intervening = Array.from({ length: 7 }, (_, i) => ({
     ...message(`progress-${i}`, acceptedSteer.timestamp, 'tool', `合成执行过程 ${i + 1}`, 'commandExecution'), turnId: steeringTurn,
   }));

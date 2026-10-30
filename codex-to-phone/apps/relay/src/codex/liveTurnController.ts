@@ -833,6 +833,7 @@ function isDisplayableUserText(text: string): boolean {
 }
 
 function isGeneratedContextText(trimmed: string): boolean {
+  // Match the rollout/native compatibility boundary, not prose prefixes.
   return (
     trimmed.startsWith("<environment_context>") ||
     trimmed.startsWith("<permissions instructions>") ||
@@ -841,10 +842,9 @@ function isGeneratedContextText(trimmed: string): boolean {
     trimmed.startsWith("<personality_spec>") ||
     trimmed.startsWith("<skills_instructions>") ||
     trimmed.startsWith("<plugins_instructions>") ||
+    trimmed.startsWith("<send_user_message_question_reply>") ||
     trimmed.startsWith("# AGENTS.md instructions") ||
-    trimmed.startsWith("<INSTRUCTIONS>") ||
-    trimmed.startsWith("Knowledge cutoff:") ||
-    trimmed.startsWith("You are ")
+    trimmed.startsWith("<INSTRUCTIONS>")
   );
 }
 

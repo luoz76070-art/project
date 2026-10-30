@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ordinaryPrompts, contextEnvelopes } from './fixtures/user-prompts.mjs';
 
 const dist = fileURLToPath(new URL('../apps/mobile/dist/', import.meta.url));
 const hotBundle = process.env.UI_FIXTURE_HOT_BUNDLE;
@@ -11,6 +12,8 @@ const streams = new Set();
 const streamRoutes = new Map();
 const notifications = new Map();
 const counters = {};
+const clipboardFixture = { text: '', writes: 0, fail: false };
+const diagnosticFixture = { gateway: 'ok', nativeVersionCode: null, activeVersion: '', pendingVersion: '', fileMode: 'saved', saves: 0, text: '' };
 const voiceFixture = { region: 'cn', workspace: '', qwenConfigured: true, deepseekConfigured: true, deepseekBaseUrl: 'https://api.deepseek.com', qwenBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', asrModel: 'qwen-audio-3.1-asr-flash', promptModel: 'deepseek-v4-flash', denied: false, failRefine: false, delay: 0, transcriptions: 0, refinements: 0, cancellations: 0 };
 let offline = false;
 const fixtureAppConfig = await fs.readFile(new URL('../apps/mobile/src/app/config.ts', import.meta.url), 'utf8');
@@ -51,6 +54,38 @@ function confirmNative(state) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/fixture/cache-storage.js') {
+      res.writeHead(200, { 'content-type': 'text/javascript' });
+      res.end(await fs.readFile(new URL('./fixtures/cache-storage.js', import.meta.url))); return;
+    }
+    if (url.pathname === '/fixture/clipboard') {
+      if (url.searchParams.has('fail')) clipboardFixture.fail = url.searchParams.get('fail') === '1';
+      if (req.method === 'POST') {
+        if (clipboardFixture.fail) return json(res, { error: 'synthetic_clipboard_failure' }, 500);
+        let body = ''; for await (const chunk of req) body += chunk;
+        const payload = JSON.parse(body);
+        if (typeof payload.string !== 'string' || payload.string.length > 65536) return json(res, { error: 'invalid_synthetic_clipboard' }, 400);
+        clipboardFixture.text = payload.string; clipboardFixture.writes++;
+      }
+      return json(res, clipboardFixture);
+    }
+    if (url.pathname === '/fixture/diagnostics') {
+      for (const key of ['gateway', 'activeVersion', 'pendingVersion', 'fileMode']) if (url.searchParams.has(key)) diagnosticFixture[key] = url.searchParams.get(key);
+      if (url.searchParams.has('nativeVersionCode')) diagnosticFixture.nativeVersionCode = Number(url.searchParams.get('nativeVersionCode'));
+      return json(res, diagnosticFixture);
+    }
+    if (url.pathname === '/fixture/diagnostic-file') {
+      if (req.method === 'POST') {
+        if (diagnosticFixture.fileMode === 'error') return json(res, { error: 'synthetic_save_failed' }, 500);
+        if (diagnosticFixture.fileMode === 'cancelled') return json(res, { status: 'cancelled' });
+        let body = ''; for await (const chunk of req) body += chunk;
+        const input = JSON.parse(body);
+        if (typeof input.text !== 'string' || Buffer.byteLength(input.text) > 65536) return json(res, { error: 'invalid_diagnostic_file' }, 400);
+        diagnosticFixture.text = input.text; diagnosticFixture.saves++;
+        return json(res, { status: 'saved' });
+      }
+      return json(res, { text: diagnosticFixture.text, saves: diagnosticFixture.saves });
+    }
     if (url.pathname === '/fixture/voice') {
       for (const key of ['denied', 'failRefine']) if (url.searchParams.has(key)) voiceFixture[key] = url.searchParams.get(key) === '1';
       if (url.searchParams.has('delay')) voiceFixture.delay = Math.min(10000, Number(url.searchParams.get('delay')) || 0);
@@ -95,6 +130,19 @@ const server = http.createServer(async (req, res) => {
       return json(res, { ...apkState, counters: apkCounters });
     }
     if (url.pathname === '/fixture/counters') return json(res, { ...counters, activeStreams: [...streamRoutes.values()] });
+    if (url.pathname === '/fixture/prompt-visibility') {
+      const state = states.get('A');
+      if (url.searchParams.get('phase') === 'completed') {
+        state.turnStatus = 'completed';
+        if (state.control) state.control = { ...state.control, activeTurnId: null, canSend: true, canInterrupt: false };
+        state.messages.push({ id: 'prompt-fixture-final', role: 'assistant', text: '合成任务完成，提示词应继续可见。', kind: 'agentMessage', phase: 'final_answer', timestamp: new Date().toISOString() });
+      } else {
+        state.messages = [...contextEnvelopes, ordinaryPrompts[2], ordinaryPrompts[3]].map((text, index) => ({ id: `prompt-fixture-${index}`, role: 'user', text, kind: 'message', timestamp: `2026-10-29T00:00:${String(index).padStart(2, '0')}Z` }));
+      }
+      state.cursor++;
+      for (const notify of notifications.values()) notify();
+      return json(res, { ok: true });
+    }
     if (url.pathname === '/fixture/projects') {
       const state = states.get(url.searchParams.get('name') ?? 'A');
       state.projects = true; state.deepseekHistory = true;
@@ -243,6 +291,28 @@ const server = http.createServer(async (req, res) => {
       for (const notify of notifications.values()) notify();
       return json(res, { ok: true, phase });
     }
+    if (url.pathname === '/fixture/input-replacement') {
+      const state = states.get('A'), phase = url.searchParams.get('phase') ?? 'provisional';
+      if (!['provisional', 'history', 'formal', 'long', 'final', 'repeat'].includes(phase)) return json(res, {}, 400);
+      const turnId = '00000000-0000-4000-8000-000000000035';
+      const provisional = { id: `${turnId}-input`, turnId, role: 'user', text: '合成显示测试：只回复开始', kind: 'userMessage', timestamp: '2026-10-24T01:00:00Z' };
+      const native = { ...provisional, id: `desktop-${turnId}-initial`, clientMessageId: 'fixture-initial', replacesMessageId: provisional.id };
+      const history = { ...provisional, id: 'log-fixture-initial', kind: 'message', sourceItemId: 'fixture-history-initial', timestamp: '2026-10-24T01:00:00.070Z' };
+      const started = { id: 'fixture-input-started', turnId, role: 'tool', kind: 'task_started', text: 'Codex turn started', timestamp: '2026-10-24T01:00:00.056Z' };
+      state.messages = phase === 'provisional' ? [] : [started, history];
+      state.desktopMessages = ['provisional', 'history'].includes(phase) ? [provisional] : phase === 'long' ? [started] : [native];
+      state.inputReplacements = ['provisional', 'history'].includes(phase) ? [] : [{ turnId, replacesMessageId: provisional.id, nativeMessageId: native.id, clientMessageId: native.clientMessageId }];
+      if (['final', 'repeat'].includes(phase)) state.messages.push({ id: 'fixture-input-final', turnId, role: 'assistant', kind: 'agentMessage', phase: 'final_answer', text: '开始', timestamp: '2026-10-24T01:00:02Z' });
+      if (phase === 'repeat') {
+        state.desktopMessages.push({ ...native, id: `desktop-${turnId}-steering`, replacesMessageId: undefined, clientMessageId: 'fixture-steer-two', timestamp: '2026-10-24T01:00:01Z' });
+        state.messages.push({ ...history, id: 'log-fixture-steer-two', sourceItemId: 'fixture-history-two', timestamp: '2026-10-24T01:00:01.070Z' });
+      }
+      state.turnStatus = ['final', 'repeat'].includes(phase) ? 'completed' : 'inProgress';
+      state.activity = state.turnStatus === 'inProgress' ? 'working' : undefined;
+      state.cursor++;
+      for (const notify of notifications.values()) notify();
+      return json(res, { ok: true, phase });
+    }
     if (url.pathname === '/fixture/mirrored-steering') {
       const state = states.get('A'), phase = url.searchParams.get('phase') ?? 'history', deepseek = url.searchParams.get('agent') === 'deepseek';
       const turnId = '00000000-0000-4000-8000-000000000010';
@@ -250,11 +320,14 @@ const server = http.createServer(async (req, res) => {
       const history = { id: 'log-fixture-steer-first', sourceItemId: 'msg_fixture_steer_first', turnId, role: 'user', text: native.text, kind: 'message', timestamp: '2026-10-23T05:52:09.088Z' };
       const missingClient = url.searchParams.get('client') === '0';
       if (missingClient) { delete native.clientMessageId; history.timestamp = '2026-10-23T05:51:35.592Z'; }
+      const withReceipt = url.searchParams.get('receipt') === '1';
+      if (withReceipt) history.clientMessageId = 'fixture-steer-first';
       state.messages = phase === 'native' ? [native] : [native, history];
+      if (url.searchParams.get('started') === '1') state.messages.push({ id: 'fixture-mirror-started', role: 'tool', kind: 'task_started', text: 'Codex turn started', timestamp: '2026-10-23T05:51:35.550Z' });
       if (missingClient) state.messages.push(...Array.from({ length: 7 }, (_, i) => ({ id: `fixture-mirror-progress-${i}`, turnId, role: 'tool', text: `合成执行过程 ${i + 1}`, kind: 'commandExecution', timestamp: native.timestamp })));
       if (phase === 'repeat') state.messages.push(
         { ...native, id: `desktop-${turnId}-second-steer`, ...(missingClient ? {} : { clientMessageId: 'fixture-steer-second' }) },
-        { ...history, id: 'log-fixture-steer-second', sourceItemId: 'msg_fixture_steer_second', timestamp: '2026-10-23T05:52:10.088Z' });
+        { ...history, id: 'log-fixture-steer-second', sourceItemId: 'msg_fixture_steer_second', ...(withReceipt ? { clientMessageId: 'fixture-steer-second' } : {}), timestamp: '2026-10-23T05:52:10.088Z' });
       state.messages.push({ id: 'fixture-steer-result', role: 'assistant', text: '成功', kind: 'agent_message', timestamp: '2026-10-23T05:52:11Z' });
       if (deepseek) { const agent = agentSnapshot('A', 'deepseek'); agent.messages = state.messages; agent.status = state.turnStatus === 'inProgress' ? 'running' : 'idle'; agent.activity = state.activity ?? 'working'; agent.partialText = true; }
       state.cursor++;
@@ -334,6 +407,13 @@ const server = http.createServer(async (req, res) => {
         return json(res, { ok: true, delivery: 'confirmed' });
       }
       if (route === '/api/status') return json(res, { ok: true, desktopControl: { ok: true, mode: state.control ? 'desktop-ipc-follower-control' : 'macos-ui-injector-control' }, live: { ok: true, mode: 'fixture' }, activeDesktopThread: thread(name) });
+      if (route === '/api/diagnostics') {
+        if (diagnosticFixture.gateway === 'legacy') return json(res, { error: 'not_found' }, 404);
+        if (diagnosticFixture.gateway === 'error') return json(res, { error: 'synthetic_diagnostic_failure' }, 503);
+        return json(res, { schema: 'mobile-codex-gateway-diagnostics-v1', buildId: 'gateway-33333333-3333-4333-8333-333333333333', tunnel: { enabled: true, omitted: 0, events: [
+          { at: new Date().toISOString(), seq: 1, generation: 1, state: 'connected', reason: 'open' },
+        ] } });
+      }
       if (route.endsWith('/health')) return json(res, { ok: true, mode: 'fixture' });
       if (route.endsWith('/stream-token')) return json(res, { streamToken: `fixture-${name}-${Date.now()}` });
       if (route.endsWith('/events')) {
@@ -341,7 +421,7 @@ const server = http.createServer(async (req, res) => {
         const delta = () => {
           if (route.startsWith('/api/agents/')) { res.write(`event: agent-session\ndata: ${JSON.stringify(agentSnapshot(name, route.split('/')[3]))}\n\n`); return; }
           res.write(`event: delta\ndata: ${JSON.stringify(state)}\n\n`);
-          res.write(`event: desktop\ndata: ${JSON.stringify({ threadId: 'same-thread', status: state.turnStatus, messages: state.messages, userInputs: state.userInputs, approvals: state.approvals, interactionsAvailable: true, control: state.control, source: 'desktop-ipc', eventCount: state.cursor, updatedAt: new Date().toISOString() })}\n\n`);
+          res.write(`event: desktop\ndata: ${JSON.stringify({ threadId: 'same-thread', status: state.turnStatus, messages: state.desktopMessages ?? state.messages, inputReplacements: state.inputReplacements, userInputs: state.userInputs, approvals: state.approvals, interactionsAvailable: true, control: state.control, source: 'desktop-ipc', eventCount: state.cursor, updatedAt: new Date().toISOString() })}\n\n`);
         };
         delta();
         streams.add(res);
@@ -433,6 +513,8 @@ const server = http.createServer(async (req, res) => {
       const profiles = ['A', 'B'].map(name => ({ id: name, name: `测试连接 ${name}`, endpoint: `http://127.0.0.1:${server.address().port}/${name}`, token: 'fixture-only', cacheNamespace: `fixture-${name}`, updatedAt: '2026-10-20' }));
       const bootstrap = `<script>if(!localStorage.connectionProfiles){localStorage.connectionProfiles=${JSON.stringify(JSON.stringify(profiles))};localStorage.activeConnectionProfileId='A';}</script>`;
       content = content.toString().replace('<head>', `<head>${bootstrap}`);
+      if (url.searchParams.get('cacheFixture') === '1') content = content.replace('</head>', '<script src="/fixture/cache-storage.js"></script></head>');
+      if (url.searchParams.get('diagnosticsFixture') === '1') content = content.replace('</head>', '<meta name="mobile-codex-hot-bundle" content="fixture-loaded-old"></head>');
       if (url.searchParams.get('apkFixture') === '1' || url.searchParams.get('voiceFixture') === '1') content = content.replace('</head>', '<script src="/fixture/apk-native.js"></script></head>');
       if (url.searchParams.get('textScale') === '150') content = content.replace('</head>', '<style>html { font-size: 150%; }</style></head>');
     }

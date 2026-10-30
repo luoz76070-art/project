@@ -1,0 +1,8 @@
+{
+  "name": "sync-input-reliability",
+  "title": "修复旧同步回包与关键输入缓存可靠性",
+  "status": "completed",
+  "createdAt": "2026-10-29",
+  "scope": "mobile",
+  "autoCommit": false
+}
