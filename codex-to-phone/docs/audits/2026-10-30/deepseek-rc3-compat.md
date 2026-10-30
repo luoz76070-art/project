@@ -42,3 +42,9 @@ CLI安装成功后桥接仍未监听；原插件页刷新显示v0.2.2，组件�
 ignored证据根：`output/audit/2026-10-30/deepseek-rc3-compat/`。runtime-identities、old-version-rejection、两版runtime/interactions/history日志、verify.log、candidate-identities、plugin-install.log、bridge-live.json、switch-report.json、gateway-live.json及stream-check.json分别记录来源、失败、验证与真实运行。
 
 私有备份与state位置仅保存在backup-path.txt/state-path.txt。回退插件可用原官方CLI重新指向备份记录的oldPluginRoot，必要时仅重载该插件；原插件在rc.3上仍会版本拒绝，不能把这种恢复称为功能正常。网关按精确instance管理stop并确认自然退出后回到oldEntry，保持配置、设备、语音凭证；不强停Harness或电脑业务任务。
+
+## Git同步与未验范围
+
+源码提交`6c2c700dc679010407cc7dd1d00093e5dacd53a2`及annotated标签`codex-to-phone-v0.2.2-deepseek-rc3-preview`已原子推送现有origin/main，远端main与标签展开值核对一致。随后交付文档单独同步，标签保持指向源码基线。只提交本项目路径，父仓库其他修改保持。
+
+手机确认卡已发出，目前等待用户实际查看原会话并重开；真实发送/引导/排队/审批、中断和长期后台不在本轮作为已通过结论。复用既有官方运行时检查、固定包切换及备份流程，补充DeepSeek契约；未创建新的安装系统或自动化。

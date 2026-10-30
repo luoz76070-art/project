@@ -55,7 +55,7 @@ deepSeek.test覆盖逐帧stream.turn、临时到durable替换、成功提升及�
 
 Wrong：从chunk.frame.turn取任务号，或用最后一条助手文本/idle猜终稿。Correct：从已验证的当前stream.turn投影临时文本；只以原生成功边界提升同turn有效末步。文件HMR未生效时，核对原进程后通过官方组件开关仅重载手机桥接；不重启Harness/Agent或更改审批策略，最后核对profile配置字节及bridge能力。
 
-官方运行时检查另用`node scripts/check-deepseek-runtime.mjs <隔离运行时绝对目录>`。显式提供官方dsh与agent-loop-testkit同版0.2.1-rc.2及Cordis4.0.5目录，脚本不安装依赖，所有profile/配置/会话位于自建临时目录并最终清理。先以真实bundle解析/版本门/CLI dump、Loader、AgentRegistry、SessionStore、SessionQuery和作用域事件总线验证9项加载/恢复/异步卸载；再用官方生产AgentLoop与唯一的本地确定性LLM adapter验证4项排队/追加/流去重/中断保留Inbox/旧turn拒绝，无外部provider、外部模型或用户持久化服务。官方const enum在JS无导出，状态值取固定版本类型声明；Session.append可见消息须带surfaceOp，不能因合成fixture省略该参数而误报插件失败。此检查通过不等于用户dsh原会话或Android验收通过。
+官方运行时检查另用`node scripts/check-deepseek-runtime.mjs <隔离运行时绝对目录>`。显式提供官方dsh与agent-loop-testkit同版0.2.1-rc.2或0.2.1-rc.3及Cordis4.0.5目录，脚本不安装依赖，所有profile/配置/会话位于自建临时目录并最终清理。先以真实bundle解析/版本门/CLI dump、Loader、AgentRegistry、SessionStore、SessionQuery和作用域事件总线验证9项加载/恢复/异步卸载；再用官方生产AgentLoop与唯一的本地确定性LLM adapter验证4项排队/追加/流去重/中断保留Inbox/旧turn拒绝，无外部provider、外部模型或用户持久化服务。官方const enum在JS无导出，状态值取固定版本类型声明；Session.append可见消息须带surfaceOp，不能因合成fixture省略该参数而误报插件失败。此检查通过不等于用户dsh原会话或Android验收通过。
 
 ## 全部工作区与按需历史（插件0.2.0）
 
