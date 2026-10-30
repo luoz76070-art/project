@@ -25,7 +25,8 @@ export type InputReplacement = {
 
 export function reconcileMessages<T extends ReconciliationMessage>(current: T[], incoming: T[], inputReplacements: InputReplacement[] = []): T[] {
   const byId = new Map<string, T>();
-  for (const message of [...current, ...incoming]) {
+  for (const candidate of [...current, ...incoming]) {
+    const message = promoteIndexedInput(candidate);
     const existing = byId.get(message.id);
     byId.set(message.id, existing ? mergeSameMessage(existing, message) : message);
   }
@@ -66,10 +67,22 @@ function initialInputReplacement(message: ReconciliationMessage) {
     ? { predecessor: message.replacesMessageId, nativeId } : null;
 }
 
+// Before Desktop assigns a turn ID, the gateway uses turn-N-input. A merge by
+// client ID can attach the formal alias while leaving that indexed ID behind.
+// Promote only this placeholder, using its explicit initial-input relation; the
+// same repair also runs for already persisted version-3 cache records.
+function promoteIndexedInput<T extends ReconciliationMessage>(message: T): T {
+  if (!isDesktopUserItem(message) || !/^turn-\d+$/u.test(message.turnId!) || message.id !== `${message.turnId}-input`) return message;
+  const turnId = message.replacesMessageId?.endsWith("-input") ? message.replacesMessageId.slice(0, -6) : "";
+  if (!turnId || /^turn-\d+$/u.test(turnId) || !message.nativeMessageId?.startsWith(`desktop-${turnId}-`)) return message;
+  return { ...message, id: message.nativeMessageId, turnId };
+}
+
 // A provisional input is a projection of params.input, not another submission.
 // Carry the explicit relation through history/cache so a late provisional frame
 // cannot restore it after the formal native record has already been folded away.
 function reconcileInitialInputReplacements<T extends ReconciliationMessage>(messages: T[], inputReplacements: InputReplacement[] = []): T[] {
+  messages = messages.map(promoteIndexedInput);
   const successors = new Map<string, { relation: InputReplacement; message?: T } | null>();
   function add(relation: InputReplacement, message?: T) {
     if (!relation || typeof relation.turnId !== "string" || typeof relation.replacesMessageId !== "string" || typeof relation.nativeMessageId !== "string") return;
@@ -294,7 +307,7 @@ function mergeSameMessage<T extends ReconciliationMessage>(current: T, incoming:
   const nativeMessageId = relation?.nativeId ?? nativeMessageIdentity(preferred) ?? nativeMessageIdentity(current) ?? nativeMessageIdentity(incoming);
   const replacesMessageId = preferred.replacesMessageId ?? incoming.replacesMessageId ?? current.replacesMessageId;
   const phase = preferred.phase ?? incoming.phase ?? current.phase;
-  return {
+  return promoteIndexedInput({
     ...preferred,
     ...(clientMessageId ? { clientMessageId } : {}),
     ...(sourceItemId ? { sourceItemId } : {}),
@@ -303,7 +316,7 @@ function mergeSameMessage<T extends ReconciliationMessage>(current: T, incoming:
     ...(replacesMessageId ? { replacesMessageId } : {}),
     ...(phase ? { phase } : {}),
     ...(attachments === undefined ? {} : { attachments }),
-  } as T;
+  } as T);
 }
 
 function preferredMessage<T extends ReconciliationMessage>(current: T, incoming: T): T {

@@ -15,7 +15,7 @@
 当前主入口：
 
 - Android APK：`dist-apk/mobile-codex-1.2.2-update-restore-debug.apk`（versionCode 18，已恢复原手机更新通道并发布，待真机验收）
-- Android独立预览：`dist-apk/mobile-codex-1.3.15-reliability-preview-debug.apk`（versionCode36，preview36/previous35已发布，配套网关已切换，源码与preview标签已同步GitHub。手机121/后端377、Android lint0错误8警告、公网19项、网关58项与Codex重连12项通过；用户确认升级连接、短摘要、系统保存取消重试正常，原重复输入重开后仅一条。详见[交付记录](audits/2026-10-30/preview-validation.md)；后续[DeepSeek rc.3兼容及手机复联](audits/2026-10-30/deepseek-rc3-compat.md)也已完成，继续使用APK36）。
+- Android独立预览：`dist-apk/mobile-codex-1.3.16-turn-identity-preview-debug.apk`（versionCode37，preview37/previous36已发布。修复手机报告精确定位的临时轮次身份遗留；手机125项、浏览器8项、Android lint0错误8警告、同签名成品及公网19项通过，原记录真机待确认，见[APK37记录](audits/2026-10-30/indexed-turn-input.md)。前版36的集成检查与已确认结果见[交付记录](audits/2026-10-30/preview-validation.md)，不扩大为此次复发已通过）。
 - Mac 原生网关：`~/Library/Application Support/Mobile Codex Gateway/releases/<固定版本>/mobile-codex/lib/gateway.mjs`，当前单Node进程、native IPC；[插件管理入口](../plugins/mobile-codex/README.md)。
 - 旧 Mac Relay/Input App：生成App已压缩归档并移除，源码与构建入口保留；[清理及恢复记录](audits/2026-10-21/legacy-mac-app-cleanup.md)。
 - Relay/Broker：`apps/relay`
@@ -23,6 +23,8 @@
 - 协议类型：`generated-protocol`
 
 ## Trellis 与当前优化
+
+最新[临时轮次重复输入修复](audits/2026-10-30/indexed-turn-input.md)：用户APK36详细报告精确定位turn-N-input吸收正式native别名后未同步提升轮次，两组身份/时间与旧代码回放逐字段一致。手机最小修复及旧缓存恢复通过125/125、消息/类型/lint/构建、浏览器8项；APK37 `1.3.16-turn-identity-preview`已发布preview，previous36，Android0错误8警告、同签名成品与公网19项通过。用户原记录待升级确认，网关/原任务保持；DeepSeek剩余控制验收继续保留。
 
 当前[DeepSeek手机真实控制验收](audits/2026-10-30/deepseek-control-acceptance.md)已由用户启动，指定默认工作区“末流211电子信息考研专业课名单”。首项输入已到达并启动原任务，但上游模型全账号冷却导致执行失败，手机漏显该错误。用户保留原模型等待服务恢复；重开后宿主实际升至rc.5，现已加载插件0.2.4并切换配套网关，明确显示原模型失败原因。rc.5官方25项、DeepSeek64/64、后端384/384、手机122/122及lint/typecheck/构建通过；桥接17项、本地/公网35项和Codex重连12项通过。APK36沿用，用户已确认失败提示；随后原模型恢复、手机收发及重开无重复验收通过。本地/公网成功终稿与idle一致，引导首轮实际等待90秒但无追加输入，用户已确认运行期间入口缺失。APK36代码一致，4组窄屏合成与一次引导发送正常、Agent状态回归12/12；真机原因尚未复现，待手机运行时连接/停止状态证据；排队及取消/权限/停止仍待测。
 

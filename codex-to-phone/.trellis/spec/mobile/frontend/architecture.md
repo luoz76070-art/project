@@ -61,6 +61,8 @@ APK33补齐HTTP确认/历史/早期native三路时序：历史上的clientMessag
 
 APK35的原始输入按明确`replacesMessageId=turnId-input`继承显示身份。snapshot的`inputReplacements`独立于最近120条正文，最多240条，仅带turn/临时/native/client身份；App合并旧runtime时同步迁移临时项和历史native别名，不能只依赖snapshot reducer的removedIds。索引与已知正式正文/client冲突、多个successor争同一predecessor时保守保留；正文完整trim比较，不把同文accepted steering作为初始输入。关系保存到版本3缓存并在加载/保存/渲染共用归一化，保留草稿/待确认/历史游标。Timeline按初始输入链保持key，冲突项回退真实ID。缺权威关系的旧记录不猜测删除，不用全量snapshot覆盖分页。
 
+输入身份还须覆盖Desktop尚无turnId时的`turn-N-input`。同client合并正式消息后，明确`replacesMessageId`及匹配的`nativeMessageId`必须同步提升临时id/turnId，否则native别名虽正确，仍无法和真实turn的history配对。只提升id恰为`turn-N-input`的原始userMessage，不按正文或时间改写任意真实轮次；缓存加载/保存、直接渲染和合并结果使用同一规则。2026-10-30手机报告的两组身份/时间已逐字段复现；回归需包含indexed turn→正式项→history、迟到indexed快照、已污染版本3缓存、草稿/待确认及真实同文第二次输入。
+
 ## 普通提示词显示边界（2026-10-29）
 
 普通user正文不能因为`You are `、`Knowledge cutoff:`等自然语言开头被隐藏。role/item type已有系统/工具来源则按原语义处理；旧user缺来源时只沿用专用上下文包络前缀兼容规则（含问答reply），不凭语言猜来源，不虚构metadata。引用/代码块中的标记仍可见；直接以保留包络开头的正文仍受兼容过滤。保持消息身份、合并器、cache schema与问答答案不落缓存。Relay历史/native/app-server和手机使用相同合成矩阵验证。

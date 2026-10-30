@@ -1,5 +1,13 @@
 # 验收设计
 
+## Codex临时轮次身份修复（用户追加）
+
+手机详细报告的两组native-input指纹分别精确对应turn-45-input/turn-48-input，nativeMessageId及client与网关正式项一致，但turnId仍为turn-N；历史使用真实turnId，导致同turn配对失败。当前mergeSameMessage已合并正式native别名/替换关系，但preferredMessage在等长正文时保留了临时ID与turn。之前回归仅覆盖真实turn下的临时input，未覆盖turn本身尚未获分配的形态。
+
+最小修改位于手机messageReconciliation：只对id恰为turn-N-input的user记录，在已有明确replacesMessageId及匹配正式nativeMessageId时提升到正式id/turn；同一规则在合并结果及缓存/渲染入口生效。继续依赖既有client/native/source身份和冲突保护，不按相同正文或时间改写真实轮次，不清缓存。后端已提供所需字段，无需协议或网关部署。
+
+先在真实createRuntimeSync入口构造脱敏序列复现并验证输出形态与手机报告一致，再测排列、版本3缓存、迟到临时帧、长尾与不同client同文输入；更新fixture并做浏览器检查。只改合并器、针对测试、fixture及相关交付文档；不将DeepSeek入口、内部摘要显示等旁项混入。产品自审通过后按版本流程交付预览，Android结果独立记录。
+
 - 先按列表标题与项目确认原会话别名；核对宿主版本、网关构建、本地/公网目录及目标当前状态，无待答/审批或未决提交才开始。
 - 使用有时限、有体积上限的原桥接/网关只读订阅，记录目标状态、能力、测试标记消息次数、阶段、问答/权限数量与投递状态。报告不含鉴权令牌、业务正文或其他会话内容。
 - 手机每项使用独立短标记，先启动观察再发用户操作卡。用户负责Android实际触摸及权限选择；观察到原生权威消息确认后才开始下一项。

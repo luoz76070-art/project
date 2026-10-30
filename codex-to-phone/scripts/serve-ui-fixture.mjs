@@ -293,14 +293,18 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/fixture/input-replacement') {
       const state = states.get('A'), phase = url.searchParams.get('phase') ?? 'provisional';
-      if (!['provisional', 'history', 'formal', 'long', 'final', 'repeat'].includes(phase)) return json(res, {}, 400);
+      if (!['provisional', 'history', 'formal', 'long', 'final', 'repeat', 'cached'].includes(phase)) return json(res, {}, 400);
       const turnId = '00000000-0000-4000-8000-000000000035';
       const provisional = { id: `${turnId}-input`, turnId, role: 'user', text: '合成显示测试：只回复开始', kind: 'userMessage', timestamp: '2026-10-24T01:00:00Z' };
       const native = { ...provisional, id: `desktop-${turnId}-initial`, clientMessageId: 'fixture-initial', replacesMessageId: provisional.id };
       const history = { ...provisional, id: 'log-fixture-initial', kind: 'message', sourceItemId: 'fixture-history-initial', timestamp: '2026-10-24T01:00:00.070Z' };
       const started = { id: 'fixture-input-started', turnId, role: 'tool', kind: 'task_started', text: 'Codex turn started', timestamp: '2026-10-24T01:00:00.056Z' };
+      const indexed = url.searchParams.get('indexed') === '1';
+      const pending = indexed ? { ...provisional, id: 'turn-48-input', turnId: 'turn-48', clientMessageId: native.clientMessageId } : provisional;
+      const gap = indexed ? Array.from({ length: 12 }, (_, index) => ({ ...started, id: `indexed-gap-${index}`, text: `Synthetic step ${index}`, timestamp: provisional.timestamp })) : [];
       state.messages = phase === 'provisional' ? [] : [started, history];
-      state.desktopMessages = ['provisional', 'history'].includes(phase) ? [provisional] : phase === 'long' ? [started] : [native];
+      state.desktopMessages = ['provisional', 'history'].includes(phase) ? [pending, ...gap] : phase === 'long' ? [started] : [native, ...gap];
+      if (phase === 'cached') state.desktopMessages = [{ ...pending, nativeMessageId: native.id, replacesMessageId: provisional.id }, ...gap];
       state.inputReplacements = ['provisional', 'history'].includes(phase) ? [] : [{ turnId, replacesMessageId: provisional.id, nativeMessageId: native.id, clientMessageId: native.clientMessageId }];
       if (['final', 'repeat'].includes(phase)) state.messages.push({ id: 'fixture-input-final', turnId, role: 'assistant', kind: 'agentMessage', phase: 'final_answer', text: '开始', timestamp: '2026-10-24T01:00:02Z' });
       if (phase === 'repeat') {
