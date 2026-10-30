@@ -103,4 +103,4 @@ ignored证据目录：`output/audit/2026-10-30/deepseek-control-acceptance/`，�
 
 ### 详细报告定位与APK37交付
 
-17:22详细文件已收到：两组临时输入的id/turn指纹分别对应turn-48-input/turn-48及turn-45-input/turn-45，正式native别名与client已合并，轮次仍旧。使用旧生产代码重建的两组身份和时间与报告逐字段一致；手机合并器现按明确替换关系提升临时轮次与id，旧缓存/重连各一条，独立同文输入保留。手机125/125、消息/lint/typecheck/构建、浏览器8项、Android编译/lint0错误8警告、同签名成品核验通过。APK37已于17:39:59发布preview，previous36、正式18/hot保持，公网19/19通过。已发送覆盖升级后只查看原记录的验收卡，真机待答；详细根因、证据及回退见[专项记录](indexed-turn-input.md)。
+17:22详细文件已收到：两组临时输入的id/turn指纹分别对应turn-48-input/turn-48及turn-45-input/turn-45，正式native别名与client已合并，轮次仍旧。使用旧生产代码重建的两组身份和时间与报告逐字段一致；手机合并器现按明确替换关系提升临时轮次与id，旧缓存/重连各一条，独立同文输入保留。手机125/125、消息/lint/typecheck/构建、浏览器8项、Android编译/lint0错误8警告、同签名成品核验通过。APK37已于17:39:59发布preview，previous36、正式18/hot保持，公网19/19通过。用户随后在验收卡确认“已升级37，两条原输入均只显示一次”，对应“现在测试一下是否重复”和“已恢复，切收到回复”。本次仅确认这两条Codex旧输入，DeepSeek引导、排队及取消、权限、停止仍待验；详细根因、证据及回退见[专项记录](indexed-turn-input.md)。
