@@ -9,6 +9,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { createDeepSeekBridge } from '../../../plugins/mobile-deepseek/bridge.mjs';
 import { apply } from '../../../plugins/mobile-deepseek/index.mjs';
+import { messageOf } from '../../../plugins/mobile-deepseek/messages.mjs';
 import { DeepSeekClient } from '../dist/agents/deepSeekClient.js';
 import { DeepSeekAdapter } from '../dist/agents/deepSeekAdapter.js';
 import { deepSeekConfigSchema, deepSeekInfo } from '../dist/agents/deepSeekProtocol.js';
@@ -92,7 +93,46 @@ async function fixture(t, options = {}) {
 const operation = value => ({ clientMessageId: randomUUID(), controlToken: value.control.token });
 const current = f => f.values.at(-1);
 
-for (const harnessVersion of ['0.2.1-rc.2', '0.2.1-rc.3']) test(`dsh ${harnessVersion} reports the loaded runtime and passes the gateway handshake`, async t => {
+const modelUnavailable = { kind: 'error', error: { code: 'INVALID_REQUEST', message: '400: {"message":"model is unavailable on every account (per-model cooldown), try another model","type":"invalid_request_error"}' } };
+
+test('dsh failed turn is a visible bounded runtime notice without exposing upstream secrets', () => {
+  const event = { seq: 8, time: 1000, type: 'turn/end', data: { turn: 3, reason: modelUnavailable } };
+  const failure = messageOf(event);
+  assert.match(failure?.text ?? '', /模型服务暂不可用/);
+  assert.equal(failure.turnId, '3');
+  assert.equal(failure.phase, undefined, 'failure must not claim a successful final answer');
+  assert.equal(failure.kind, 'agent_message', 'existing APK36 message contract remains usable');
+  const privateFailure = messageOf({ ...event, data: { turn: 3, reason: { kind: 'error', error: { code: 'UNEXPECTED_PRIVATE_CODE', message: 'Bearer synthetic-secret https://private.invalid/api?token=synthetic-key' } } } });
+  assert.match(privateFailure.text, /执行失败/);
+  assert.doesNotMatch(privateFailure.text, /synthetic|private.invalid|UNEXPECTED_PRIVATE_CODE/);
+  assert.ok(Buffer.byteLength(privateFailure.text) < 1024);
+  for (const kind of ['completed', 'aborted', 'max-tokens', 'blocked']) assert.equal(messageOf({ ...event, data: { turn: 3, reason: { kind } } }), null);
+  assert.equal(messageOf({ ...event, seq: -1 }), null);
+  assert.equal(messageOf({ ...event, data: { turn: -1, reason: modelUnavailable } }), null);
+});
+
+test('dsh accepted input followed by model failure remains delivered and shows one notice live and after reopen', async t => {
+  const f = await fixture(t, { confirm: true }); let close = await f.watch();
+  const input = { ...operation(current(f)), text: 'synthetic failed model request', delivery: 'queue' };
+  await f.adapter.sendMessage(f.id, input);
+  f.agent.status = 'running'; f.event('turn/start', { turn: 8 });
+  const errorEvent = f.event('turn/end', { turn: 8, reason: modelUnavailable });
+  f.agent.status = 'idle'; f.emit('agent/status', { agent: f.agent });
+  await until(() => current(f).messages.some(message => message.text.includes('模型服务暂不可用')));
+  const live = current(f), notice = live.messages.find(message => message.text.includes('模型服务暂不可用'));
+  assert.equal(live.submission.delivery, 'confirmed');
+  assert.equal(live.messages.filter(message => message.text === input.text).length, 1);
+  assert.equal(live.messages.filter(message => message.id === notice.id).length, 1);
+  assert.equal(live.operationError, null); assert.equal(live.control.canSend, true);
+  f.emit('session/event', f.agent.session, errorEvent);
+  close(); close = await f.watch();
+  assert.deepEqual(current(f).messages.find(message => message.id === notice.id), notice);
+  assert.equal(current(f).messages.filter(message => message.id === notice.id).length, 1);
+  assert.equal(f.calls.length, 1, 'showing or reopening a failure never resubmits');
+  close();
+});
+
+for (const harnessVersion of ['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5']) test(`dsh ${harnessVersion} reports the loaded runtime and passes the gateway handshake`, async t => {
   const f = await fixture(t, { harnessVersion, initial: true });
   const info = await f.client.json('/info', deepSeekInfo);
   assert.equal(info.harnessVersion, harnessVersion);
@@ -105,7 +145,7 @@ for (const harnessVersion of ['0.2.1-rc.2', '0.2.1-rc.3']) test(`dsh ${harnessVe
 });
 
 test('dsh missing or unverified runtime cannot start a bridge or pass the gateway handshake', () => {
-  for (const version of [undefined, '', '0.2.1-rc.1', '0.2.1-rc.4', '0.2.1', '0.2.2']) {
+  for (const version of [undefined, '', '0.2.1-rc.1', '0.2.1-rc.4', '0.2.1-rc.6', '0.2.1', '0.2.2']) {
     assert.throws(() => createDeepSeekBridge({}, { port: 0, token, directory }, user, version), /DEEPSEEK_VERSION_UNSUPPORTED/u);
     assert.equal(deepSeekInfo.safeParse({ protocol: 1, harnessVersion: version }).success, false);
   }
@@ -556,8 +596,10 @@ for (const kind of ['aborted', 'error', 'max-tokens', 'blocked']) test(`dsh ${ki
   f.event('turn/start', { turn: 3 }); f.event('step/start', { turn: 3, step: 1 });
   f.event('assistant/message', { turn: 3, step: 1, message: { id: 'partial', role: 'assistant', content: [{ type: 'text', text: '尚未完成' }] }, ...(kind === 'aborted' ? { interrupted: true } : {}) });
   f.event('turn/end', { turn: 3, reason: { kind } }); f.emit('agent/status', { agent: f.agent });
-  await until(() => current(f).messages.length === 1);
+  await until(() => current(f).messages.length === (kind === 'error' ? 2 : 1));
   assert.equal(current(f).messages[0].phase, 'commentary');
+  assert.ok(current(f).messages.every(message => message.phase !== 'final_answer'));
+  if (kind === 'error') assert.match(current(f).messages[1].text, /运行提示.*执行失败/);
 });
 
 test('dsh successful empty or tool-only later step cannot relabel an earlier answer, including after reconnect', async t => {

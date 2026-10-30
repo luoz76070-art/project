@@ -24,7 +24,9 @@
 
 ## Trellis 与当前优化
 
-最新[DeepSeek rc.3兼容与手机复联](audits/2026-10-30/deepseek-rc3-compat.md)：插件0.2.2精确支持rc.2/rc.3，真实版本上报与网关白名单同步；两版官方各25项、DeepSeek60项及完整verify通过（手机121/后端380）。原插件已在原宿主加载，14会话首帧和重连通过；原网关已安全切换，本地/公网31项及Codex重连12项通过。用户已确认APK36列表、正文与重新打开正常，本轮完成；[真实控制验收候选计划](plans/2026-10-30-deepseek-control-acceptance.md)待用户决定是否启动。
+当前[DeepSeek手机真实控制验收](audits/2026-10-30/deepseek-control-acceptance.md)已由用户启动，指定默认工作区“末流211电子信息考研专业课名单”。首项输入已到达并启动原任务，但上游模型全账号冷却导致执行失败，手机漏显该错误。用户保留原模型等待服务恢复；重开后宿主实际升至rc.5，现已加载插件0.2.4并切换配套网关，明确显示原模型失败原因。rc.5官方25项、DeepSeek64/64、后端384/384、手机122/122及lint/typecheck/构建通过；桥接17项、本地/公网35项和Codex重连12项通过。APK36沿用，手机新增提示待确认；五项真实控制仍待模型恢复，未标完成。
+
+最新[DeepSeek rc.3兼容与手机复联](audits/2026-10-30/deepseek-rc3-compat.md)：插件0.2.2精确支持rc.2/rc.3，真实版本上报与网关白名单同步；两版官方各25项、DeepSeek60项及完整verify通过（手机121/后端380）。原插件已在原宿主加载，14会话首帧和重连通过；原网关已安全切换，本地/公网31项及Codex重连12项通过。用户已确认APK36列表、正文与重新打开正常，本轮完成；后续[真实控制验收计划](plans/2026-10-30-deepseek-control-acceptance.md)已启动，进展见上方记录。
 
 最新[阶段五状态模块与统一验证入口](audits/2026-10-30/maintenance-boundaries.md)：五个状态/轮询函数迁入runtimeSync，关键回归直接导入生产模块，真实App effect和浏览器接线保持覆盖。新增verify/verify:android/verify:all与明确JS/TS lint规则；Android兼容脚本正式入库。完整入口通过，手机121/121、后端377/377，最终入口自测6/6，Android编译/lint为0错误、8警告。390px合成临时→历史→正式→结束→重连/重开均单气泡且草稿保持。未发布、未Git写入，原手机双气泡与系统保存仍独立待验。[可靠性计划](plans/2026-10-29-reliability.md)本地五项已完成，[预览与真机验收](plans/2026-10-30-preview-validation.md)已由用户启动，APK36已发布，其余进展见本轮交付；命令见[验证入口](verification.md)。
 

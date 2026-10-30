@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { build } from 'esbuild';
 import { ordinaryPrompts, contextEnvelopes } from './fixtures/user-prompts.mjs';
+import { messageOf as deepSeekMessageOf } from '../plugins/mobile-deepseek/messages.mjs';
 
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-connection-test-'));
 async function moduleFrom(file) {
@@ -29,6 +30,21 @@ try { ({ messagesForRender } = await moduleFrom('features/chat/messages.ts')); }
 const tick = () => new Promise(resolve => setTimeout(resolve, 10));
 
 const processMessage = (id, phase, extra = {}) => ({ id, role: 'assistant', text: id, phase, kind: 'agent_message', timestamp: '2026-10-23T06:00:00Z', ...extra });
+test('DeepSeek terminal failure stays visible outside process groups without repeating the input', () => {
+  const input = processMessage('user-input', undefined, { role: 'user', turnId: '8' });
+  const progress = processMessage('work-in-progress', 'commentary', { turnId: '8' });
+  const failure = deepSeekMessageOf({ seq: 1728, time: 1793325708984, type: 'turn/end', data: { turn: 8, reason: { kind: 'error', error: { code: 'TRANSPORT', message: 'synthetic private error' } } } });
+  const messages = messagesForRender([input, progress, failure]);
+  const groups = groupMessageProcesses(messages);
+  assert.equal(messages.filter(message => message.role === 'user').length, 1);
+  assert.equal(groups[1].completed, false);
+  assert.equal(groups[2].kind, 'message');
+  assert.match(groups[2].message.text, /DeepSeek Harness 运行提示.*执行失败/);
+  assert.equal(groups[2].message.phase, undefined);
+  const afterRecovery = groupMessageProcesses([...messages, processMessage('recovered', 'final_answer', { turnId: '9' })]);
+  assert.equal(afterRecovery[1].completed, false);
+  assert.equal(afterRecovery[2].message.id, failure.id);
+});
 test('ordinary role prompts remain visible in local, native and history messages', () => {
   for (const [prefix, kind] of [['local-', 'user_message'], ['desktop-', 'userMessage'], ['log-', 'message']]) {
     const input = ordinaryPrompts.map((text, index) => ({ id: `${prefix}${index}`, role: 'user', text, kind, timestamp: `2026-10-29T00:00:0${index}Z` }));

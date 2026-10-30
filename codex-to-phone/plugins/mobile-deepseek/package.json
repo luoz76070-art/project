@@ -1,6 +1,6 @@
 {
   "name": "dsh-mobile-codex",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "type": "module",
   "main": "index.mjs",
   "files": [
@@ -15,10 +15,10 @@
   ],
   "engines": {
     "node": ">=22.19.0",
-    "dsh": "=0.2.1-rc.2 || =0.2.1-rc.3"
+    "dsh": "=0.2.1-rc.2 || =0.2.1-rc.3 || =0.2.1-rc.5"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-llm": "=0.2.1-rc.2 || =0.2.1-rc.3"
+    "@deepseek-ai/dsh-llm": "=0.2.1-rc.2 || =0.2.1-rc.3 || =0.2.1-rc.5"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-llm": "0.2.1-rc.3"

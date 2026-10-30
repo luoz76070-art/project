@@ -5,7 +5,7 @@ import { messageOf, finalMessageId } from './messages.mjs';
 import path from 'node:path';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
-export const supportedHarnessVersions = Object.freeze(['0.2.1-rc.2', '0.2.1-rc.3']);
+export const supportedHarnessVersions = Object.freeze(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5']);
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u;
 const fail = (code, status = 409) => Object.assign(new Error(`DEEPSEEK_${code}`), { status });
 const iso = value => new Date(Number.isSafeInteger(value) && value >= 0 && value <= 8.64e15 ? value : Date.now()).toISOString();
@@ -119,6 +119,8 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
         }
         const visible = messageOf(event); if (visible) add(entry, visible);
       }
+    } else if (event.type === 'turn/end' && entry.clients.size) {
+      const notice = messageOf(event); if (notice) add(entry, notice);
     }
   }
   async function baseline(entry, agent, signal) {

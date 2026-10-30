@@ -1,6 +1,6 @@
 # DeepSeek 官方 Harness 原进程契约
 
-固定主源/版本见当前task的research-deepseek.md。插件 `plugins/mobile-deepseek` 通过官方Cordis bundle加载，插件0.2.2的engines.dsh与peer dsh-llm精确允许0.2.1-rc.2或0.2.1-rc.3；安装/profile启动拒绝未知版本。不得用Claude wrapper/SDK resume/新CLI代替原Session。
+固定主源/版本见当前task的research-deepseek.md。插件 `plugins/mobile-deepseek` 通过官方Cordis bundle加载，插件0.2.4的engines.dsh与peer dsh-llm精确允许0.2.1-rc.2、0.2.1-rc.3或0.2.1-rc.5；安装/profile启动拒绝未知版本。不得用Claude wrapper/SDK resume/新CLI代替原Session。
 
 官方macOS桌面版的runtime/cli/bin/dsh允许plugin命令管理保留desktop配置，但普通启动与dump-config拒绝该profile。GUI配置须使用profile patch的mobile-codex.configFile，不能假设继承shell export。新插件可经官方HMR监视manifest/patch动态加载；须核对原进程、插件启用状态和真实鉴权bridge响应，安装成功不等于加载成功。需要重启时不强停用户运行中任务。离线链接无运行依赖的固定插件包，保留autoInstallPeers:false；peer由官方profile runtime resolution共享，不能为消除pnpm提示安装重复宿主依赖。
 
@@ -55,7 +55,16 @@ deepSeek.test覆盖逐帧stream.turn、临时到durable替换、成功提升及�
 
 Wrong：从chunk.frame.turn取任务号，或用最后一条助手文本/idle猜终稿。Correct：从已验证的当前stream.turn投影临时文本；只以原生成功边界提升同turn有效末步。文件HMR未生效时，核对原进程后通过官方组件开关仅重载手机桥接；不重启Harness/Agent或更改审批策略，最后核对profile配置字节及bridge能力。
 
-官方运行时检查另用`node scripts/check-deepseek-runtime.mjs <隔离运行时绝对目录>`。显式提供官方dsh与agent-loop-testkit同版0.2.1-rc.2或0.2.1-rc.3及Cordis4.0.5目录，脚本不安装依赖，所有profile/配置/会话位于自建临时目录并最终清理。先以真实bundle解析/版本门/CLI dump、Loader、AgentRegistry、SessionStore、SessionQuery和作用域事件总线验证9项加载/恢复/异步卸载；再用官方生产AgentLoop与唯一的本地确定性LLM adapter验证4项排队/追加/流去重/中断保留Inbox/旧turn拒绝，无外部provider、外部模型或用户持久化服务。官方const enum在JS无导出，状态值取固定版本类型声明；Session.append可见消息须带surfaceOp，不能因合成fixture省略该参数而误报插件失败。此检查通过不等于用户dsh原会话或Android验收通过。
+### 失败轮次提示（插件0.2.3）
+
+- 触发：原生`turn/end.data.reason.kind === "error"`，且turn和seq为有效非负safe integer；`messageOf(event)`输出稳定`turn-error-${seq}`消息。实时bridge及catalog历史分页共用该函数。
+- 消息沿用`role:assistant/kind:agent_message`，正文明确标识“DeepSeek Harness 运行提示”，有原turnId但不标`final_answer`或`commentary`。失败提示保持在过程块外，旧APK36/网关现有schema可以直接读取。
+- `reason.error.code`按已知错误码映射固定说明；INVALID_REQUEST仅在有界原文同时包含已知全账号不可用与冷却字样时提示模型服务暂不可用。未知码、缺详情使用通用提示。原始错误正文、URL、凭证与堆栈均不转发。
+- `confirmed`只确认输入送达，后续模型失败不改投递确认、不恢复已送达草稿、不自动重发。完成、取消、blocked/max-tokens不伪造该错误提示；已有部分输出仍为原阶段。
+- 必需验证：接受输入后失败、实时/重开单提示与稳定身份、冷历史零激活、后续成功不隐藏旧失败、固定摘要及敏感原文不透出；手机真实过滤/分组和组件显示分别核对。
+- Wrong：输入已确认且宿主转idle就宣称任务成功。Correct：保留原输入，由原生终态显示执行失败，恢复服务后由用户决定是否再发新请求。
+
+官方运行时检查另用`node scripts/check-deepseek-runtime.mjs <隔离运行时绝对目录>`。显式提供官方dsh与agent-loop-testkit同版0.2.1-rc.2、0.2.1-rc.3或0.2.1-rc.5及Cordis4.0.5目录，脚本不安装依赖，所有profile/配置/会话位于自建临时目录并最终清理。先以真实bundle解析/版本门/CLI dump、Loader、AgentRegistry、SessionStore、SessionQuery和作用域事件总线验证9项加载/恢复/异步卸载；再用官方生产AgentLoop与唯一的本地确定性LLM adapter验证4项排队/追加/流去重/中断保留Inbox/旧turn拒绝，无外部provider、外部模型或用户持久化服务。官方const enum在JS无导出，状态值取固定版本类型声明；Session.append可见消息须带surfaceOp，不能因合成fixture省略该参数而误报插件失败。此检查通过不等于用户dsh原会话或Android验收通过。
 
 ## 全部工作区与按需历史（插件0.2.0）
 
@@ -113,3 +122,7 @@ displayReason是必含en的locale→string对象，不是字符串；保留全�
 5. **用例**：Good=rc.3加载后info返回rc.3且同源正文正常；Base=rc.2保持能力；Bad=硬编码rc.2冒充实际新版或允许所有未来版本。
 6. **验证**：两版各自官方runtime13/interaction8/history4，隔离profile和本地adapter；旧manifest在rc.3官方evaluatePluginCompatibility明确拒绝；未知版本门和默认HTTP握手回归。官方探针保持显式入口，不并入verify。原profile部署、手机及实控单独验收。
 7. **错误/正确**：错误是只放宽engines；正确是核对加载器、Query/Controller、AgentLoop和审批接口，双版回归后同步peer、真实版本上报与网关白名单，再通过官方CLI/HMR加载到原profile。
+
+## 宿主升级后的兼容恢复
+
+重开应用可能已切换官方宿主版本。不得继续安装只验过旧版本的候选，或硬编码旧版本绕过检查。先读取官方插件页拒绝原因及已安装运行时；只读提取到隔离目录，比较关键接口并跑对应版本的运行时/审批/历史检查，再同时更新manifest、bridge和网关握手的精确白名单。rc.5关键入口与rc.3字节一致，25项官方隔离检查通过；未知rc.4/rc.6仍拒绝。手机协议不变时沿用现有APK；部署分别确认插件实际/info及网关下发，不把磁盘安装成功当加载成功。

@@ -98,6 +98,26 @@ test('opening and paging cold history reads original messages without activation
   close();
 });
 
+test('cold history shows terminal model failure once and keeps it separate from a later successful result', async t => {
+  const f = await fixture(t, { messages: 0 }), id = 'cold/original';
+  f.append(id, 'turn/start', { turn: 8 });
+  f.append(id, 'user/message', { id: 'failed-input', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'synthetic failed input' }] });
+  f.append(id, 'turn/end', { turn: 8, reason: { kind: 'error', error: { code: 'TRANSPORT', message: 'private transport endpoint' } } });
+  f.append(id, 'turn/start', { turn: 9 });
+  f.append(id, 'assistant/message', { turn: 9, step: 1, message: { id: 'recovered-output', role: 'assistant', content: [{ type: 'text', text: '恢复完成' }] } });
+  f.append(id, 'turn/end', { turn: 9, reason: { kind: 'completed' } });
+  const row = (await f.adapter.listSessions()).sessions[0]; let close = await f.watch(row.id);
+  const messages = f.values.at(-1).messages;
+  assert.equal(messages.length, 3, 'original input, runtime failure notice and later result');
+  assert.match(messages[1].text, /连接失败/); assert.doesNotMatch(messages[1].text, /private/);
+  assert.equal(messages[1].turnId, '8'); assert.equal(messages[1].phase, undefined);
+  assert.equal(messages[2].phase, 'final_answer');
+  close(); close = await f.watch(row.id);
+  assert.deepEqual(f.values.at(-1).messages, messages);
+  assert.equal(f.agents.size, 0); assert.deepEqual(f.calls, []);
+  close();
+});
+
 test('explicit cold send uses official original-session prompt once and confirms by original rpcId', async t => {
   const f = await fixture(t), row = (await f.adapter.listSessions()).sessions[0]; await f.watch(row.id);
   const input = { clientMessageId: randomUUID(), controlToken: f.values.at(-1).control.token, text: '继续原线程', delivery: 'queue' };

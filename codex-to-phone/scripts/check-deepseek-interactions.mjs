@@ -10,7 +10,7 @@ import { createDeepSeekBridge } from '../plugins/mobile-deepseek/bridge.mjs';
 const runtime = process.argv[2];
 if (!runtime || !path.isAbsolute(runtime) || process.argv.length !== 3) throw new Error('Usage: node scripts/check-deepseek-interactions.mjs <absolute-isolated-runtime-directory>');
 const version = JSON.parse(await fs.readFile(path.join(runtime, 'node_modules/@deepseek-ai/dsh-llm/package.json'), 'utf8')).version;
-assert.ok(['0.2.1-rc.2', '0.2.1-rc.3'].includes(version), 'Unsupported isolated runtime');
+assert.ok(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5'].includes(version), 'Unsupported isolated runtime');
 const load = name => import(pathToFileURL(path.join(runtime, 'node_modules/@deepseek-ai', name, 'lib/index.js')).href);
 for (const name of ['dsh-api-gateway', 'dsh-user-approval', 'dsh-user-questions', 'dsh-session']) {
   assert.equal(JSON.parse(await fs.readFile(path.join(runtime, 'node_modules/@deepseek-ai', name, 'package.json'), 'utf8')).version, version);
