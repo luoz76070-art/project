@@ -15,7 +15,7 @@
 当前主入口：
 
 - Android APK：`dist-apk/mobile-codex-1.2.2-update-restore-debug.apk`（versionCode 18，已恢复原手机更新通道并发布，待真机验收）
-- Android独立预览：`dist-apk/mobile-codex-1.3.15-reliability-preview-debug.apk`（versionCode36，集成可靠性阶段一至五与Android系统诊断保存；preview36/previous35已发布，完整公网19项核验通过。统一verify:all通过，手机121/后端377，Android lint0错误8警告。网关切换、DeepSeek rc.3兼容与原手机验收进行中，见[本轮交付](audits/2026-10-30/preview-validation.md)）。
+- Android独立预览：`dist-apk/mobile-codex-1.3.15-reliability-preview-debug.apk`（versionCode36，preview36/previous35已发布，配套网关已切换，源码与preview标签已同步GitHub。手机121/后端377、Android lint0错误8警告、公网19项、网关58项与Codex重连12项通过；用户确认升级连接、短摘要、系统保存取消重试正常，原重复输入重开后仅一条。DeepSeek rc.3兼容按用户选择放至下一轮；详见[交付记录](audits/2026-10-30/preview-validation.md)）。
 - Mac 原生网关：`~/Library/Application Support/Mobile Codex Gateway/releases/<固定版本>/mobile-codex/lib/gateway.mjs`，当前单Node进程、native IPC；[插件管理入口](../plugins/mobile-codex/README.md)。
 - 旧 Mac Relay/Input App：生成App已压缩归档并移除，源码与构建入口保留；[清理及恢复记录](audits/2026-10-21/legacy-mac-app-cleanup.md)。
 - Relay/Broker：`apps/relay`

@@ -1,33 +1,46 @@
-# 集成预览交付与手机验收
+# APK36集成预览交付与真机验收
 
-日期：2026-10-30。状态：APK36预览已发布，网关切换、源码同步与真机验收进行中。用户启动范围见[计划](../../plans/2026-10-30-preview-validation.md)。
+日期：2026-10-30。状态：本轮预览交付完成；保持preview，未晋升稳定版。用户启动的[计划](../../plans/2026-10-30-preview-validation.md)已执行；DeepSeek rc.3兼容经用户明确选择留到[下一轮计划](../../plans/2026-10-30-deepseek-rc3-compat.md)。
 
-线上只读确认preview35（1.3.14-input-replacement-preview）、previous34、正式18及hot1.2.2-web.1；固定网关仍为2026-10-24版本，bundle SHA256 a79f7a9b1eb36f5b21d32a9067b7156b6362ddfa85727e5099db9b11e336f8f6，本地与Tunnel在线。旧版/api/diagnostics返回404，符合尚未部署新诊断的事实。
+## 交付与真机结果
 
-候选：APK36 1.3.15-reliability-preview，集成可靠性阶段一至五。详细证据保存于ignored的output/audit/2026-10-30/preview-validation/；私有备份路径保存在backup-path.txt。ADB当前无设备，手机升级/系统保存/原双气泡仍待验。
+- APK36 `1.3.15-reliability-preview`于08:39（上海时间）原子发布到既有preview，previous保留APK35。正式18及hot清单逐字节保持。
+- 用户确认已覆盖升级36，原连接保留，短摘要复制正常，系统保存先取消、再重试保存正常。
+- 用户查看原来重复的输入，返回列表并重开会话后确认“现在只显示一次”。这证明该手机原记录的本次验收通过；未将其扩大成所有运行中时序或新发送/引导/排队均已真机验证。
+- 配套固定网关已切换，新实例本地/公网连接、实际构建诊断、鉴权、近期/全部列表、语音配置与Codex原生IPC通过；公网Codex首帧及重连通过。未代发模型任务、回答卡片、批准权限或调用外部模型。
 
-## 候选验证
+## 产物身份与自动验证
 
-APK36构建通过；SHA256 `ecc3db0a880e152a6ff48a0147c471556b3830a6fe24e9d7a66966b09f3c6c7e`，4,077,185字节，与线上APK35同签名。4个Web产物逐字节一致，preview/hot地址正确、无fixture；DEX确认六个原生插件存在及MainActivity注册诊断/剪贴板/更新入口，安装与录音权限保持。完整verify:all最终通过：手机121、后端377、入口6、APK5、热更新1、发布4，以及lint/类型/消息/CLI/构建。Android lint 0 Error/Fatal、8 Warning。
+APK SHA256：`ecc3db0a880e152a6ff48a0147c471556b3830a6fe24e9d7a66966b09f3c6c7e`，4,077,185字节，与线上APK35同签名。4个Web产物逐字节匹配APK，preview/hot更新地址正确、无fixture；DEX核实六个原生插件存在及MainActivity诊断/剪贴板/更新注册，安装和录音权限保持。
 
-初次与二次全量后端并发4均失败于原生文件通知更新用例；单独用例及并发2全量通过，最终入口按既有版本同步流程调整为并发2，文件通知断言按可观察状态最多等3秒（小于60秒扫描兜底）。保留失败日志，未跳过断言。成品检查脚本第一次因DEX包含非UTF8字符串解码失败，改为容错解码后完成原生注册核验，APK无需修改。
+Web构建：`web-3d9952a9-c6c8-4109-b38a-181968c55ca2`。网关构建：`gateway-e5e3ce97-882c-45b4-8e14-fcd998a1c28f`，bundle SHA256 `7a2bbd240cf276001c2a62e22b44e14f355a853a4e3dde6ef373d1203226d56f`。独立网关ZIP保存在ignored output/delivery/2026-10-30/reliability-preview/。
 
-## 当前外部条件
+完整`corepack pnpm verify:all`最终通过：手机121/121、后端377/377、入口6/6、APK5/5、热更新1/1、发布4/4，另含lint、类型、消息、CLI发现及两端/插件构建。Android Java编译与lint为0 Error/Fatal、8 Warning。最终APK clean assembleDebug通过。沿用阶段五真实App的390px合成时序/草稿/终稿折叠与重开检查，其结果与本轮手机反馈分别记录。
 
-- 用户已打开DeepSeek Harness；实际宿主为0.2.1-rc.3，已安装dsh-mobile-codex0.2.1要求engines.dsh精确rc.2，宿主插件页显示不兼容并停用，9876未监听。问题在本轮切换前已存在，未绕过版本门。
-- 原生只读快照显示另一个Codex会话运行中，网关候选已备份并复制固定目录但尚未切换；候选bundle SHA256 `7a2bbd240cf276001c2a62e22b44e14f355a853a4e3dde6ef373d1203226d56f`。
-- fetch发现origin/main领先1条：`9c80e49 Create SECURITY.md`，仅新增父仓库根SECURITY.md；与项目修改无路径冲突，按version-sync约定不能自动merge/rebase。
+公网发布19/19项通过：完整下载与本地包逐字节一致，大小/SHA256/CORS/清单版本/previous正确。新网关58/58项只读检查、Codex首帧与重连12/12项通过，尾窗120条与36条输入替换关系有效。
 
-## APK36已发布
+## 网关切换与保留
 
-2026-10-30 08:39（上海时间）已原子切换preview36/previous35，公网19项核验通过：完整下载与本地APK逐字节一致、大小/SHA256/CORS正确，正式18与hot清单字节保持。手机可通过设置→版本与更新→检查更新→下载并安装覆盖升级。新原生系统保存能力需要安装APK36。
+基线是preview35/previous34，固定网关为10月24日bundle `a79f7a9b1eb36f5b21d32a9067b7156b6362ddfa85727e5099db9b11e336f8f6`。起初另一个Codex业务任务运行，候选先准备；待只读快照确认其他业务任务结束、待发队列及审批为空后，于08:46执行精确instance管理stop，原PID约2.17秒自然退出，端口释放后启动新固定包并连接Tunnel。
 
-构建身份：Web `web-3d9952a9-c6c8-4109-b38a-181968c55ca2`；候选网关 `gateway-e5e3ce97-882c-45b4-8e14-fcd998a1c28f`。目前在线仍为旧网关，因此手机摘要暂会标记网关诊断不支持，不能误报为新网关已部署。
+原配置、设备配对、语音凭证、DeepSeek profile/插件等保留文件逐项SHA核对一致。DeepSeek原进程没有被停止或重启；桥接在切换前就未监听。未注册新的LaunchAgent。
 
-## 回退边界
+## 失败与修正记录
 
-网关恢复使用原固定包和原配置，仅管理stop确认当前实例自然退出后启动备份中的oldEntry；不覆盖设备/语音配置，不关闭Harness。发布回退需核对线上latest仍为本轮36后，将保存的preview-before.json原子恢复latest；previous-before.json可恢复原previous。只更改清单不删除包。已安装36的手机不能通过普通覆盖安装降到35；应发布同签名、更高versionCode的修复包，不卸载或清空数据。
+- 初次与二次全量后端并发4均失败于原生文件通知更新用例；单独及并发2全量通过。最终入口恢复既有版本同步流程的并发2，该断言按可观察状态最多等待3秒，仍小于生产60秒扫描兜底；未跳过断言。失败日志保留，完整入口最终重跑通过。
+- 成品检查脚本第一次因DEX中非UTF8字符串解码失败；对工具输出采用容错解码后完成原生注册核验，无需修改APK。
+- 用户打开DeepSeek后，原桌面插件页明确报：宿主0.2.1-rc.3不兼容dsh-mobile-codex0.2.1的engines.dsh =0.2.1-rc.2；9876无监听、列表502。这是更新前已存在的宿主兼容问题。用户选择本轮先交付APK36，下一轮修复；没有放宽版本门或改原profile。
 
-复用项目发布脚本、APK35成品核验脚本及私有备份方式，本轮运维脚本/失败和成功证据保存在ignored输出目录；没有把凭证或APK放入Git。
+## Git与证据
 
-用户随后明确批准“允许快进后同步APK36”，已使用merge --ff-only接收9c80e49；原项目工作区修改保留，不产生合并提交。
+fetch发现origin/main领先一条`9c80e49 Create SECURITY.md`，仅新增父仓库SECURITY.md。按项目约定暂停自动合并；用户明确批准后使用`merge --ff-only`接收，保留所有项目修改。
+
+集成源码提交：`a29e32867dad48c19544ff79daff61febc4337e4`；annotated标签：`codex-to-phone-v1.3.15-reliability-preview`。已原子推送main与标签，并核实远端main及标签展开值都等于该提交。后续交付文档另作docs提交，标签保持指向该源码构建基线，不移动已发布标签。仅提交codex-to-phone/下101项源码与文档，暂存前后校验范围、无二进制/构建包/凭证；父仓库其他工程修改保持。
+
+详细证据：ignored `output/audit/2026-10-30/preview-validation/`中的verify-all-final.log、apk-verification.json、publication-check.json、switch-report.json、health-report.json、stream-check.json、github-sync.json和phone-acceptance.json。初始失败日志独立保留。私有源码/原网关/配置备份位置在backup-path.txt与state-path.txt中，不入Git。
+
+## 回退与本轮边界
+
+网关回退仅对核验后的当前instance执行管理stop，确认自然退出与端口释放后以原配置启动备份oldEntry；不覆盖设备/语音配置、不关闭Harness。通道回退须先核对latest仍为本轮36，再原子恢复preview-before.json和必要的previous-before.json，不删除包。已安装36的手机不能普通覆盖降到35，应发布同签名且更高versionCode修复包，不卸载或清数据。
+
+复用既有发布脚本、成品核验与私有备份流程；新增下一轮兼容计划，不另造发布系统。真实新发送/引导/排队/审批、长时间后台/切网及合盖恢复不在本轮作为已通过结论。
