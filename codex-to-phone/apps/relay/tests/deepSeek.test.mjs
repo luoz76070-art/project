@@ -80,7 +80,7 @@ async function fixture(t, options = {}) {
     }; pending.releaseContext = () => {};
     pendingRemoteEvents.set(pending.id, pending); return pending;
   }
-  const bridge = createDeepSeekBridge(ctx, { port: 0, token, directory }, user), address = await bridge.ready;
+  const bridge = createDeepSeekBridge(ctx, { port: 0, token, directory }, user, options.harnessVersion ?? '0.2.1-rc.2'), address = await bridge.ready;
   const config = { url: `http://127.0.0.1:${address.port}/`, token, directory };
   const client = new DeepSeekClient(config, { timeoutMs: 2000 }), adapter = new DeepSeekAdapter(client);
   t.after(async () => { await adapter.stop(); await bridge.stop(); });
@@ -91,6 +91,25 @@ async function fixture(t, options = {}) {
 }
 const operation = value => ({ clientMessageId: randomUUID(), controlToken: value.control.token });
 const current = f => f.values.at(-1);
+
+for (const harnessVersion of ['0.2.1-rc.2', '0.2.1-rc.3']) test(`dsh ${harnessVersion} reports the loaded runtime and passes the gateway handshake`, async t => {
+  const f = await fixture(t, { harnessVersion, initial: true });
+  const info = await f.client.json('/info', deepSeekInfo);
+  assert.equal(info.harnessVersion, harnessVersion);
+  assert.equal(info.messagePhases, true);
+  assert.equal((await f.adapter.probe()).capabilities.approve, true);
+  const close = await f.watch();
+  assert.deepEqual(current(f).messages.map(message => message.text), ['用户记录', '公开输出']);
+  assert.equal(f.calls.length, 0);
+  close();
+});
+
+test('dsh missing or unverified runtime cannot start a bridge or pass the gateway handshake', () => {
+  for (const version of [undefined, '', '0.2.1-rc.1', '0.2.1-rc.4', '0.2.1', '0.2.2']) {
+    assert.throws(() => createDeepSeekBridge({}, { port: 0, token, directory }, user, version), /DEEPSEEK_VERSION_UNSUPPORTED/u);
+    assert.equal(deepSeekInfo.safeParse({ protocol: 1, harnessVersion: version }).success, false);
+  }
+});
 
 test('dsh constructor/probe/list are passive; arbitrary host id has lifecycle UUID alias and exact scope', async t => {
   const f = await fixture(t);
@@ -240,7 +259,7 @@ test('dsh config rejects remote URL, shared secret and unknown settings', () => 
   const base = { version: 1, port: 8787, token: 'm'.repeat(40), managerKey: 'k'.repeat(40), workspace: '/synthetic', codexHome: '/synthetic/codex', desktopTransport: 'native' };
   assert.equal(parseManagedConfig({ ...base, deepseek: { url: 'http://127.0.0.1:9876/', token, directory } }).deepseek.token, token);
   assert.throws(() => parseManagedConfig({ ...base, deepseek: { url: 'http://127.0.0.1:9876/', token: base.token, directory } }), { code: 'GATEWAY_CONFIG_INVALID' });
-  assert.throws(() => createDeepSeekBridge({}, { port: 0, token, directory, unwanted: true }, user));
+  assert.throws(() => createDeepSeekBridge({}, { port: 0, token, directory, unwanted: true }, user, '0.2.1-rc.2'));
 });
 
 test('dsh loader rejects private configuration errors before loading the host factory', async t => {

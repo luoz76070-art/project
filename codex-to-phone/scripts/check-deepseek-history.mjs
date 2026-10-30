@@ -9,9 +9,11 @@ import { createDeepSeekBridge } from '../plugins/mobile-deepseek/bridge.mjs';
 const runtime = process.argv[2];
 if (!runtime || !path.isAbsolute(runtime) || process.argv.length !== 3) throw new Error('Usage: node scripts/check-deepseek-history.mjs <absolute-isolated-runtime-directory>');
 const packages = path.join(runtime, 'node_modules/@deepseek-ai');
+const version = JSON.parse(await fs.readFile(path.join(runtime, 'node_modules/@deepseek-ai/dsh-llm/package.json'), 'utf8')).version;
+assert.ok(['0.2.1-rc.2', '0.2.1-rc.3'].includes(version), 'Unsupported isolated runtime');
 const load = name => import(pathToFileURL(path.join(packages, name, 'lib/index.js')).href);
 const official = path.join(packages, 'dsh-api-session-controller/lib/index.js');
-assert.equal(JSON.parse(await fs.readFile(path.join(packages, 'dsh-api-session-controller/package.json'), 'utf8')).version, '0.2.1-rc.2');
+assert.equal(JSON.parse(await fs.readFile(path.join(packages, 'dsh-api-session-controller/package.json'), 'utf8')).version, version);
 const copy = path.join(path.dirname(official), `mobile-history-check-${randomUUID()}.mjs`);
 await fs.writeFile(copy, (await fs.readFile(official, 'utf8')) + '\nexport { ApiSessionList, SessionHistoryController, SessionCommandController };\n');
 let ctx, bridge, reader, stream;
@@ -57,7 +59,7 @@ try {
   ctx.reflect.provide('sessionController', service);
   const token = randomBytes(32).toString('base64url');
   const facade = { agents: ctx.agents, sessionQuery: ctx.sessionQuery, on: (...args) => ctx.on(...args), get: name => ctx.get(name) };
-  bridge = createDeepSeekBridge(facade, { port: 0, token, directory, scope: 'all' }, createUserMessage);
+  bridge = createDeepSeekBridge(facade, { port: 0, token, directory, scope: 'all' }, createUserMessage, version);
   const base = `http://127.0.0.1:${(await bridge.ready).port}`;
   const json = async (route, body) => {
     const result = await fetch(base + route, { method: body ? 'POST' : 'GET', headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(4000) });
@@ -94,7 +96,7 @@ try {
   resolver.resolveAgent = async id => ({ agent: ctx.agents.get(id) });
   await service.prompt({ sessionId: 'official-cold-0', requestId, mode: 'queue', content: [{ type: 'text', text: '隔离原线程继续' }] }, new AbortController().signal);
   assert.equal(admissions, 1); checks.officialRequestDeduplication = true;
-  console.log(JSON.stringify({ checks, externalModelRequests: 0, userProfilesChanged: false, originalUserSessionsRead: false }, null, 2));
+  console.log(JSON.stringify({ version, checks, externalModelRequests: 0, userProfilesChanged: false, originalUserSessionsRead: false }, null, 2));
 } finally {
   stream?.abort(); await reader?.cancel().catch(() => {}); await bridge?.stop(); await ctx?.fiber.dispose(); await fs.rm(copy, { force: true });
 }

@@ -14,10 +14,13 @@ export async function apply(ctx, config) {
     if (stat.size > 65536 || (process.platform !== 'win32' && (stat.mode & 0o077) !== 0)) throw new Error('DEEPSEEK_CONFIG_PERMISSIONS');
     settings = JSON.parse(await fs.readFile(file, 'utf8'));
   } catch (error) { throw new Error(error.message === 'DEEPSEEK_CONFIG_PERMISSIONS' ? error.message : 'DEEPSEEK_CONFIG_INVALID'); }
-  const { createUserMessage } = await import('@deepseek-ai/dsh-llm');
+  const [{ createUserMessage }, { default: llmManifest }] = await Promise.all([
+    import('@deepseek-ai/dsh-llm'),
+    import('@deepseek-ai/dsh-llm/package.json', { with: { type: 'json' } }),
+  ]);
   // The official loader enforces engines.dsh before this plugin enters the original process.
   if (!Number.isInteger(settings?.port) || settings.port < 1) throw new Error('DEEPSEEK_CONFIG_INVALID');
-  const bridge = createDeepSeekBridge(ctx, settings, createUserMessage);
+  const bridge = createDeepSeekBridge(ctx, settings, createUserMessage, llmManifest.version);
   ctx.effect(() => async () => { await bridge.stop(); });
   try { await bridge.ready; } catch { await bridge.stop(); throw new Error('DEEPSEEK_BIND_FAILED'); }
 }

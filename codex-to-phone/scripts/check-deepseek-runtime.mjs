@@ -13,9 +13,10 @@ const runtime = process.argv[2];
 if (!runtime || !path.isAbsolute(runtime) || process.argv.length !== 3) {
   throw new Error('Usage: node scripts/check-deepseek-runtime.mjs <absolute-isolated-runtime-directory>');
 }
-const version = '0.2.1-rc.2';
 const modules = path.join(runtime, 'node_modules');
 async function manifest(name) { return JSON.parse(await fs.readFile(path.join(modules, name, 'package.json'), 'utf8')); }
+const version = (await manifest('@deepseek-ai/dsh')).version;
+assert.ok(['0.2.1-rc.2', '0.2.1-rc.3'].includes(version), 'Unsupported isolated runtime');
 for (const name of ['dsh', 'dsh-app-boot', 'dsh-agent', 'dsh-agent-loop', 'dsh-session', 'dsh-session-query', 'dsh-llm', 'dsh-agent-loop-testkit']) {
   assert.equal((await manifest(`@deepseek-ai/${name}`)).version, version, `Unexpected official ${name} version`);
 }
@@ -56,7 +57,9 @@ try {
   await fs.cp(fileURLToPath(new URL('../plugins/mobile-deepseek', import.meta.url)), plugin, { recursive: true });
   const pluginManifest = JSON.parse(await fs.readFile(path.join(plugin, 'package.json'), 'utf8'));
   assert.equal(boot.evaluatePluginCompatibility(pluginManifest, undefined, version), undefined);
-  assert.ok(boot.evaluatePluginCompatibility(pluginManifest, undefined, '0.2.1-rc.3'));
+  for (const unsupported of ['0.2.1-rc.1', '0.2.1-rc.4', '0.2.1', '0.2.2']) {
+    assert.ok(boot.evaluatePluginCompatibility(pluginManifest, undefined, unsupported));
+  }
   checks.officialVersionGate = true;
   // Dependencies resolve only from the supplied isolated official installation.
   await fs.symlink(modules, path.join(sandbox, 'node_modules'));
@@ -109,7 +112,7 @@ try {
     assert.equal(response.status, 200);
     return response.json();
   }
-  assert.deepEqual(await json('/info'), { protocol: 1, harnessVersion: version, interactions: false });
+  assert.deepEqual(await json('/info'), { protocol: 1, harnessVersion: version, messagePhases: true, interactions: false });
   assert.deepEqual((await json('/sessions')).sessions, []);
   checks.officialLoaderActive = true;
 
@@ -171,7 +174,7 @@ try {
   await replacement.await();
   await entry.fiber.await();
   assert.equal(entry.fiber.state, activeState);
-  assert.deepEqual(await json('/info'), { protocol: 1, harnessVersion: version, interactions: false });
+  assert.deepEqual(await json('/info'), { protocol: 1, harnessVersion: version, messagePhases: true, interactions: false });
   await loader.dispose();
   await assert.rejects(fetch(`${base}/info`, { signal: AbortSignal.timeout(2000) }));
   checks.reloadAndAsyncUnload = true;

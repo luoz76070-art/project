@@ -9,9 +9,11 @@ import { createDeepSeekBridge } from '../plugins/mobile-deepseek/bridge.mjs';
 // Explicit, isolated official-service verification. No user profile, provider or model.
 const runtime = process.argv[2];
 if (!runtime || !path.isAbsolute(runtime) || process.argv.length !== 3) throw new Error('Usage: node scripts/check-deepseek-interactions.mjs <absolute-isolated-runtime-directory>');
+const version = JSON.parse(await fs.readFile(path.join(runtime, 'node_modules/@deepseek-ai/dsh-llm/package.json'), 'utf8')).version;
+assert.ok(['0.2.1-rc.2', '0.2.1-rc.3'].includes(version), 'Unsupported isolated runtime');
 const load = name => import(pathToFileURL(path.join(runtime, 'node_modules/@deepseek-ai', name, 'lib/index.js')).href);
 for (const name of ['dsh-api-gateway', 'dsh-user-approval', 'dsh-user-questions', 'dsh-session']) {
-  assert.equal(JSON.parse(await fs.readFile(path.join(runtime, 'node_modules/@deepseek-ai', name, 'package.json'), 'utf8')).version, '0.2.1-rc.2');
+  assert.equal(JSON.parse(await fs.readFile(path.join(runtime, 'node_modules/@deepseek-ai', name, 'package.json'), 'utf8')).version, version);
 }
 const [{ Context, symbols }, { TypertGatewayService }, { ApprovalService }, { UserQuestionService }, { SessionStore }, { AgentRegistry }, { default: SessionQuery }, { default: Projections }, { createUserMessage, createToolResultMessage }] = await Promise.all([
   load('cordis'), load('dsh-api-gateway'), load('dsh-user-approval'), load('dsh-user-questions'), load('dsh-session'), load('dsh-agent'), load('dsh-session-query'), load('dsh-session-projection'), load('dsh-llm'),
@@ -38,7 +40,7 @@ try {
   }));
   const facade = { agents: ctx.agents, sessionQuery: ctx.sessionQuery, on: (...args) => ctx.on(...args), get: name => ctx.get(name) };
   const token = randomBytes(32).toString('base64url');
-  bridge = createDeepSeekBridge(facade, { port: 0, token, directory }, createUserMessage);
+  bridge = createDeepSeekBridge(facade, { port: 0, token, directory }, createUserMessage, version);
   const base = `http://127.0.0.1:${(await bridge.ready).port}`;
   const json = async (route, body) => {
     const res = await fetch(base + route, { method: body ? 'POST' : 'GET', headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(4000) });
@@ -112,7 +114,7 @@ try {
   try { assert.deepEqual(events.events.filter(event => event.type === 'approval/decided').map(event => event.data.outcome), ['allowed-once', 'rejected', 'cancelled']); }
   finally { events[Symbol.dispose](); }
   assert.equal(host.pendingRemoteEvents.size, 0); checks.noPendingLeak = true;
-  console.log(JSON.stringify({ checks, externalModelRequests: 0, userProfilesChanged: false, actualUserApprovalPerformed: false }, null, 2));
+  console.log(JSON.stringify({ version, checks, externalModelRequests: 0, userProfilesChanged: false, actualUserApprovalPerformed: false }, null, 2));
 } finally {
   controller?.abort(); await reader?.cancel().catch(() => {}); await bridge?.stop(); await ctx.fiber.dispose(); await fs.rm(directory, { recursive: true, force: true });
 }

@@ -1,6 +1,6 @@
 # Mobile Codex for DeepSeek Harness
 
-DeepSeek **官方** `dsh` 原进程 Cordis bundle，固定支持 `0.2.1-rc.2`。当前桌面构建332895e0与早期研究687f282分别复核，不因版本号相同就假定内部接口一致。官方安装器/profile使用engines版本门，不通过SDK或新CLI替代原线程。
+DeepSeek **官方** `dsh` 原进程 Cordis bundle，插件0.2.2精确支持 `0.2.1-rc.2` 与 `0.2.1-rc.3`。rc.3已用本机桌面实际打包的运行时完成隔离复核，rc.2另用官方发布运行时复核；不因版本号相同就假定内部接口一致。官方安装器/profile使用engines版本门，不通过SDK或新CLI替代原线程。
 
 插件0.2.0可选择`scope: "all"`：原profile跨工作区普通线程和未加载历史，保留真实缓存标题、分页列表和按需历史。默认列表为近30天（官方最后用户对话/创建时间），仍运行或当前查看的线程保留；“查看更早会话”展开全部。摘要缓存15秒、原消息/创建/状态事件失效，手机列表前台每30秒及回前台刷新；无手机请求不扫描正文。不会删除更早的桌面记录。
 
@@ -79,8 +79,14 @@ GUI进程通常不会继承终端export。先备份`~/.dsh/profiles/desktop/cord
 
 `corepack pnpm test:deepseek` 使用合成Cordis上下文和随机端口，不运行真实模型。`node scripts/check-deepseek-history.mjs /absolute/isolated-runtime`另以当前安装包官方list/page/prompt算法、真实SessionStore/Query与合成持久化/resolver检查冷历史；不读取用户profile，不调用模型，也不能代替用户真实继续验收。
 
-另可显式运行 `node scripts/check-deepseek-runtime.mjs /absolute/isolated-runtime`；目录需已包含官方`@deepseek-ai/dsh@0.2.1-rc.2`、`@deepseek-ai/dsh-agent-loop-testkit@0.2.1-rc.2`及其依赖，Cordis固定4.0.5。检查器不安装依赖，使用临时profile验证bundle解析/版本门/CLI配置、Loader与内存Session/事件总线、依赖卸载/恢复和端口释放；再以官方生产AgentLoop及本地确定性adapter验证排队、追加、流与权威文本去重、中断保留Inbox和旧任务令牌拒绝。2026-10-21此13项及隔离回归22/22通过，3次本地响应、外部模型请求0次。最后清理自己的Context/profile；不读取用户配置或原会话。
+另可显式运行 `node scripts/check-deepseek-runtime.mjs /absolute/isolated-runtime`；目录需已包含同版的官方`@deepseek-ai/dsh`、`@deepseek-ai/dsh-agent-loop-testkit`及其依赖（精确rc.2或rc.3），Cordis固定4.0.5。检查器不安装依赖，使用临时profile验证bundle解析/版本门/CLI配置、Loader与内存Session/事件总线、依赖卸载/恢复和端口释放；再以官方生产AgentLoop及本地确定性adapter验证排队、追加、流与权威文本去重、中断保留Inbox和旧任务令牌拒绝。2026-10-21此13项及隔离回归22/22通过，3次本地响应、外部模型请求0次。最后清理自己的Context/profile；不读取用户配置或原会话。
 
 插件0.1.1修复官方流的revision逐帧递增校验，拒绝旧revision、错attempt和错index，避免正文被全部过滤。APK21和网关无需更换；宿主需要显式加载此修复插件。安装、加载和原会话控制须分别验收，隔离检查不代表Android真实控制已经通过。
 
 卸载使用 `dsh plugin --profile EXISTING_PROFILE remove dsh-mobile-codex`，并删除网关deepseek字段；只停止该插件的监听与订阅，不终止原Agent或清空其inbox。进程重启后不承诺跨重启exactly-once；不对结果未知的输入重新发送。
+
+## rc.3升级边界
+
+插件从宿主共享的`@deepseek-ai/dsh-llm/package.json`读取实际版本，经精确白名单校验后用于`/info.harnessVersion`。缺失/未知版本拒绝启动，不能硬编码rc.2让新版宿主伪装通过。对应网关也必须接受rc.3；只改插件或只改网关均不完整。APK36沿用，无需为本次桥接兼容重新安装。
+
+本次两版官方隔离检查各通过13项运行时、8项问答审批和4项历史；只登记本地确定性adapter，不读取用户profile或调用外部模型。部署和原手机结果另记[rc.3验收记录](../../docs/audits/2026-10-30/deepseek-rc3-compat.md)。

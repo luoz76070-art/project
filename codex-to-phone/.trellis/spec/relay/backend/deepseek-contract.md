@@ -1,6 +1,6 @@
 # DeepSeek 官方 Harness 原进程契约
 
-固定主源/版本见当前task的research-deepseek.md。插件 `plugins/mobile-deepseek` 通过官方Cordis bundle加载，engines.dsh精确0.2.1-rc.2，peer dsh-llm同版本；安装/profile启动拒绝未知版本。不得用Claude wrapper/SDK resume/新CLI代替原Session。
+固定主源/版本见当前task的research-deepseek.md。插件 `plugins/mobile-deepseek` 通过官方Cordis bundle加载，插件0.2.2的engines.dsh与peer dsh-llm精确允许0.2.1-rc.2或0.2.1-rc.3；安装/profile启动拒绝未知版本。不得用Claude wrapper/SDK resume/新CLI代替原Session。
 
 官方macOS桌面版的runtime/cli/bin/dsh允许plugin命令管理保留desktop配置，但普通启动与dump-config拒绝该profile。GUI配置须使用profile patch的mobile-codex.configFile，不能假设继承shell export。新插件可经官方HMR监视manifest/patch动态加载；须核对原进程、插件启用状态和真实鉴权bridge响应，安装成功不等于加载成功。需要重启时不强停用户运行中任务。离线链接无运行依赖的固定插件包，保留autoInstallPeers:false；peer由官方profile runtime resolution共享，不能为消除pnpm提示安装重复宿主依赖。
 
@@ -103,3 +103,13 @@ displayReason是必含en的locale→string对象，不是字符串；保留全�
 每个原请求以随机public ID及完整签名绑定；内容改变、桌面先答、取消、旧turn/step禁止手机迟答。结果未知在bridge原对象及Relay有界256条记录跨重连锁定，不保存答案、不自动重放；普通消息未知不妨碍回答独立问题。沿用设备鉴权、stream-token及SubmissionRegistry。
 
 显式`node scripts/check-deepseek-interactions.mjs <隔离运行时绝对目录>`以官方Gateway原型算法、真实Cordis traceable服务和Approval/UserQuestions/Session/Projection/AgentRegistry检查8项，含多语言理由、审计、取消、桌面先答及continued，无模型、用户profile或真实权限决定。不纳入默认离线测试；公网只读显示、手机实际决定与长期稳定性分别验收。
+
+## 宿主升级兼容（插件0.2.2）
+
+1. **范围**：宿主升级导致bundle被版本门拒绝；插件和网关协议校验必须同时核对。
+2. **签名**：`createDeepSeekBridge(ctx, config, createUserMessage, harnessVersion)`第四参必填，由入口动态导入宿主共享LLM包的package.json获得，不接纳私有JSON或手机指定版本。
+3. **契约**：engines/peer、bridge白名单与Relay deepSeekInfo均仅允许rc.2/rc.3。`/info.harnessVersion`为实际共享包版本。跨运行时保持各自校验，不把宿主依赖引入Relay；测试握手覆盖两端。
+4. **异常**：缺失/rc.1/rc.4/正式0.2.1/0.2.2等未验证版本，bridge在监听前抛`DEEPSEEK_VERSION_UNSUPPORTED`，网关schema拒绝；官方版本门拒绝加载。待答内部接口指纹仍独立核验，不能跟随版本门一起取消。
+5. **用例**：Good=rc.3加载后info返回rc.3且同源正文正常；Base=rc.2保持能力；Bad=硬编码rc.2冒充实际新版或允许所有未来版本。
+6. **验证**：两版各自官方runtime13/interaction8/history4，隔离profile和本地adapter；旧manifest在rc.3官方evaluatePluginCompatibility明确拒绝；未知版本门和默认HTTP握手回归。官方探针保持显式入口，不并入verify。原profile部署、手机及实控单独验收。
+7. **错误/正确**：错误是只放宽engines；正确是核对加载器、Query/Controller、AgentLoop和审批接口，双版回归后同步peer、真实版本上报与网关白名单，再通过官方CLI/HMR加载到原profile。

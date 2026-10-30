@@ -64,7 +64,7 @@ async function fixture(t, options = {}) {
       follow() { assert.fail('desktop follow must not activate cold sessions during viewing'); },
     },
   };
-  const bridge = createDeepSeekBridge(ctx, { port: 0, token, directory, scope: 'all' }, value => ({ ...value, id: randomUUID(), role: 'user' }));
+  const bridge = createDeepSeekBridge(ctx, { port: 0, token, directory, scope: 'all' }, value => ({ ...value, id: randomUUID(), role: 'user' }), '0.2.1-rc.2');
   const address = await bridge.ready, config = { url: `http://127.0.0.1:${address.port}/`, token, directory, scope: 'all' };
   const client = new DeepSeekClient(config, { timeoutMs: 2000 }), adapter = new DeepSeekAdapter(client);
   t.after(async () => { await adapter.stop(); await bridge.stop(); });

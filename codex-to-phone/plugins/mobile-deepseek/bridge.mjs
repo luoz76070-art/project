@@ -5,13 +5,14 @@ import { messageOf, finalMessageId } from './messages.mjs';
 import path from 'node:path';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
-export const harnessVersion = '0.2.1-rc.2';
+export const supportedHarnessVersions = Object.freeze(['0.2.1-rc.2', '0.2.1-rc.3']);
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u;
 const fail = (code, status = 409) => Object.assign(new Error(`DEEPSEEK_${code}`), { status });
 const iso = value => new Date(Number.isSafeInteger(value) && value >= 0 && value <= 8.64e15 ? value : Date.now()).toISOString();
 
 /** Original dsh process; only an explicit cold-session message may restore its Agent. */
-export function createDeepSeekBridge(ctx, config, createUserMessage) {
+export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVersion) {
+  if (!supportedHarnessVersions.includes(harnessVersion)) throw fail('VERSION_UNSUPPORTED', 400);
   if (!config || Object.keys(config).some(key => !['port', 'token', 'directory', 'scope'].includes(key))
     || !Number.isInteger(config.port) || config.port < 0 || config.port > 65535
     || typeof config.token !== 'string' || !/^[A-Za-z0-9_-]{32,512}$/u.test(config.token)
