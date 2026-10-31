@@ -228,6 +228,18 @@ test('Agent snapshot must match both selected agent and selected session', () =>
   assert.throws(() => verifyAgentSnapshot(agentSnapshot(), 'opencode', 'ses_other'));
   assert.throws(() => verifyAgentSnapshot({ ...agentSnapshot(), control: null }, 'opencode', 'ses_synthetic'));
 });
+test('Agent native queue acceptance clears only the matching draft without claiming execution', () => {
+  const pending = { clientMessageId: 'submission', text: 'queued draft' };
+  const receipt = { clientMessageId: 'submission', action: 'message', delivery: 'submitted' };
+  const queue = { available: true, items: [{ clientMessageId: 'submission', text: 'queued draft', status: 'waiting' }] };
+  assert.deepEqual(reconcileAgentDraft('queued draft', pending, receipt, queue), { draft: '', pending: null });
+  assert.deepEqual(reconcileAgentDraft('next draft', pending, receipt, queue), { draft: 'next draft', pending: null });
+  assert.deepEqual(reconcileAgentDraft('queued draft', pending, receipt, { ...queue, available: false }), { draft: 'queued draft', pending });
+  assert.deepEqual(reconcileAgentDraft('queued draft', pending, receipt, { ...queue, items: [{ ...queue.items[0], clientMessageId: 'other' }] }), { draft: 'queued draft', pending });
+  assert.deepEqual(reconcileAgentDraft('queued draft', pending, receipt, { ...queue, items: [{ ...queue.items[0], status: 'uncertain' }] }), { draft: 'queued draft', pending });
+  assert.equal(offlineAgent({ ...agentSnapshot(), queue }).queue.available, false);
+  assert.deepEqual(offlineAgent({ ...agentSnapshot(), queue }).queue.items, queue.items);
+});
 test('Agent draft cache is scoped and saves only bounded draft strings, never control/card objects', () => {
   const values = new Map(), storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
   saveAgentDrafts('A', { 'opencode:ses_synthetic': 'keep draft', control: { token: 'secret-token' }, questions: [{ answers: 'private-answer' }], 'opencode:ses_too-long': 'x'.repeat(20_001) }, storage);

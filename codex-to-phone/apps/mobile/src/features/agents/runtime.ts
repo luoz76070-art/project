@@ -7,7 +7,9 @@ export function agentHistoryWindow(current: CodexMessage[], older: CodexMessage[
 }
 
 export function offlineAgent(snapshot: AgentSessionSnapshot | null): AgentSessionSnapshot | null {
-  return snapshot ? { ...snapshot, connected: false, control: null, questions: [], permissions: [] } : null;
+  return snapshot ? { ...snapshot, connected: false, control: null, questions: [], permissions: [],
+    ...(snapshot.queue ? { queue: { ...snapshot.queue, available: false } } : {}),
+  } : null;
 }
 
 /** A late HTTP result cannot restore a card or overwrite authoritative SSE confirmation. */
@@ -21,8 +23,10 @@ export function agentDelivery(snapshot: AgentSessionSnapshot | null, clientMessa
 }
 
 export type PendingAgentDraft = { clientMessageId: string; text: string };
-export function reconcileAgentDraft(draft: string, pending: PendingAgentDraft | null, receipt: AgentSessionSnapshot["submission"]) {
-  if (!pending || receipt?.clientMessageId !== pending.clientMessageId || receipt.action !== "message" || receipt.delivery !== "confirmed") return { draft, pending };
+export function reconcileAgentDraft(draft: string, pending: PendingAgentDraft | null, receipt: AgentSessionSnapshot["submission"], queue?: AgentSessionSnapshot["queue"]) {
+  if (!pending || receipt?.clientMessageId !== pending.clientMessageId || receipt.action !== "message") return { draft, pending };
+  const queued = queue?.available && queue.items.some(item => item.clientMessageId === pending.clientMessageId && ["waiting", "paused"].includes(item.status));
+  if (receipt.delivery !== "confirmed" && !queued) return { draft, pending };
   return { draft: draft === pending.text ? "" : draft, pending: null };
 }
 

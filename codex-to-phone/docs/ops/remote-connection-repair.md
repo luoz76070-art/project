@@ -12,6 +12,8 @@
 
 ## 固定网关更新与退出核验
 
+2026-10-31已再次核验现有预览发布入口：SSH别名`hermes-8153`，显式`IdentityFile ~/.ssh/hermes_scout_bridge_ed25519`，目录`/var/www/mobile-codex/releases/android/preview`。别名本身未配置该IdentityFile，默认SSH会认证失败；脚本设置`MOBILE_CODEX_RELEASE_SSH_KEY`指向既有私钥文件即可，不输出私钥。发布前仍须比较远端四份清单与公网SHA，不能仅依赖历史值。
+
 APK预览发布前，从上一轮发布记录核对实际SSH别名与IdentityFile，并先只读比较远端和公网清单SHA；不能只用公开域名和默认密钥猜测登录。2026-10-23语音发布复用原子脚本，preview26/previous25，详见[发布记录](../audits/2026-10-23/voice-release.md)。
 
 更新前读取实际运行命令、instanceId及唯一监听PID，核对候选bundle SHA/逐文件内容，私有备份配置、设备状态及原固定入口。凭证在脚本进程内读取，只放鉴权header，不打印或放命令参数。通过原instance绑定的管理stop后，分别等待原PID自然退出和监听释放，再启动核验的新固定入口；202或端口空闲不代表退出完成。启动后核对新PID/instance、Tunnel connected、本地/公网200、无凭证401、Android预检、IPC和配置/设备状态。

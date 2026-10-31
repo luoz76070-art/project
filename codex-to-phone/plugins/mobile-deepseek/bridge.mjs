@@ -2,6 +2,7 @@ import http from 'node:http';
 import { createDeepSeekInteractions } from './interactions.mjs';
 import { createDeepSeekCatalog } from './catalog.mjs';
 import { messageOf, finalMessageId } from './messages.mjs';
+import { mobileQueueSnapshot, queuedMobileInput } from './queue.mjs';
 import path from 'node:path';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
@@ -73,6 +74,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
       messages: entry.messages, ...(agent ? interactions.snapshot(entry) : { questions: [], permissions: [] }), historyCursor: entry.historyCursor ?? null, partialText: true,
       control: { token: entry.token, canSend: ready, canSteer: ready && Boolean(agent) && entry.turn !== null, canInterrupt: ready && agent?.status === 'running' && entry.turn !== null },
       submission: entry.submission ? { clientMessageId: entry.submission.clientMessageId, action: entry.submission.action, delivery: entry.submission.delivery } : null,
+      queue: mobileQueueSnapshot(entry, agent),
       operationError: entry.operationError,
     };
   }
@@ -178,7 +180,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
       publish(entry, true);
       const timer = setInterval(() => write(res, ': heartbeat\n\n'), 10000); timer.unref();
       if (!entry.poll) {
-      const pollState = () => { const current = currentAgent(entry); return JSON.stringify({ interactions: current ? interactions.snapshot(entry) : null, status: current?.status ?? 'idle', token: entry.token }); };
+      const pollState = () => { const current = currentAgent(entry); return JSON.stringify({ interactions: current ? interactions.snapshot(entry) : null, status: current?.status ?? 'idle', token: entry.token, queue: mobileQueueSnapshot(entry, current) }); };
       let previous = pollState();
       entry.poll = setInterval(() => {
         try {
@@ -197,6 +199,21 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
       if (!agent) throw fail('REQUEST_EXPIRED', 410);
       const result = interactions.respond(entry, action, requestId, input); publish(entry, true); return result;
     }
+    if (action === 'queue-cancel') {
+      const pending = queuedMobileInput(entry, agent);
+      if (!pending || pending.clientMessageId !== requestId || pending.status === 'uncertain') throw fail('QUEUE_ITEM_EXPIRED');
+      entry.cancellingQueueId = pending.messageId;
+      entry.token = randomUUID();
+      try {
+        if (!agent.inbox.remove(pending.messageId)) throw fail('QUEUE_ITEM_EXPIRED');
+        entry.submission = null; entry.operationError = null; entry.uncertainQueueId = null;
+      } catch (error) {
+        if (error.message === 'DEEPSEEK_QUEUE_ITEM_EXPIRED') throw error;
+        entry.uncertainQueueId = pending.messageId;
+        publish(entry, true); return { ok: true, delivery: 'uncertain' };
+      } finally { entry.cancellingQueueId = null; }
+      publish(entry, true); return { ok: true, delivery: 'confirmed' };
+    }
     if (entry.submission?.clientMessageId === input.clientMessageId) throw fail('ALREADY_SUBMITTED');
     if (entry.submission && entry.submission.delivery !== 'confirmed') throw fail('RESULT_PENDING');
     if (action === 'message' && (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 20000 || !['queue', 'steer'].includes(input.delivery))) throw fail('INPUT_INVALID', 400);
@@ -212,7 +229,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
     if (!agent) throw fail('SESSION_GONE', 410);
     const message = action === 'message' ? createUserMessage({ content: [{ type: 'text', text: input.text }], source: { kind: 'user' } }) : null;
     // No await between guard, reservation and original live-handle operation.
-    entry.submission = { clientMessageId: input.clientMessageId, action, delivery: 'submitted', messageId: message?.id, turn: entry.turn };
+    entry.submission = { clientMessageId: input.clientMessageId, action, delivery: 'submitted', deliveryMode: input.delivery, messageId: message?.id, turn: entry.turn };
     entry.operationError = null; entry.token = randomUUID();
     try {
       if (action === 'interrupt') agent.cancel({ kind: 'user' }, { keepInbox: true });
@@ -249,8 +266,10 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
   on('agent/inbox/discarded', ({ agent, message }) => {
     const entry = entryFor(agent);
     if (entry?.submission?.messageId !== message.id) return;
+    if (entry.cancellingQueueId === message.id) return;
     entry.operationError = { clientMessageId: entry.submission.clientMessageId, code: 'rejected' }; entry.submission = null; entry.token = randomUUID(); publish(entry);
   });
+  on('agent/inbox/spliced', ({ agent }) => { const entry = entryFor(agent); if (entry?.clients.size) publish(entry); });
   on('agent/assistant-stream', ({ agent, frame }) => {
     const entry = entryFor(agent); if (!entry?.clients.size || entry.loading) return;
     // Official revisions increase for every frame, across attempts of this Agent.
@@ -304,7 +323,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
         if (catalog) return json(await catalog.list(url.searchParams.get('search'), url.searchParams.get('cursor'), controller.signal, url.searchParams.get('range') ?? 'recent'));
         const sessions = ctx.agents.list().filter(allowed).slice(0, 128).map(session); return json({ sessions, cursor: null });
       }
-      const match = /^\/sessions\/([0-9a-f-]{36})\/(events|history|messages|interrupt|questions\/([0-9a-f-]{36})\/respond|permissions\/([0-9a-f-]{36})\/respond)$/u.exec(url.pathname);
+      const match = /^\/sessions\/([0-9a-f-]{36})\/(events|history|messages|interrupt|questions\/([0-9a-f-]{36})\/respond|permissions\/([0-9a-f-]{36})\/respond|queue\/([0-9a-f-]{36})\/cancel)$/u.exec(url.pathname);
       if (!match || !uuid.test(match[1])) throw fail('NOT_FOUND', 404);
       if (catalog && req.method === 'GET' && match[2] === 'history') {
         const cursor = url.searchParams.get('cursor'); if (!cursor || !uuid.test(cursor)) throw fail('CURSOR_INVALID', 400);
@@ -316,7 +335,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
       for await (const chunk of req) { size += chunk.length; if (size > 128 * 1024) throw fail('INPUT_INVALID', 413); chunks.push(chunk); }
       let input; try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw fail('INPUT_INVALID', 400); }
       if (!input || typeof input !== 'object' || Array.isArray(input)) throw fail('INPUT_INVALID', 400);
-      return json(await operate(match[1], match[3] ? 'question' : match[4] ? 'permission' : match[2] === 'messages' ? 'message' : 'interrupt', input, match[3] ?? match[4], controller.signal));
+      return json(await operate(match[1], match[3] ? 'question' : match[4] ? 'permission' : match[5] ? 'queue-cancel' : match[2] === 'messages' ? 'message' : 'interrupt', input, match[3] ?? match[4] ?? match[5], controller.signal));
     } catch (error) { json({ error: error.message?.startsWith('DEEPSEEK_') ? error.message : 'DEEPSEEK_BRIDGE_FAILED' }, error.status ?? 500); if (res.headersSent && !res.writableEnded) res.destroy(); }
   });
   server.requestTimeout = 10000; server.headersTimeout = 10000; server.maxConnections = 32;

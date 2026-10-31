@@ -1606,3 +1606,36 @@ APK29用户确认语音主流程通过；网关增加有限低权重短语，真
 ### Next Steps
 
 - 真实控制候选计划位于docs/plans/2026-10-30-deepseek-control-acceptance.md，尚未启动；由用户决定并指定测试会话。
+
+
+## Session 48: APK38 DeepSeek待发取消与控制区交付
+<!-- trellis-session: v=2 fp=de7f1ca974022345 -->
+
+**Date**: 2026-10-31
+**Task**: APK38 DeepSeek待发取消与控制区交付
+**Package**: relay
+**Branch**: `main`
+
+### Summary
+
+插件0.2.5、网关和APK38 preview已交付；手机真实控制待验，原计划继续。
+
+### Main Changes
+
+- 原生手机待发投影及定向取消，鉴权/幂等/未知锁和草稿保护；紧凑控制区保留禁用引导入口。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 完整verify手机126/后端389，最终DeepSeek70；官方三版各14项，浏览器/Android及公网19项通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 等待APK38升级反馈，依次引导、排队取消、权限与停止；不发送真实模型任务代验。

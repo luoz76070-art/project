@@ -33,11 +33,21 @@ async function fixture(t, options = {}) {
     cancel(cause, config) { calls.push({ action: 'interrupt', cause, config }); if (!options.pendingCancel) event('turn/end', { turn: 1 }); },
   };
   agent.inbox = { nextTurn: [], nextStep: [] };
+  if (options.nativeQueue) agent.inbox.remove = messageId => {
+    calls.push({ action: 'queue-cancel', messageId });
+    if (options.throwQueueCancel) throw new Error('synthetic cancellation outcome unknown');
+    const index = agent.inbox.nextTurn.findIndex(message => message.id === messageId);
+    if (index < 0) return false;
+    agent.inbox.nextTurn.splice(index, 1);
+    emit('agent/inbox/spliced', { agent });
+    return true;
+  };
   agents.set(agent.id, agent);
   function event(type, data) { const value = { seq: log.length, time: Date.now(), type, data }; log.push(value); emit('session/event', agent.session, value); return value; }
   function submit(mode, message) {
     calls.push({ action: 'message', mode, message });
     if (options.throwSend) throw new Error('synthetic private failure');
+    if (options.nativeQueue && mode === 'queue' && agent.status === 'running') { agent.inbox.nextTurn.push(message); emit('agent/inbox/spliced', { agent }); return; }
     if (options.confirm) event('user/message', message);
   }
   if (options.running) { agent.status = 'running'; event('turn/start', { turn: 1 }); }
@@ -92,6 +102,112 @@ async function fixture(t, options = {}) {
 }
 const operation = value => ({ clientMessageId: randomUUID(), controlToken: value.control.token });
 const current = f => f.values.at(-1);
+
+test('dsh queued mobile input is visible and cancel removes only its original native inbox item', async t => {
+  const f = await fixture(t, { running: true, nativeQueue: true }); await f.watch();
+  const desktop = user({ source: { kind: 'user' }, content: [{ type: 'text', text: 'desktop-owned queue' }] });
+  f.agent.inbox.nextTurn.push(desktop);
+  const input = { ...operation(current(f)), text: 'mobile-owned queued input', delivery: 'queue' };
+  const result = await f.adapter.sendMessage(f.id, input);
+  assert.equal(result.delivery, 'submitted', 'queue acceptance is not execution confirmation');
+  await until(() => current(f).submission?.clientMessageId === input.clientMessageId);
+  assert.equal(current(f).queue?.available, true);
+  assert.deepEqual(current(f).queue.items.map(item => [item.clientMessageId, item.text, item.status]), [[input.clientMessageId, input.text, 'waiting']]);
+  assert.equal(current(f).messages.some(message => message.text === input.text), false);
+  assert.equal((await f.adapter.cancelQueuedMessage(f.id, input.clientMessageId, operation(current(f)))).delivery, 'confirmed');
+  await until(() => current(f).queue?.items.length === 0 && !current(f).submission);
+  assert.deepEqual(f.agent.inbox.nextTurn.map(message => message.id), [desktop.id]);
+  assert.equal(f.agent.status, 'running');
+  assert.equal(f.calls.filter(call => call.action === 'interrupt').length, 0);
+  assert.equal(current(f).control.canSend, true);
+});
+
+test('dsh queue cancellation rejects foreign and already consumed items without stopping work', async t => {
+  const f = await fixture(t, { running: true, nativeQueue: true }); await f.watch();
+  const input = { ...operation(current(f)), text: 'queued target', delivery: 'queue' };
+  await f.adapter.sendMessage(f.id, input);
+  await until(() => current(f).submission?.clientMessageId === input.clientMessageId);
+  assert.equal(current(f).queue?.items.length, 1);
+  await assert.rejects(f.adapter.cancelQueuedMessage(f.id, randomUUID(), operation(current(f))), { code: 'DEEPSEEK_QUEUE_ITEM_EXPIRED' });
+  const taken = f.agent.inbox.nextTurn.shift();
+  await assert.rejects(f.adapter.cancelQueuedMessage(f.id, input.clientMessageId, operation(current(f))), { statusCode: 409 });
+  assert.equal(f.calls.filter(call => call.action === 'interrupt').length, 0);
+  assert.equal(taken.id, f.calls[0].message.id);
+});
+
+test('dsh queued input remains cancellable after reconnect and rejects a previous control token', async t => {
+  const f = await fixture(t, { running: true, nativeQueue: true }); const close = await f.watch();
+  const input = { ...operation(current(f)), text: 'pending across reconnect', delivery: 'queue' };
+  await f.adapter.sendMessage(f.id, input);
+  await until(() => current(f).queue?.items.length === 1);
+  const old = operation(current(f)); close(); await sleep(40);
+  await f.watch();
+  assert.equal(current(f).queue.items[0].clientMessageId, input.clientMessageId);
+  await assert.rejects(f.adapter.cancelQueuedMessage(f.id, input.clientMessageId, old), { code: 'DEEPSEEK_STALE_CONTROL' });
+  await f.adapter.cancelQueuedMessage(f.id, input.clientMessageId, operation(current(f)));
+  await until(() => current(f).queue.items.length === 0);
+  assert.equal(f.calls.filter(call => call.action === 'queue-cancel').length, 1);
+});
+
+test('dsh uncertain queue cancellation stays locked across subsequent snapshots and reconnect', async t => {
+  const f = await fixture(t, { running: true, nativeQueue: true, throwQueueCancel: true }); const close = await f.watch();
+  const input = { ...operation(current(f)), text: 'keep unknown queue outcome', delivery: 'queue' };
+  await f.adapter.sendMessage(f.id, input);
+  await until(() => current(f).queue?.items.length === 1);
+  assert.equal((await f.adapter.cancelQueuedMessage(f.id, input.clientMessageId, operation(current(f)))).delivery, 'uncertain');
+  await until(() => current(f).queue.items[0].status === 'uncertain');
+  close(); await sleep(40); await f.watch();
+  assert.equal(current(f).queue.items[0].status, 'uncertain');
+  await assert.rejects(f.adapter.cancelQueuedMessage(f.id, input.clientMessageId, operation(current(f))), { code: 'DEEPSEEK_QUEUE_ITEM_EXPIRED' });
+  assert.equal(f.calls.filter(call => call.action === 'queue-cancel').length, 1);
+  assert.equal(f.agent.inbox.nextTurn.length, 1);
+  // The original bridge also remembers uncertainty if the Relay is restarted.
+  await assert.rejects(f.client.json(`/sessions/${f.id}/queue/${input.clientMessageId}/cancel`, z.unknown(), operation(current(f))), { statusCode: 409 });
+  assert.equal(f.calls.filter(call => call.action === 'queue-cancel').length, 1);
+});
+
+test('dsh late uncertain cancellation cannot restore an item removed by authoritative sync', async t => {
+  const f = await fixture(t, { running: true, nativeQueue: true }); await f.watch();
+  const input = { ...operation(current(f)), text: 'first queued target', delivery: 'queue' };
+  await f.adapter.sendMessage(f.id, input); await until(() => current(f).queue?.items.length === 1);
+  const json = f.client.json.bind(f.client); let release;
+  f.client.json = async (...args) => {
+    const result = await json(...args);
+    if (args[0].endsWith('/cancel')) { await new Promise(resolve => { release = resolve; }); return { ok: true, delivery: 'uncertain' }; }
+    return result;
+  };
+  const cancelling = f.adapter.cancelQueuedMessage(f.id, input.clientMessageId, operation(current(f)));
+  await until(() => release && current(f).queue?.items.length === 0);
+  const next = { ...operation(current(f)), text: 'new queued target', delivery: 'queue' };
+  await f.adapter.sendMessage(f.id, next); await until(() => current(f).queue?.items[0]?.clientMessageId === next.clientMessageId);
+  release(); await cancelling; f.client.json = json;
+  assert.equal(current(f).queue.items[0].status, 'waiting');
+  await f.adapter.cancelQueuedMessage(f.id, next.clientMessageId, operation(current(f)));
+  await until(() => current(f).queue.items.length === 0);
+  assert.equal(f.calls.filter(call => call.action === 'queue-cancel').length, 2);
+});
+
+test('dsh public queue cancellation requires a paired device and deduplicates identical operations', async t => {
+  const f = await fixture(t, { running: true, nativeQueue: true }); await f.watch();
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-dsh-queue-test-'));
+  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty-codex'), defaultCwd: root }, services: { agentGateway: new AgentGateway([f.adapter]), desktopControl: { stop: async () => {} } } });
+  t.after(async () => { await app.close(); await fs.rm(root, { recursive: true, force: true }); });
+  const pairing = (await app.inject({ method: 'POST', url: '/api/pairing', headers: { authorization: 'Bearer synthetic-admin' } })).json();
+  const device = (await app.inject({ method: 'POST', url: '/api/pairing/consume', payload: { code: pairing.code } })).json();
+  const headers = { authorization: `Bearer ${device.token}` }, route = `/api/agents/deepseek/sessions/${f.id}`;
+  const input = { ...operation(current(f)), text: 'HTTP queued target', delivery: 'queue' };
+  assert.equal((await app.inject({ method: 'POST', url: `${route}/messages`, headers, payload: input })).statusCode, 200);
+  await until(() => current(f).queue?.items.length === 1);
+  const cancel = { method: 'POST', url: `${route}/queue/${input.clientMessageId}/cancel`, headers, payload: operation(current(f)) };
+  assert.equal((await app.inject({ ...cancel, headers: {} })).statusCode, 401);
+  const replies = await Promise.all([app.inject(cancel), app.inject(cancel)]);
+  for (const reply of replies) { assert.equal(reply.statusCode, 200); assert.equal(reply.json().delivery, 'confirmed'); }
+  assert.equal(f.calls.filter(call => call.action === 'queue-cancel').length, 1);
+  assert.equal((await app.inject({ ...cancel, url: `${route}/queue/${randomUUID()}/cancel` })).statusCode, 409);
+  assert.equal((await app.inject({ ...cancel, payload: { ...cancel.payload, extra: true } })).statusCode, 400);
+  await until(() => current(f).queue?.items.length === 0);
+  assert.equal(f.agent.status, 'running');
+});
 
 const modelUnavailable = { kind: 'error', error: { code: 'INVALID_REQUEST', message: '400: {"message":"model is unavailable on every account (per-model cooldown), try another model","type":"invalid_request_error"}' } };
 
@@ -154,7 +270,7 @@ test('dsh missing or unverified runtime cannot start a bridge or pass the gatewa
 test('dsh constructor/probe/list are passive; arbitrary host id has lifecycle UUID alias and exact scope', async t => {
   const f = await fixture(t);
   assert.match(f.id, /^[0-9a-f-]{36}$/u); assert.notEqual(f.id, f.agent.id);
-  assert.deepEqual(f.stats(), { reads: 0, observations: 0, disposed: 0, disconnected: 0, listeners: 5 });
+  assert.deepEqual(f.stats(), { reads: 0, observations: 0, disposed: 0, disconnected: 0, listeners: 6 });
   f.agents.set('other', { id: 'other', session: { header: { cwd: '/synthetic/other' } } });
   f.agents.set('child', { id: 'child', session: { header: { cwd: directory, origin: 'subagent' } } });
   assert.equal((await f.adapter.listSessions()).sessions.length, 1);

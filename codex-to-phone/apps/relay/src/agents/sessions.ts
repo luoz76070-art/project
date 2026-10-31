@@ -16,6 +16,7 @@ export type AgentSessionSnapshot = {
   messages: AgentMessage[]; questions: AgentQuestion[]; permissions: AgentPermission[];
   historyCursor: string | null;
   partialText: boolean;
+  queue?: { available: boolean; items: { clientMessageId: string; text: string; status: "waiting" | "paused" | "cancelling" | "uncertain" }[] };
   operationError?: { clientMessageId: string; code: "rejected" | "expired" } | null;
   control: { token: string; canSend: boolean; canSteer: boolean; canInterrupt: boolean } | null;
   submission: { clientMessageId: string; action: "message" | "interrupt"; delivery: "submitted" | "confirmed" | "uncertain" } | null;
@@ -31,6 +32,7 @@ export interface SessionAdapter {
   watchSession(sessionId: string, onSnapshot: (snapshot: AgentSessionSnapshot) => void, onDisconnect: () => void): Promise<() => void>;
   sendMessage(sessionId: string, input: AgentOperation & { text: string; delivery: "steer" | "queue" }): Promise<AgentDelivery>;
   interruptSession(sessionId: string, input: AgentOperation): Promise<AgentDelivery>;
+  cancelQueuedMessage?(sessionId: string, id: string, input: AgentOperation): Promise<AgentDelivery>;
   respondQuestion(sessionId: string, id: string, input: AgentOperation & { answers: string[][] }): Promise<AgentDelivery>;
   respondPermission(sessionId: string, id: string, input: AgentOperation & { decision: "once" | "always" | "reject" }): Promise<AgentDelivery>;
 }

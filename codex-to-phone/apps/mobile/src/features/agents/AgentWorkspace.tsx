@@ -9,6 +9,7 @@ import { subscribeEvents, type SubscriptionState } from "../connection/subscript
 import { createSnapshotReducer } from "../connection/snapshotPatch";
 import { writeClipboard } from "../../shared/clipboard";
 import { AgentQuestions } from "./AgentQuestions";
+import { AgentQueue } from "./AgentQueue";
 import { agentDelivery, agentHistoryWindow, loadAgentDrafts, offlineAgent, reconcileAgentDraft, saveAgentDrafts, verifyAgentSnapshot, type PendingAgentDraft } from "./runtime";
 import type { AgentDelivery, AgentPermission, AgentSession, AgentSessionSnapshot } from "./types";
 import { groupByProject, sessionInRange, sessionListRefreshMs } from "../threads/model";
@@ -128,7 +129,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft }: {
       url: streamToken => buildUrl(endpoint, `${base}/events?${new URLSearchParams({ streamToken, v: "1" })}`),
       events: { "agent-session": input => {
         const next = verifyAgentSnapshot(reduce(input), agent.id, session.id);
-        acceptMessageReceipt(next.submission);
+        acceptMessageReceipt(next.submission, next.connected ? next.queue : undefined);
         setSnapshot(next); setError("");
         if (!historyInitialized.current) { historyInitialized.current = true; setHistoryCursor(next.historyCursor); }
         if (!historyRef.current.length && nearBottom.current && !next.questions.length && !next.permissions.length) requestAnimationFrame(() => viewport.current?.scrollTo({ top: viewport.current.scrollHeight }));
@@ -146,12 +147,12 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft }: {
   }, [endpoint, token, agent.id, session.id]);
   const online = stream === "online" && Boolean(snapshot?.connected && snapshot.control);
   const control = online ? snapshot?.control : null;
-  function acceptMessageReceipt(receipt: AgentSessionSnapshot["submission"]) {
-    const next = reconcileAgentDraft(draftRef.current, pendingDraft.current, receipt);
+  function acceptMessageReceipt(receipt: AgentSessionSnapshot["submission"], queue?: AgentSessionSnapshot["queue"]) {
+    const next = reconcileAgentDraft(draftRef.current, pendingDraft.current, receipt, queue);
     pendingDraft.current = next.pending;
     if (next.draft !== draftRef.current) { draftRef.current = next.draft; onDraft(next.draft); }
   }
-  async function operate(action: "message" | "interrupt" | "question" | "permission", suffix: string, extra: Record<string, unknown>, requestId?: string) {
+  async function operate(action: "message" | "interrupt" | "question" | "permission" | "queue-cancel", suffix: string, extra: Record<string, unknown>, requestId?: string) {
     const current = snapshotRef.current, currentScope = scope.current;
     if (!currentScope || currentScope.signal.aborted || busyRef.current || !current?.connected || !current.control) return false;
     busyRef.current = true; setBusy(true); setError("");
@@ -164,7 +165,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft }: {
       if (action === "message" || action === "interrupt") {
         setSnapshot(value => agentDelivery(value, clientMessageId, action, result));
         if (action === "message") acceptMessageReceipt({ clientMessageId, action, delivery: result.delivery });
-      } else setSnapshot(value => value?.connected && value.control?.token === controlToken ? { ...value,
+      } else if (action !== "queue-cancel") setSnapshot(value => value?.connected && value.control?.token === controlToken ? { ...value,
         ...(action === "question" ? { questions: value.questions.map(q => q.id === requestId ? { ...q, status: result.delivery === "uncertain" ? "uncertain" : "submitted" } : q) }
           : { permissions: value.permissions.map(p => p.id === requestId ? { ...p, status: result.delivery === "uncertain" ? "uncertain" : "submitted" } : p) }),
       } : value);
@@ -197,6 +198,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft }: {
   }
   const messages = [...new Map([...history, ...(agent.id === "deepseek" && history.length ? [] : snapshot?.messages ?? [])].map(message => [message.id, message])).values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id));
   const unresolved = snapshot?.submission && snapshot.submission.delivery !== "confirmed";
+  const queuedSubmission = snapshot?.queue?.items.some(item => item.clientMessageId === snapshot.submission?.clientMessageId);
   const sendEnabled = Boolean(control?.canSend && !busy && !unresolved && draft.trim());
   const waiting = Boolean(snapshot?.questions.length || snapshot?.permissions.length);
   const progress = !online ? "正在核验任务状态" : waiting ? "等待你的处理" : snapshot?.activity === "working" ? `${agent.label} 正在执行` : snapshot?.activity === "outputting" ? `${agent.label} 正在输出` : `${agent.label} 正在思考`;
@@ -213,14 +215,17 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft }: {
       <MessageTimeline messages={messages} renderMessage={message => <MessageBubble message={message} assistantLabel={agent.label} smooth={false} smoothPending={false} onSmoothDone={() => {}} onCopy={() => void writeClipboard(message.text)} />} />
       {snapshot?.questions.map(question => <AgentQuestions key={question.id} request={question} agentLabel={agent.label} disabled={!online || busy} onRespond={answers => operate("question", `/questions/${question.id}/respond`, { answers }, question.id)} />)}
       {snapshot?.permissions.map(permission => <PermissionCard key={permission.id} permission={permission} agentLabel={agent.label} disabled={!online || busy} onRespond={decision => operate("permission", `/permissions/${permission.id}/respond`, { decision }, permission.id)} />)}
+      {snapshot?.queue && <AgentQueue queue={snapshot.queue} disabled={!online || busy} onCancel={id => operate("queue-cancel", `/queue/${encodeURIComponent(id)}/cancel`, {}, id)} />}
       {snapshot?.status === "running" && <GenerationStatus label={progress} detail={online ? "与原服务会话同步" : "连接恢复后核验运行状态"} tone={waiting ? "approval" : snapshot.activity === "outputting" ? "outputting" : "thinking"} anchorRole="assistant" />}
       {!snapshot && <p className="inline-loading" role="status"><Loader2 size={18} className="spin" />正在读取原会话…</p>}
     </div>
     <footer className="composer-panel agent-composer">
       {error && <p className="connection-notice" role="status">{error}</p>}
-      {unresolved && <p className="connection-notice" role="status">{snapshot?.submission?.delivery === "uncertain" ? "提交结果未知，正在核对；请勿重复发送。" : "已提交，等待服务确认。"}</p>}
-      {snapshot?.status === "running" && <div className="agent-running"><span>{progress}</span><button className="icon-button" aria-label="打断 Agent 当前任务" disabled={!control?.canInterrupt || busy} onClick={() => void operate("interrupt", "/interrupt", {})}><CircleStop size={18} /></button></div>}
-      {snapshot?.status === "running" && control?.canSteer && <div className="agent-delivery" aria-label="消息送达方式">{(["steer", "queue"] as const).map(value => <button key={value} className={delivery === value ? "active" : ""} onClick={() => setDelivery(value)}>{value === "steer" ? "引导当前任务" : "排队处理"}</button>)}</div>}
+      {unresolved && !queuedSubmission && <p className="connection-notice" role="status">{snapshot?.submission?.delivery === "uncertain" ? "提交结果未知，正在核对；请勿重复发送。" : "已提交，等待服务确认。"}</p>}
+      {snapshot?.status === "running" && <div className="agent-running">
+        {(agent.id === "deepseek" || control?.canSteer) ? <div className="agent-delivery" aria-label="消息送达方式">{(["steer", "queue"] as const).map(value => <button type="button" key={value} disabled={!control?.canSend || (value === "steer" && !control.canSteer) || busy || Boolean(unresolved)} aria-pressed={delivery === value} className={delivery === value ? "active" : ""} onClick={() => setDelivery(value)}>{value === "steer" ? "引导当前任务" : "排队处理"}</button>)}</div> : <span>{progress}</span>}
+        <button className="icon-button" aria-label="打断 Agent 当前任务" disabled={!control?.canInterrupt || busy} onClick={() => void operate("interrupt", "/interrupt", {})}><CircleStop size={18} /></button>
+      </div>}
       <form className="agent-input" onSubmit={event => { event.preventDefault(); if (sendEnabled) void operate("message", "/messages", { text: draft, delivery: agent.id === "deepseek" && !control?.canSteer ? "queue" : delivery }); }}>
         <textarea aria-label="发送给当前 Agent 会话" placeholder={online ? `发送给 ${agent.label}…` : "草稿已保留，等待恢复连接…"} rows={2} value={draft} maxLength={20_000} onChange={event => onDraft(event.target.value)} />
       <VoiceInput endpoint={endpoint} token={token} draft={draft} onDraft={onDraft} />

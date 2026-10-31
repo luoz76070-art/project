@@ -65,7 +65,15 @@ export class DeepSeekAdapter implements AgentAdapter, SessionAdapter {
           for (const key of this.interactionLocks.keys()) if (key.startsWith(prefix) && !active.has(key)) this.interactionLocks.delete(key);
           for (const request of next[kind]) { const locked = this.interactionLocks.get(prefix + request.id); if (locked) request.status = locked; }
         }
-        owned.snapshot = next; for (const listener of owned.listeners) listener.receive(structuredClone(next)); }, () => {
+        const queuePrefix = `${id}:queue:`;
+        const queued = new Set((next.queue?.items ?? []).map(item => queuePrefix + item.clientMessageId));
+        for (const key of this.interactionLocks.keys()) if (key.startsWith(queuePrefix) && !queued.has(key)) this.interactionLocks.delete(key);
+        const snapshot: AgentSessionSnapshot = next;
+        for (const item of snapshot.queue?.items ?? []) {
+          const lock = this.interactionLocks.get(queuePrefix + item.clientMessageId);
+          if (lock) item.status = lock === "uncertain" ? "uncertain" : "cancelling";
+        }
+        owned.snapshot = snapshot; for (const listener of owned.listeners) listener.receive(structuredClone(snapshot)); }, () => {
           this.entries.delete(id); for (const listener of owned.listeners) listener.disconnect(); owned.listeners.clear();
         });
         if (this.stopped || this.entries.get(id) !== owned) close(); else owned.close = close;
@@ -102,6 +110,34 @@ export class DeepSeekAdapter implements AgentAdapter, SessionAdapter {
     }
   }
   sendMessage(id: string, input: AgentOperation & { text: string; delivery: "queue" | "steer" }) { return this.operate(id, input, "message"); }
+  async cancelQueuedMessage(id: string, queuedId: string, input: AgentOperation): Promise<AgentDelivery> {
+    const entry = this.entries.get(id), snapshot = entry?.snapshot;
+    if (!snapshot?.connected || snapshot.control?.token !== input.controlToken || !entry?.listeners.size) throw agentError("DEEPSEEK_STALE_CONTROL", 409);
+    const item = snapshot.queue?.available && snapshot.queue.items.find(value => value.clientMessageId === queuedId);
+    if (!item || !["waiting", "paused"].includes(item.status)) throw agentError("DEEPSEEK_QUEUE_ITEM_EXPIRED", 409);
+    if (this.interactionLocks.size >= 256) throw agentError("DEEPSEEK_BUSY", 429);
+    const key = `${id}:queue:${queuedId}`;
+    this.interactionLocks.set(key, "submitted"); item.status = "cancelling";
+    for (const listener of entry.listeners) listener.receive(structuredClone(snapshot));
+    try {
+      const result = await this.client.json(`/sessions/${encodeURIComponent(id)}/queue/${encodeURIComponent(queuedId)}/cancel`, deepSeekDelivery, input);
+      if (result.delivery === "uncertain" && this.interactionLocks.has(key)) {
+        this.interactionLocks.set(key, "uncertain");
+        const active = this.entries.get(id), current = active?.snapshot?.queue?.items.find(value => value.clientMessageId === queuedId);
+        if (current) { current.status = "uncertain"; for (const listener of active!.listeners) listener.receive(structuredClone(active!.snapshot!)); }
+      }
+      return result;
+    } catch (error) {
+      if ([400, 403, 404, 409, 410, 429].includes((error as { statusCode?: number }).statusCode ?? 0)) {
+        this.interactionLocks.delete(key); if (this.entries.get(id) === entry) this.entries.delete(id); entry.close?.();
+        for (const listener of entry.listeners) listener.disconnect(); entry.listeners.clear(); throw error;
+      }
+      if (this.interactionLocks.has(key)) this.interactionLocks.set(key, "uncertain");
+      const active = this.entries.get(id), current = active?.snapshot?.queue?.items.find(value => value.clientMessageId === queuedId);
+      if (current) { current.status = "uncertain"; for (const listener of active!.listeners) listener.receive(structuredClone(active!.snapshot!)); }
+      return { ok: true, delivery: "uncertain" };
+    }
+  }
   interruptSession(id: string, input: AgentOperation) { return this.operate(id, input, "interrupt"); }
   private async respond(id: string, requestId: string, input: AgentOperation & { answers?: string[][]; decision?: "once" | "always" | "reject" }, kind: "questions" | "permissions"): Promise<AgentDelivery> {
     const entry = this.entries.get(id), snapshot = entry?.snapshot;

@@ -1,5 +1,15 @@
 # 验收设计
 
+## 2026-10-31：补齐手机待发查看与取消
+
+只读检查确认DeepSeek现有手机、Agent路由、协议和桥接均没有取消待发入口。沿用原生next-turn队列及现有一次未确认发送锁；不创建第二个调度队列。桥接仅暴露本插件当前submission.messageId仍精确存在于原Agent.inbox.nextTurn的那一项，以clientMessageId作外部标识。队列接受与真正user/message执行确认区分：手机可凭权威待发项清理匹配草稿并展示“已排队”，新草稿保持；不能标记为任务已执行。
+
+增加可选queue快照和cancelQueuedMessage适配器方法、鉴权且幂等的queue/:id/cancel路由。bridge同步复核原live handle、controlToken、原提交及nextTurn归属后，仅调用官方inbox.remove(messageId)，不调用cancel、clear或更改其他宿主待发项。已取走/消费的项拒绝取消；未知回包锁定按钮且不重试，队列权威移除后解除。旧插件缺queue时继续原行为，不显示可取消能力。
+
+改动范围：mobile-deepseek/bridge与对应queue辅助模块、Relay Agent类型/schema/adapter/routes、手机Agent类型/runtime/待发卡及必要样式；新增隔离回归和官方rc.5 AgentLoop取消检查。先证实原代码无队列投影/路由，再实现并核对拒绝边界、断流重连、迟到结果及草稿保护。用户已确认上次运行时“已连接且停止可用”，不能按断线归因。运行中引导缺入口仍待该瞬间手机能力/页面证据，本修复不当作其已定位；APK37旧记录验收保持独立。
+
+补充布局：390px待发卡展开挤占输入区，360×320聚焦草稿时旧45dvh footer裁掉停止按钮。将待发卡移到消息区、模式和停止合并一行，footer上限按剩余屏幕空间；DeepSeek running时模式入口保持，能力不足时禁用，不越过原控制守卫。此为已复现边界修复，不冒充真机根因。
+
 ## Codex临时轮次身份修复（用户追加）
 
 手机详细报告的两组native-input指纹分别精确对应turn-45-input/turn-48-input，nativeMessageId及client与网关正式项一致，但turnId仍为turn-N；历史使用真实turnId，导致同turn配对失败。当前mergeSameMessage已合并正式native别名/替换关系，但preferredMessage在等长正文时保留了临时ID与turn。之前回归仅覆盖真实turn下的临时input，未覆盖turn本身尚未获分配的形态。

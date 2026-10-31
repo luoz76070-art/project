@@ -126,3 +126,11 @@ displayReason是必含en的locale→string对象，不是字符串；保留全�
 ## 宿主升级后的兼容恢复
 
 重开应用可能已切换官方宿主版本。不得继续安装只验过旧版本的候选，或硬编码旧版本绕过检查。先读取官方插件页拒绝原因及已安装运行时；只读提取到隔离目录，比较关键接口并跑对应版本的运行时/审批/历史检查，再同时更新manifest、bridge和网关握手的精确白名单。rc.5关键入口与rc.3字节一致，25项官方隔离检查通过；未知rc.4/rc.6仍拒绝。手机协议不变时沿用现有APK；部署分别确认插件实际/info及网关下发，不把磁盘安装成功当加载成功。
+
+## 手机待发定向取消（插件0.2.5）
+
+可选queue快照仅投影本桥接当前未确认手机submission对应的原生nextTurn项，最多一条；available要求当前live Agent具有数组nextTurn和同步remove方法。无该字段的旧插件不宣称支持。原生waiting/paused/uncertain；网关额外合成cancelling。手机凭匹配的waiting/paused权威项清理原草稿，新编辑保持；队列接纳仍submitted，只有原user/message确认执行。
+
+POST /api/agents/:agentId/sessions/:sessionId/queue/:clientMessageId/cancel采用既有设备鉴权、原订阅controlToken及操作UUID幂等。bridge无await核验当前live handle、同一submission和nextTurn归属，精确remove(messageId)；禁止cancel/clear。已消费、外国项、旧token拒绝。取消未知由bridge和Relay双层锁定，跨重订阅不可重试；权威移除清锁，迟到未知结果不污染新待发项。插件重载不恢复映射，部署前必须清空未决手机提交；不宣称跨进程exactly-once。
+
+隔离覆盖取消不影响任务/桌面项、过期拒绝、重连旧token、未知与迟到HTTP、路由鉴权/幂等。官方rc.2/rc.3/rc.5运行时脚本新增生产AgentLoop中定向remove验证，外部模型请求0；手机真实排队顺序/取消仍独立验收。

@@ -36,4 +36,5 @@ export const deepSeekSnapshot = z.object({
   control: z.object({ token: z.string().uuid(), canSend: z.boolean(), canSteer: z.boolean(), canInterrupt: z.boolean() }),
   submission: z.object({ clientMessageId: z.string().uuid(), action: z.enum(["message", "interrupt"]), delivery: z.enum(["submitted", "confirmed", "uncertain"]) }).nullable(),
   operationError: z.object({ clientMessageId: z.string().uuid(), code: z.enum(["rejected", "expired"]) }).nullable(),
+  queue: z.object({ available: z.boolean(), items: z.array(z.object({ clientMessageId: z.string().uuid(), text: z.string().max(20000), status: z.enum(["waiting", "paused", "uncertain"]) })).max(1) }).optional(),
 });

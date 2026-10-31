@@ -1,6 +1,6 @@
 {
   "name": "dsh-mobile-codex",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "type": "module",
   "main": "index.mjs",
   "files": [
@@ -8,6 +8,7 @@
     "bridge.mjs",
     "catalog.mjs",
     "messages.mjs",
+    "queue.mjs",
     "interactions.mjs",
     "cordis.patch.yml",
     "README.md",

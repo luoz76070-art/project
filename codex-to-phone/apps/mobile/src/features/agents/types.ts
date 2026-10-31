@@ -15,6 +15,7 @@ export type AgentSessionSnapshot = {
   status: "idle" | "running"; activity: "thinking" | "working" | "outputting";
   messages: CodexMessage[]; questions: AgentQuestion[]; permissions: AgentPermission[]; historyCursor: string | null;
   partialText: boolean;
+  queue?: { available: boolean; items: { clientMessageId: string; text: string; status: "waiting" | "paused" | "cancelling" | "uncertain" }[] };
   operationError?: { clientMessageId: string; code: "rejected" | "expired" } | null;
   control: { token: string; canSend: boolean; canSteer: boolean; canInterrupt: boolean } | null;
   submission: { clientMessageId: string; action: "message" | "interrupt"; delivery: "submitted" | "confirmed" | "uncertain" } | null;

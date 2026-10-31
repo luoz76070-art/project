@@ -156,7 +156,10 @@ const server = http.createServer(async (req, res) => {
       const snapshot = agentSnapshot(name, agentId), phase = url.searchParams.get('phase');
       states.get(name).agentResponseDelay = Math.min(3000, Math.max(0, Number(url.searchParams.get('responseDelay')) || 0));
       snapshot.questions = []; snapshot.permissions = []; snapshot.submission = null; snapshot.operationError = null;
+      snapshot.queue = agentId === 'deepseek' ? { available: true, items: [] } : undefined;
+      states.get(name).agentQueueCancelUnknown = url.searchParams.get('cancelUnknown') === '1';
       snapshot.control = { token: randomUUID(), canSend: true, canSteer: agentId !== 'claude', canInterrupt: phase !== 'completed' };
+      if (url.searchParams.get('canSteer') === '0') snapshot.control.canSteer = false;
       snapshot.status = phase === 'completed' ? 'idle' : 'running'; snapshot.activity = phase === 'working' ? 'working' : 'outputting';
       snapshot.partialText = phase === 'partial';
       if (agentId === 'deepseek' && phase === 'history') {
@@ -402,13 +405,32 @@ const server = http.createServer(async (req, res) => {
         if (input.controlToken !== snapshot.control.token || !input.clientMessageId) return json(res, { error: 'control_expired' }, 409);
         if (snapshot.agentId === 'claude' && ((route.endsWith('/messages') && input.delivery !== 'queue') || (route.includes('/permissions/') && input.decision === 'always'))) return json(res, { error: 'unsupported' }, 409);
         counters['agentWrites'] = (counters['agentWrites'] ?? 0) + 1;
-        if (route.endsWith('/messages')) { counters['agentDelivery'] = input.delivery; snapshot.messages.push({ id: `msg_${input.clientMessageId}`, role: 'user', text: input.text, kind: 'user_message', timestamp: new Date(Math.max(Date.now(), ...snapshot.messages.map(message => Date.parse(message.timestamp))) + 1).toISOString() }); snapshot.submission = { clientMessageId: input.clientMessageId, action: 'message', delivery: 'confirmed' }; snapshot.status = 'running'; snapshot.control.canInterrupt = true; }
+        let delivery = 'confirmed';
+        if (route.endsWith('/messages')) {
+          if (snapshot.submission && snapshot.submission.delivery !== 'confirmed') return json(res, { error: 'result_pending' }, 409);
+          counters['agentDelivery'] = input.delivery;
+          const queued = snapshot.agentId === 'deepseek' && snapshot.queue?.available && snapshot.status === 'running' && input.delivery === 'queue';
+          if (queued) {
+            snapshot.queue.items = [{ clientMessageId: input.clientMessageId, text: input.text, status: 'waiting' }];
+            delivery = 'submitted';
+          } else snapshot.messages.push({ id: `msg_${input.clientMessageId}`, role: 'user', text: input.text, kind: 'user_message', timestamp: new Date(Math.max(Date.now(), ...snapshot.messages.map(message => Date.parse(message.timestamp))) + 1).toISOString() });
+          snapshot.submission = { clientMessageId: input.clientMessageId, action: 'message', delivery };
+          snapshot.status = 'running'; snapshot.control.canInterrupt = true;
+          if (queued) snapshot.control = { ...snapshot.control, canSend: false, canSteer: false, canInterrupt: false };
+        }
+        if (/\/queue\/[^/]+\/cancel$/.test(route)) {
+          const item = snapshot.queue?.items.find(item => item.clientMessageId === route.split('/').at(-2));
+          if (!item || !['waiting', 'paused'].includes(item.status)) return json(res, { error: 'queue_expired' }, 409);
+          counters.agentQueueCancellations = (counters.agentQueueCancellations ?? 0) + 1;
+          if (state.agentQueueCancelUnknown) { item.status = 'uncertain'; delivery = 'uncertain'; }
+          else { snapshot.queue.items = []; snapshot.submission = null; snapshot.control = { ...snapshot.control, canSend: true, canSteer: snapshot.status === 'running', canInterrupt: snapshot.status === 'running' }; }
+        }
         if (route.endsWith('/interrupt')) { snapshot.status = 'idle'; snapshot.control.canInterrupt = false; snapshot.submission = { clientMessageId: input.clientMessageId, action: 'interrupt', delivery: 'confirmed' }; }
         if (route.includes('/questions/')) { counters['agentAnswerCounts'] = input.answers.map(answer => answer.length); snapshot.questions = []; }
         if (route.includes('/permissions/')) { counters['agentPermissionDecision'] = input.decision; snapshot.permissions = []; }
         for (const notify of notifications.values()) notify();
-        if (state.agentResponseDelay) { setTimeout(() => json(res, { ok: true, delivery: 'confirmed' }), state.agentResponseDelay); return; }
-        return json(res, { ok: true, delivery: 'confirmed' });
+        if (state.agentResponseDelay) { setTimeout(() => json(res, { ok: true, delivery }), state.agentResponseDelay); return; }
+        return json(res, { ok: true, delivery });
       }
       if (route === '/api/status') return json(res, { ok: true, desktopControl: { ok: true, mode: state.control ? 'desktop-ipc-follower-control' : 'macos-ui-injector-control' }, live: { ok: true, mode: 'fixture' }, activeDesktopThread: thread(name) });
       if (route === '/api/diagnostics') {

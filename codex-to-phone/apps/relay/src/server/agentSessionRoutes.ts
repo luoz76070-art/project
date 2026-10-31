@@ -83,6 +83,12 @@ export function createAgentSessionRoutes(context: {
         const params = paramsSchema.parse(request.params), body = operationSchema.strict().parse(request.body);
         return execute(request, params, "interrupt", body, () => sessionAdapter(params).interruptSession(params.sessionId, body));
       });
+      app.post("/api/agents/:agentId/sessions/:sessionId/queue/:id/cancel", { bodyLimit: 4096 }, async request => {
+        const params = paramsSchema.extend({ id: z.string().uuid() }).parse(request.params);
+        const body = operationSchema.strict().parse(request.body), adapter = sessionAdapter(params);
+        if (!adapter.cancelQueuedMessage) throw agentError("AGENT_QUEUE_UNSUPPORTED", 409);
+        return execute(request, params, `queue-cancel:${params.id}`, body, () => adapter.cancelQueuedMessage!(params.sessionId, params.id, body));
+      });
       app.post("/api/agents/:agentId/sessions/:sessionId/questions/:id/respond", { bodyLimit: 65_536 }, async request => {
         const params = paramsSchema.extend({ id: z.string().uuid() }).parse(request.params);
         const body = operationSchema.extend({ answers: z.array(z.array(z.string().min(1).max(10_000)).min(1).max(100)).min(1).max(20) }).strict().parse(request.body);
