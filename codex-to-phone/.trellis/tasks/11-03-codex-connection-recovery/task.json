@@ -15,7 +15,7 @@
   "branch": "main",
   "base_branch": "main",
   "worktree_path": null,
-  "commit": null,
+  "commit": "30b2860",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -26,6 +26,6 @@
     "apps/relay/tests/desktopThreadRecovery.test.mjs",
     "docs/audits/2026-11-04/codex-cold-thread-recovery.md"
   ],
-  "notes": "2026-11-04用户确认Kelivo并授权通用修复。13项恢复回归、后端403/手机126等检查通过；第二个冷会话约11秒自动恢复。用户明确允许后，仅强制退出已核验旧网关PID32223并启动新版PID60246；配置/设备/凭证及宿主保留，本地/公网同instance/build、列表与四会话控制通过。已发手机草稿按钮验收卡，尚待确认；无模型测试发送。DeepSeek剩余验收及权限恢复暂停。",
+  "notes": "2026-11-04用户确认Kelivo并授权通用修复。13项恢复回归、后端403/手机126等检查通过；第二个冷会话约11秒自动恢复。经用户明确许可仅强制退出旧网关PID32223并上线新版PID60246，配置及宿主保留，两端健康/列表与四会话控制通过。用户先确认正文及草稿按钮正常，再确认自然使用消息确由手机发送、重开后输入和完整回复各一次；本轮验收全部完成。修复本地提交30b2860，无代发模型测试；第2、3项后续计划未启动，DeepSeek剩余验收及权限恢复暂停。",
   "meta": {}
 }
