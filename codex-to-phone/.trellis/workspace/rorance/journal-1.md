@@ -1639,3 +1639,43 @@ APK29用户确认语音主流程通过；网关增加有限低权重短语，真
 ### Next Steps
 
 - 等待APK38升级反馈，依次引导、排队取消、权限与停止；不发送真实模型任务代验。
+
+
+## Session 49: Codex未加载会话修复及手机闭环验收完成
+<!-- trellis-session: v=2 fp=b387040edf2893ef -->
+
+**Date**: 2026-11-04
+**Task**: Codex未加载会话修复及手机闭环验收完成
+**Package**: relay
+**Branch**: `main`
+
+### Summary
+
+原会话按需加载修复已上线；用户确认APK38按钮恢复、手机实际收发及重开输入和完整回复各一次。已归档本轮任务，后续计划等待选择。
+
+### Main Changes
+
+- 鉴权手机订阅可按需加载已核验的原会话，保留并发合并、限频及原生控制守卫。
+- 管理停止后旧网关残留，经用户明确允许仅终止已核验PID再上线新版，配置和宿主保留。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `30b2860` | fix(codex-to-phone): recover unloaded desktop thread controls |
+| `ccd4cf9` | docs(codex-to-phone): record cold thread phone acceptance |
+
+### Testing
+
+- [OK] 13项新增恢复回归；手机126/126、后端403/403、lint/typecheck/build及相关检查通过。
+- [OK] 本地/公网同网关及列表一致；四会话控制恢复，另一冷会话约11秒恢复。
+- [OK] 用户真机确认Kelivo正文及按钮恢复、手机发送成功、重开输入与完整回复各一次；两端历史终稿指纹一致。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 等待用户选择docs/plans/2026-11-03-codex-connection-recovery.md第2、3项；尚未启动。
+- DeepSeek拒绝/停止及原权限恢复仍暂停；不自动继续其他任务。
