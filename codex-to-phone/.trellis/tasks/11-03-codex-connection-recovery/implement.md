@@ -1,0 +1,16 @@
+# 检查清单
+
+- [x] 读工程入口、当前差异、控制与传输规范；保留既有DeepSeek验收与Kelivo计划文件。
+- [x] 本地/公网connection、gateway、desktop/control/health、diagnostics核对；同一网关和native IPC均正常。
+- [x] 比较recent/all列表与桌面30个样本，保存只读元数据证据。
+- [x] 当前运行会话与“墨韵主线”控制就绪；未加载Kelivo会话两端SSE无控制快照，直接owner发现请求超时。
+- [x] 用户确认Kelivo；宿主原会话导航后两端canSend=true，因果对照成立。
+- [x] 后端按需原会话加载、取消/并发/限频、恢复健康状态及13项隔离回归；完整检查通过（手机126、后端403）。
+- [x] 第二个冷会话真实加载约11秒恢复，模型请求0次。
+- [x] 固定网关上线：用户明确允许后，仅对已核验旧PID32223发送SIGKILL；新PID60246/Tunnel恢复，配置与宿主保留。首次失败与恢复记录分存。
+- [x] 本地/公网同instance/build、鉴权、IPC、recent28/all123列表及DeepSeek14会话列表通过；Kelivo等四会话控制恢复。
+- [ ] 手机确认：已发卡要求重开Kelivo，等待约15秒，填写草稿观察发送按钮；真实消息由用户操作。
+
+证据目录：output/audit/2026-11-03/codex-connection/。探针每条流9秒或取得控制状态即关闭，单流数据上限3MiB；保存报告只含白名单摘要，不提交真实输入。
+
+上线恢复证据：output/audit/2026-11-04/codex-recovery/。Kelivo补测观察上限30秒，取得控制即结束；管理与健康HTTP使用agent:false及有界截止，避免keepalive影响退出观察。手机确认尚未收到，任务保持in_progress；DeepSeek剩余验收及原权限恢复继续暂停。

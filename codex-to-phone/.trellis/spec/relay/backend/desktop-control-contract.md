@@ -4,7 +4,15 @@
 
 ## 1. 范围
 
-`desktopNativeControl.ts` 构建普通 follower 写入，`DesktopControl` 提供已校验 owner/host/revision 的订阅状态。与 P0 app-server-control socket 无关，不为发送恢复或新建替代会话。macOS 默认 legacy 输入；原生写须显式启用并单独做真实验收。
+`desktopNativeControl.ts` 构建普通 follower 写入，`DesktopControl` 提供已校验 owner/host/revision 的订阅状态。与 P0 app-server-control socket 无关，不为发送新建替代会话。未加载原会话可按下述规则请求宿主加载，不能通过独立app-server恢复副本。macOS 默认 legacy 输入；原生写须显式启用并单独做真实验收。
+
+### 未加载原会话
+
+`desktopThreadLoader.ts`只在手机鉴权SSE的`followThread(id,{allowLoad:true})`遇到owner不存在/发现超时时启用；队列后台follow、列表、健康探测和smoke默认不加载。macOS验证UUID及本地索引存在后，执行`/usr/bin/open -g codex://threads/<UUID>`，无prompt/新建参数，无辅助功能输入。宿主可能切换当前显示会话；不得承诺后台无界面变化。执行器5秒截止，同线程并发合并、60秒限频、近期记录及待处理上限128；用户切走/停止后未开始工作取消，新订阅可加入原加载而不被旧订阅取消误伤。
+
+每次恢复最多请求打开一次，取得权威快照后才重置加载尝试；后续仅退避发现owner。成功打开链接不是发送许可，仍须校验owner/method/host/revision/epoch及快照，未知提交/审批锁不变。健康`following`返回discovering/loading/waiting-snapshot/ready/unavailable及稳定错误码，不放业务正文或上游原始错误；不得用伪造完成快照表达恢复失败。旧APK继续依赖真实控制令牌，无需通过前端放宽按钮。
+
+`desktopThreadRecovery.test.mjs`使用合成IPC和注入打开器，覆盖冷加载、发现超时、并发、切走/停止、被动订阅、错误响应、HTTP鉴权入口、未知提交锁与限频。真实原会话加载能力另行手工集成检查，不并入默认测试。
 
 ## 2. 签名
 

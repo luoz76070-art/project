@@ -6,10 +6,12 @@ import { asyncQuestionReply, conversationTurns, desktopQuestionCandidates, inter
 import { DesktopNativeControl, type DesktopControlCapability, type DesktopTransport, type NativeControlInput, type NativeControlOutcome } from "./desktopNativeControl.js";
 import { DesktopApprovals, type DesktopApproval, type DesktopApprovalDecision } from "./desktopApprovals.js";
 import { DesktopMessageQueue } from "./desktopMessageQueue.js";
+import type { DesktopThreadLoad } from "./desktopThreadLoader.js";
 
 type QuestionBinding = { candidate: DesktopQuestionCandidate; view: UserInputRequest; signature: string };
 type PendingQuestion = { threadId: string; status: Exclude<UserInputRequest["status"], "pending"> };
-type FollowedThread = { refs: number; epoch: string; owner: string | null; revision: number | null; connecting: boolean; questions: Map<string, QuestionBinding>; deadline?: NodeJS.Timeout };
+type FollowStatus = { state: "discovering" | "loading" | "waiting-snapshot" | "ready" | "unavailable"; errorCode?: string };
+type FollowedThread = { refs: number; loadRefs: number; loadAttempted: boolean; recovery: FollowStatus; epoch: string; owner: string | null; revision: number | null; connecting: boolean; questions: Map<string, QuestionBinding>; deadline?: NodeJS.Timeout };
 
 type DesktopControlAction = "start-turn" | "steer-turn" | "interrupt-turn" | "ui-submit" | "queue-message";
 type DesktopControlMode = "auto" | "start" | "steer" | "queue";
@@ -73,12 +75,14 @@ export class DesktopControl {
   private readonly nativeControl: DesktopNativeControl;
   private readonly approvalControl: DesktopApprovals;
   private readonly transport: DesktopTransport;
+  private readonly loadThread?: DesktopThreadLoad;
   readonly messageQueue: DesktopMessageQueue;
 
-  constructor(private readonly store: CodexStore, options: { client?: DesktopIpcClient; codexHome?: string; confirmationMs?: number; transport?: DesktopTransport } = {}) {
+  constructor(private readonly store: CodexStore, options: { client?: DesktopIpcClient; codexHome?: string; confirmationMs?: number; transport?: DesktopTransport; loadThread?: DesktopThreadLoad } = {}) {
     this.client = options.client ?? new DesktopIpcClient({ clientType: "mobile-codex-relay-desktop-control", pipePath: getDesktopIpcPipePath(options.codexHome), requestTimeoutMs: 5_000 });
     this.confirmationMs = options.confirmationMs ?? 2_000;
     this.transport = options.transport ?? (process.platform === "darwin" ? "legacy" : "native");
+    this.loadThread = options.loadThread;
     this.nativeControl = new DesktopNativeControl({
       read: id => {
         const session = this.followed.get(id), state = record(this.streamStates.get(id));
@@ -123,20 +127,22 @@ export class DesktopControl {
     await this.client.disconnect();
   }
 
-  followThread(threadId: string): () => void {
+  followThread(threadId: string, options: { allowLoad?: boolean } = {}): () => void {
     if (this.stopped) return () => {};
     let session = this.followed.get(threadId);
     if (!session) {
       if (this.followed.size >= 16) throw interactionError("desktop_follow_limit", 429);
-      session = { refs: 0, epoch: randomUUID(), owner: null, revision: null, connecting: false, questions: new Map() };
+      session = { refs: 0, loadRefs: 0, loadAttempted: false, recovery: { state: "discovering" }, epoch: randomUUID(), owner: null, revision: null, connecting: false, questions: new Map() };
       this.followed.set(threadId, session);
     }
     session.refs++;
+    if (options.allowLoad) session.loadRefs++;
     void this.connectFollow(threadId, session);
     let released = false;
     return () => {
       if (released) return;
       released = true;
+      if (options.allowLoad) session.loadRefs--;
       if (--session.refs > 0 || this.followed.get(threadId) !== session) return;
       this.followed.delete(threadId);
       this.invalidateFollow(threadId, session);
@@ -147,13 +153,25 @@ export class DesktopControl {
   private async connectFollow(threadId: string, session: FollowedThread): Promise<void> {
     if (session.connecting || session.owner || this.stopped) return;
     const epoch = session.epoch;
+    const current = () => this.followed.get(threadId) === session && session.epoch === epoch && !this.stopped;
     session.connecting = true;
     try {
       await this.client.connect();
-      const owner = await this.client.sendRequest("thread-owner-discovery", { conversationId: threadId, hostId: "local" }, { version: 1 });
-      if (this.followed.get(threadId) !== session || session.epoch !== epoch || this.stopped) return;
-      if (owner.resultType !== "success" || !owner.handledByClientId) throw interactionError("desktop_owner_unavailable");
-      session.owner = owner.handledByClientId;
+      if (!current()) return;
+      let owner = await this.discoverOwner(threadId);
+      if (!current()) return;
+      if (!owner && session.loadRefs > 0 && !session.loadAttempted && this.loadThread && this.transport === "native" && this.client.getStatus().initialized) {
+        session.loadAttempted = true;
+        session.recovery = { state: "loading" };
+        try { await this.loadThread(threadId, () => current() && session.loadRefs > 0); }
+        catch { if (current()) session.recovery = { state: "unavailable", errorCode: "desktop_thread_load_failed" }; throw interactionError("desktop_thread_load_failed"); }
+        if (!current()) return;
+        owner = await this.discoverOwner(threadId);
+      }
+      if (!current()) return;
+      if (!owner) throw interactionError("desktop_owner_unavailable");
+      session.owner = owner;
+      session.recovery = { state: "waiting-snapshot" };
       await this.client.sendBroadcast("thread-stream-following-changed", { conversationId: threadId, hostId: "local", following: true }, 1, [session.owner]);
       if (session.revision == null && session.epoch === epoch) {
         session.deadline = setTimeout(() => { this.invalidateFollow(threadId, session); this.scheduleFollowRetry(); }, 5_000);
@@ -165,6 +183,24 @@ export class DesktopControl {
     } finally {
       session.connecting = false;
     }
+  }
+
+  private async discoverOwner(threadId: string): Promise<string | null> {
+    try {
+      const response = await this.client.sendRequest("thread-owner-discovery", { conversationId: threadId, hostId: "local" }, { version: 1 });
+      if (response.method !== "thread-owner-discovery") throw interactionError("desktop_owner_invalid");
+      if (response.resultType === "error" && response.error === "no-client-found") return null;
+      if (response.resultType !== "success" || !response.handledByClientId) throw interactionError("desktop_owner_invalid");
+      return response.handledByClientId;
+    } catch (error) {
+      if (error instanceof Error && error.message === "desktop-ipc-request-timeout") return null;
+      throw error;
+    }
+  }
+
+  getFollowStatus(threadId: string): FollowStatus | null {
+    const session = this.followed.get(threadId);
+    return session ? { ...session.recovery } : null;
   }
 
   private scheduleFollowRetry(): void {
@@ -181,6 +217,7 @@ export class DesktopControl {
     clearTimeout(session.deadline); session.deadline = undefined;
     for (const pending of this.unconfirmedQuestions.values()) if (pending.threadId === threadId) pending.status = "uncertain";
     session.epoch = randomUUID(); session.owner = null; session.revision = null; session.questions.clear();
+    session.recovery = { state: "unavailable", errorCode: session.recovery.errorCode ?? "desktop_owner_unavailable" };
     this.approvalControl.invalidate(threadId);
     this.streamStates.delete(threadId);
     const previous = this.streamSnapshots.get(threadId);
@@ -277,6 +314,7 @@ export class DesktopControl {
     activeStreamThreadId: string | null;
     streamThreadIds: string[];
     capabilities: string[];
+    following?: { threadId: string; state: FollowStatus["state"]; errorCode?: string }[];
     error?: string;
   }> {
     if (process.platform === "darwin" && this.transport === "legacy") {
@@ -301,6 +339,7 @@ export class DesktopControl {
       return {
         ok: true,
         mode: "desktop-ipc-follower-control",
+        following: [...this.followed].map(([threadId, session]) => ({ threadId, ...session.recovery })),
         ipc,
         activeThread,
         activeThreadSource,
@@ -519,6 +558,8 @@ export class DesktopControl {
     clearTimeout(session.deadline); session.deadline = undefined;
     this.retryAttempt = 0;
     session.revision = revision;
+    session.recovery = { state: "ready" };
+    session.loadAttempted = false;
     this.approvalControl.sync(threadId, state);
     const previous = new Map([...session.questions.values()].map(binding => [binding.candidate.key, binding]));
     const candidates = desktopQuestionCandidates(threadId, state).map(candidate => ({ candidate, signature: createHash("sha256").update(JSON.stringify(candidate)).digest("hex") }));

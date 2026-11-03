@@ -13,6 +13,7 @@ import { CodexStore } from "../store/codexStore.js";
 import { resolveCodexExecutableDetails } from "../codex/codexExecutable.js";
 import { loadConfig, type RelayConfig } from "../config.js";
 import { DesktopControl, type DesktopStreamSnapshot } from "../desktop/desktopControl.js";
+import { createDesktopThreadLoader } from "../desktop/desktopThreadLoader.js";
 import { LiveCodex } from "../codex/liveCodex.js";
 import { LiveTurnController, type LiveTurnSnapshot } from "../codex/liveTurnController.js";
 import { UploadStore } from "../store/uploadStore.js";
@@ -47,7 +48,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const store = options.services?.store ?? new CodexStore(config.codexHome);
   const live = options.services?.live ?? new LiveCodex(config.defaultCwd);
   const liveTurns = options.services?.liveTurns ?? new LiveTurnController(config.defaultCwd);
-  const desktopControl = options.services?.desktopControl ?? new DesktopControl(store, { codexHome: config.codexHome, transport: config.desktopTransport });
+  const desktopControl = options.services?.desktopControl ?? new DesktopControl(store, { codexHome: config.codexHome, transport: config.desktopTransport, loadThread: createDesktopThreadLoader(store) });
   const uploads = options.services?.uploads ?? new UploadStore(config.defaultCwd);
   const agentGateway = options.services?.agentGateway ?? createAgentGateway({ codexHome: config.codexHome, opencode: config.opencode, claude: config.claude, deepseek: config.deepseek });
   const claudeBridge = config.claude ? agentGateway.claudeBridge() : null;
@@ -423,7 +424,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     };
     const unsubscribe = desktopControl.onStreamSnapshot(onSnapshot);
     events.onClose(unsubscribe);
-    const unfollow = desktopControl.followThread?.(params.id);
+    const unfollow = desktopControl.followThread?.(params.id, { allowLoad: true });
     if (unfollow) events.onClose(unfollow);
     const current = desktopControl.getStreamSnapshot(params.id);
     if (current) sendSnapshot(current);

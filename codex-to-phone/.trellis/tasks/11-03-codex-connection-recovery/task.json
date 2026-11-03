@@ -1,0 +1,31 @@
+{
+  "id": "codex-connection-recovery",
+  "name": "codex-connection-recovery",
+  "title": "Codex 会话同步与发送能力故障排查",
+  "description": "核对手机Codex列表、实时订阅及原生控制链路，定位同步不全和发送置灰并完成针对性修复与验证",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": "relay",
+  "priority": "P2",
+  "creator": "rorance",
+  "assignee": "rorance",
+  "createdAt": "2026-11-03",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "apps/relay/src/desktop/desktopThreadLoader.ts",
+    "apps/relay/src/desktop/desktopControl.ts",
+    "apps/relay/tests/desktopThreadRecovery.test.mjs",
+    "docs/audits/2026-11-04/codex-cold-thread-recovery.md"
+  ],
+  "notes": "2026-11-04用户确认Kelivo并授权通用修复。13项恢复回归、后端403/手机126等检查通过；第二个冷会话约11秒自动恢复。用户明确允许后，仅强制退出已核验旧网关PID32223并启动新版PID60246；配置/设备/凭证及宿主保留，本地/公网同instance/build、列表与四会话控制通过。已发手机草稿按钮验收卡，尚待确认；无模型测试发送。DeepSeek剩余验收及权限恢复暂停。",
+  "meta": {}
+}
