@@ -1,0 +1,32 @@
+{
+  "id": "kelivo-visual-migration",
+  "name": "kelivo-visual-migration",
+  "title": "Kelivo 风格迁移与整合可行性复核",
+  "description": "复核统一 Kelivo 风格及双独立功能的可行性，先迁移现有远控的样式、导航、聊天、设置与 Agent 页面，并用隔离浏览器验证保留原控制行为。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "mobile",
+  "priority": "P2",
+  "creator": "rorance",
+  "assignee": "rorance",
+  "createdAt": "2026-11-04",
+  "completedAt": "2026-11-05",
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "apps/mobile/src/styles.css",
+    "apps/mobile/src/features/chat/components.tsx",
+    "apps/mobile/src/app/App.tsx",
+    "docs/audits/2026-11-04/kelivo-style.md",
+    "docs/plans/2026-11-04-kelivo-fast-integration.md"
+  ],
+  "notes": "现有远控Kelivo视觉迁移和最终verify/浏览器验收完成；完整AI整合、原生组合、APK与真机未验。沿用户main本地检查点流程，无任务分支。",
+  "meta": {}
+}

@@ -5,7 +5,7 @@ import { takeSmoothChunk, roleClass, isToolMessage, roleLabel, summarizeToolMess
 import { smoothTextFrameMs } from "../../app/config";
 import { type PendingAttachment, type CodexMessage, type LiveApproval, type LiveApprovalDecision } from "../../app/types";
 import { formatFileSize, isImageAttachment, parseMessageAttachments } from "./attachments";
-import { X, ImageIcon, Paperclip, Copy, AlertCircle, Terminal, CheckCircle2, CircleStop, ChevronRight } from "lucide-react";
+import { X, ImageIcon, Paperclip, Copy, AlertCircle, Terminal, CheckCircle2, CircleStop, ChevronRight, UserRound, Bot, Info } from "lucide-react";
 import { MessageContent } from "./MessageContent";
 import { formatTime } from "../../shared/format";
 
@@ -117,13 +117,19 @@ export function MessageBubble({
 
   return (
     <article className={`message-bubble ${roleClass(message.role)}`} data-message-id={message.id} data-message-role={message.role}>
+      <header className="message-identity">
+        <span className="message-avatar" aria-hidden="true">{message.role === "user" ? <UserRound size={18} /> : message.role === "assistant" ? <Bot size={18} /> : <Info size={18} />}</span>
+        <span className="message-author">
+          <strong>{message.role === "assistant" ? assistantLabel : roleLabel(message.role)}</strong>
+          <time dateTime={message.timestamp ?? undefined}>{formatTime(message.timestamp)}</time>
+        </span>
+      </header>
       {parsed.text && (message.role === "assistant"
         ? <SmoothText text={parsed.text} active={smooth} pending={smoothPending} onDone={onSmoothDone} />
         : <p className="user-message-text">{parsed.text}</p>)}
       <MessageAttachments attachments={parsed.attachments} />
       <footer className="message-actions">
         <button className="copy-icon" onClick={onCopy} aria-label={`复制${message.role === "assistant" ? assistantLabel : roleLabel(message.role)}消息`}><Copy size={15} /></button>
-        <time>{formatTime(message.timestamp)}</time>
       </footer>
     </article>
   );

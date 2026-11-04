@@ -32,7 +32,7 @@ APK32紧凑footer需比较同viewport、同运行/草稿状态的前后高度；
 
 `corepack pnpm --filter @mobile-codex/mobile typecheck`、`corepack pnpm --filter @mobile-codex/mobile build`、`corepack pnpm test:messages`。结构迁移后比较原函数体与构建 gzip；不改变视觉要求来掩盖行为回归。
 
-UI 以 Codex 手机版为参考；先收集可核验的版本/日期与真实画面，再逐页对照。复用 React/CSS、图标，避免重型依赖、大面积模糊和持续动画。
+UI 按用户 2026-11-04 决定统一以 Kelivo 为参考；当前固定 v1.3.4 的默认浅深主题、官方仓库截图与组件源码，映射见 `docs/audits/2026-11-04/kelivo-style.md`。后续先收集可核验的版本/日期与真实画面，再逐页对照。复用 React/CSS、图标，避免重型依赖、大面积模糊和持续动画。
 
 视觉验收覆盖 360/390/430 CSS px、浅深主题、键盘、安全区、字体缩放、流式消息、上拉历史与连接恢复。浏览器不能替代 Android 键盘和前后台真机验收。
 

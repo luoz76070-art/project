@@ -25,7 +25,7 @@ import { ApkUpdateProgress } from "../features/updates/ApkUpdateProgress";
 import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mimeTypeFromName, isImageFile, revokeAttachmentPreviews } from "../features/chat/attachments";
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
 import { clamp, applyTheme } from "../shared/preferences";
-import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, Plus, ArrowUp, ChevronLeft, ChevronDown, Download } from "lucide-react";
+import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, Plus, ArrowUp, ChevronDown, Download } from "lucide-react";
 import { formatDate } from "../shared/format";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { MessageBubble, MessageTimeline, GenerationStatus, ApprovalCard, AttachmentTray } from "../features/chat/components";
@@ -1613,7 +1613,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
     <main className={`codex-shell ${layoutClass} ${resizingPane ? "is-resizing" : ""}`} style={shellStyle}>
       <header className="topbar glass-surface">
         <button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="打开线程列表">
-          <ChevronLeft size={21} />
+          <Menu size={22} />
         </button>
         <div className="workspace-title">
           <span className={`status-dot ${connectionState === "error" ? "error" : connectionState === "ok" ? "ok" : ""}`} />
@@ -1902,7 +1902,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
       <aside className={`settings-sheet glass-surface ${settingsOpen ? "open" : ""}`} aria-label="设置">
         <div className="settings-heading">
           <div>
-            <h2>连接与外观</h2>
+            <h2>设置</h2>
             <p>{status}</p>
           </div>
           <button className="icon-button" onClick={() => setSettingsOpen(false)} aria-label="关闭设置">
