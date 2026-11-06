@@ -170,4 +170,4 @@ App内更新本轮交付核验通过：见 `docs/audits/2026-11-06/kelivo-update
 - [x] 真实浏览器窄屏、深色、大字号、连续执行与图片场景检查。
 - [x] 递增 preview 版本，完整 verify、Flutter 定向分析/测试、Android lint/单元/签名构建与对应源码归档。
 - [x] README、许可、发布目录 APK/校验信息；审查本项目既有改动及新增源码中的敏感配置，限定范围提交。
-- [ ] fetch 并核对全部未推送提交仅属本项目，正常推送 main 和 preview 标签，回下载核对 APK SHA；记录真实手机/在线网关边界。
+- [x] fetch 并核对全部未推送提交仅属本项目，正常推送 main 和 preview 标签，回下载核对 APK SHA；记录真实手机/在线网关边界。

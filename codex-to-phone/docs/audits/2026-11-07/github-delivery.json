@@ -1,0 +1,43 @@
+{
+  "status": "passed",
+  "date": "2026-11-07",
+  "sourceCommit": "a71e7f2f09edb5870abab0f2cd7df1808c8bb4d4",
+  "tag": "codex-to-phone-v0.1.5-native-preview",
+  "artifacts": [
+    {
+      "file": "mobile-codex-kelivo-0.1.5-preview-arm64.apk",
+      "bytes": 60977575,
+      "sha256": "2666d55e30205e60a4b64c23ba36d2fe4b01d9ecd96971fc50267bf1dfd2a316",
+      "matches": true,
+      "url": "https://raw.githubusercontent.com/luoz76070-art/project/a71e7f2f09edb5870abab0f2cd7df1808c8bb4d4/codex-to-phone/releases/android/kelivo-preview/0.1.5/mobile-codex-kelivo-0.1.5-preview-arm64.apk"
+    },
+    {
+      "file": "mobile-codex-kelivo-0.1.5-preview-source.tar.gz",
+      "bytes": 21687913,
+      "sha256": "d94bd7999e878cb6c2f1e00c0dbf3093263e1b74bd7c3c3b39d47175421b067c",
+      "matches": true,
+      "url": "https://raw.githubusercontent.com/luoz76070-art/project/a71e7f2f09edb5870abab0f2cd7df1808c8bb4d4/codex-to-phone/releases/android/kelivo-preview/0.1.5/mobile-codex-kelivo-0.1.5-preview-source.tar.gz"
+    },
+    {
+      "file": "mobile-codex-gateway-0.1.5-preview.tar.gz",
+      "bytes": 334806,
+      "sha256": "5bfe4c82b0f867bf7ea61cf2421078ca634c57cdc086d5e118a8b89622166550",
+      "matches": true,
+      "url": "https://raw.githubusercontent.com/luoz76070-art/project/a71e7f2f09edb5870abab0f2cd7df1808c8bb4d4/codex-to-phone/releases/android/kelivo-preview/0.1.5/mobile-codex-gateway-0.1.5-preview.tar.gz"
+    },
+    {
+      "file": "SHA256SUMS",
+      "bytes": 696,
+      "sha256": "966a2331fe89a354bd9dbed786d1efa35085ec34d861a5acb0b488279d2cd112",
+      "matches": true,
+      "url": "https://raw.githubusercontent.com/luoz76070-art/project/a71e7f2f09edb5870abab0f2cd7df1808c8bb4d4/codex-to-phone/releases/android/kelivo-preview/0.1.5/SHA256SUMS"
+    }
+  ],
+  "source": {
+    "commit": "a71e7f2f09edb5870abab0f2cd7df1808c8bb4d4",
+    "sourceFiles": 5917,
+    "archiveMatchesCommit": true
+  },
+  "download": "All bytes downloaded from GitHub; initial whole-file timeouts resumed via validated HTTP206 ranges.",
+  "remaining": "Phone code7 installation and actual project-image acceptance; live gateway and self-hosted update channel were not changed."
+}

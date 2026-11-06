@@ -1877,3 +1877,42 @@ APK29用户确认语音主流程通过；网关增加有限低权重短语，真
 ### Next Steps
 
 - 手机先手动覆盖code6一次，确认视觉和系统授权/安装；继续其余真机联动、原Desktop新建及59组完整对照，整组仍0/59，文稿清理搁置。
+
+
+## Session 56: Kelivo code7执行摘要、图片与GitHub交付
+<!-- trellis-session: v=2 fp=52eb77264b0c3d33 -->
+
+**Date**: 2026-11-07
+**Task**: Kelivo code7执行摘要、图片与GitHub交付
+**Package**: mobile
+**Branch**: `main`
+
+### Summary
+
+真机反馈修复，紧凑动态执行记录、Codex项目图片与统一渲染偏好；README与源码、APK和网关已推送，最终回下载校验单列。
+
+### Main Changes
+
+- 沿用整合基线，保留5052固定来源；同轮过程默认折叠、失败摘要、字号与工具偏好桥，新增鉴权项目图片与大图/重试。
+- 版本目录交付code7 APK60977575字节、5917源码文件归档和自包含网关；全部未推送提交仅属本项目，父仓库其他修改保留。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a71e7f2` | feat(codex-to-phone): deliver Kelivo preview with compact execution and images |
+
+### Testing
+
+- [OK] 完整verify入口8/手机161/后端407、Flutter产品11及Dart分析、原生340、完整Android lint0错误56/1警告，签名与5个Web文件一致。
+- [OK] 浏览器连续40执行、图片/大图/404重试、360/390/430、深色与150%字号通过；源码归档全部文件与Git提交匹配。
+
+### Status
+
+[OK] **Completed**
+
+- [OK] GitHub源码a71e7f2、annotated preview标签及APK/源码/网关/SHA清单全量回下载一致；公开回执docs/audits/2026-11-07/github-delivery.json。大包超时采用有界206续传，未改线上网关/自托管源。
+
+### Next Steps
+
+- 按docs/plans/2026-11-07-remote-rendering-device.md由用户决定启动真机覆盖与配套网关升级；在线网关和自托管更新源本轮保持。

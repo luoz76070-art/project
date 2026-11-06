@@ -45,3 +45,9 @@ Git沿现有 `luoz76070-art/project` 的main，仅提交 `codex-to-phone/`；开
 本轮未升级在线电脑网关、未更新自托管APK清单、未创建GitHub Release、未执行真实模型任务。新APK配旧网关不会具备本地取图能力，需按版本README升级配套网关。code7手机覆盖安装与真实图片联动仍待复测；全功能59组、最低系统/系统插件、其他Agent本地取图均不宣称已完成。
 
 复用了正式验证入口、原APK签名/安装机制、来源清单及对应源码脚本；版本目录与Git范围例外写入 `docs/ops/version-sync.md`。未新增自动化或通用skill。下一轮有明确验收步骤的接续见[手机复测计划](../../plans/2026-11-07-remote-rendering-device.md)。
+
+## GitHub最终交付结果
+
+已正常推送现有main及annotated预览标签，源码提交 `a71e7f2f09edb5870abab0f2cd7df1808c8bb4d4`，标签 `codex-to-phone-v0.1.5-native-preview` 展开值与之相同。所有5917个归档源码文件与该提交中的Git blob一致。APK、源码包、配套网关和SHA256SUMS均从GitHub完整回下载并与本地逐字节一致；精确大小/SHA见[公开交付回执](github-delivery.json)。
+
+大APK首次整文件下载出现超时，保留失败记录，随后使用已核实HTTP206的有界区间续传；所有区间校验后拼回60,977,575字节，最终SHA与APK一致。该结果不证明手机安装或真实取图已经通过。GitHub接受了58.15MiB APK，给出超过推荐50MiB的提示，未超过100MiB硬限制；没有配置LFS或改写历史。后续文档提交仅记录这次交付，版本标签保持指向上述源码提交。
