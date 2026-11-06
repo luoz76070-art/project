@@ -26,7 +26,7 @@ Kelivo 整合候选（2026-11-04，现有远控视觉试迁移已实施）：用
 
 ## Trellis 与当前优化
 
-本轮[电脑执行摘要与图片修复](audits/2026-11-07/remote-rendering.md)：code7 `0.1.5-native-preview`，默认折叠同轮执行、紧凑字号/偏好桥、Codex 项目图片鉴权加载与大图。README 和版本化 APK/对应源码/配套网关交付到现有 GitHub `project/codex-to-phone`；[版本目录](../releases/android/kelivo-preview/0.1.5/)。本轮不升级在线网关或自托管更新通道，真机 code7 覆盖与真实图片联动待验；旧记录保留其当时状态，整体59组对照继续未完成。
+本轮[电脑执行摘要与图片修复](audits/2026-11-07/remote-rendering.md)：code7 `0.1.5-native-preview`，默认折叠同轮执行、紧凑字号/偏好桥、Codex 项目图片鉴权加载与大图。README 和版本化 APK/对应源码/配套网关交付到现有 GitHub `project/codex-to-phone`；[版本目录](../releases/android/kelivo-preview/0.1.5/)。随后已[补发 App 内更新](audits/2026-11-07/app-update.md)，独立更新源 latest7 / previous6，code6 可从统一设置升级；在线网关仍未升级，真机 code7 覆盖与真实图片联动待验；旧记录保留其当时状态，整体59组对照继续未完成。
 
 
 最新[整合 App 内更新](audits/2026-11-06/kelivo-update.md)：code6 `0.1.4-native-preview` 增加统一设置“应用更新”，无需配对电脑，复用原 APK 下载/完整性/签名与安装恢复能力；绑定独立 kelivo-preview 源，整合热更新保持为空。code4/5需先手动覆盖一次，随后可在App内检查并安装后续版本。完整verify手机155/后端403/入口8、Flutter定向19、原生340与完整lint0错误（56/1警告）、浏览器五场景及成品核验通过。Android36实际code4→6覆盖、更新入口/硬件返回及重启后原双草稿恢复通过，手机系统授权/安装继续待验；对应源码与公网最终核验见审计。整体in_progress，59组0/59，原Desktop新建与其余真机联动未完成。

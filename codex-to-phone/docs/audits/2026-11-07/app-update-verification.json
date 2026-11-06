@@ -1,0 +1,93 @@
+{
+  "status": "passed",
+  "verifiedAt": "2026-11-06T23:10:22.271364+00:00",
+  "applicationId": "com.mobilecodex.kelivo.preview",
+  "manifest": {
+    "platform": "android",
+    "versionName": "0.1.5-native-preview",
+    "versionCode": 7,
+    "apkUrl": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/mobile-codex-0.1.5-native-preview-2666d55e3020.apk",
+    "size": 60977575,
+    "sha256": "2666d55e30205e60a4b64c23ba36d2fe4b01d9ecd96971fc50267bf1dfd2a316",
+    "mandatory": false,
+    "notes": "电脑页连续执行改为动态折叠摘要，点击展开；缩小代码与日志字体，跟随 Kelivo 聊天显示偏好。新增 Markdown 图片与大图查看，本地项目图片需配套新版电脑网关。预览版，手机覆盖安装与真实图片联动待复测。",
+    "publishedAt": "2026-11-06T23:06:26Z"
+  },
+  "appManifestParser": {
+    "status": "passed",
+    "source": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/latest.json",
+    "currentCode6GetsUpdate": true
+  },
+  "downloads": [
+    {
+      "url": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/mobile-codex-0.1.5-native-preview-2666d55e3020.apk",
+      "status": 200,
+      "bytes": 60977575,
+      "sha256": "2666d55e30205e60a4b64c23ba36d2fe4b01d9ecd96971fc50267bf1dfd2a316",
+      "byteIdentical": true,
+      "httpsVerified": true
+    },
+    {
+      "url": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/source/mobile-codex-kelivo-0.1.5-preview-source.tar.gz",
+      "status": 200,
+      "bytes": 21687913,
+      "sha256": "d94bd7999e878cb6c2f1e00c0dbf3093263e1b74bd7c3c3b39d47175421b067c",
+      "byteIdentical": true,
+      "httpsVerified": true
+    }
+  ],
+  "downloadPage": {
+    "url": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/index.html",
+    "status": 200,
+    "byteIdentical": true,
+    "sha256": "ca4d36774094f95d31b6364cc20e58b90be317567c83cd1c1d1616205d31f175"
+  },
+  "apkRangeStatus": 206,
+  "cors": "*",
+  "previousVersionCode": 6,
+  "previousSourceRetained": true,
+  "otherChannels": [
+    {
+      "channel": "android/latest.json",
+      "sha256": "d13c4441aca86dff17de1d7f66510f9901e14218173a3ea2fbe3c327d12c25b4",
+      "unchanged": true
+    },
+    {
+      "channel": "android/preview/latest.json",
+      "sha256": "4fe37b37110d221855279883336ac9c05350a56554f8a977e0239e5c0d91b225",
+      "unchanged": true
+    },
+    {
+      "channel": "android/preview/previous.json",
+      "sha256": "b6f64195cae89d2c0e94c982f851828e07b57fcce886572c35e273090bfc95a5",
+      "unchanged": true
+    },
+    {
+      "channel": "hot/latest.json",
+      "sha256": "fdaf8e394e46fe5030df9e59b7ce9e21f066971f6c88f07f8f68a00a9044b712",
+      "unchanged": true
+    }
+  ],
+  "localChecks": {
+    "command": "node --test scripts/test-release-publication.mjs scripts/test-apk-update.mjs",
+    "testsPassed": 10,
+    "nativeDownloadAssertions": 39
+  },
+  "sourceCommit": "a71e7f2f09edb5870abab0f2cd7df1808c8bb4d4",
+  "sourceTag": "codex-to-phone-v0.1.5-native-preview",
+  "deviceInstallation": "awaiting user",
+  "gatewayUpgrade": "not performed",
+  "realModelTasks": "not executed",
+  "previousManifestBytes": [
+    {
+      "url": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/previous.json",
+      "byteIdenticalToPrepublicationLatest": true,
+      "sha256": "2fd6aae204f5b5cc1b9cdbbfd92338e9f735a3d885cbff813d1a9ab2d6c7efc6"
+    },
+    {
+      "url": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/source/previous.json",
+      "byteIdenticalToPrepublicationLatest": true,
+      "sha256": "bf2cf66c1de160d917779bcf1ea5f86f22c0b00a05f21eb9fb5380f535ebfbc0"
+    }
+  ]
+}

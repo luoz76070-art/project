@@ -80,3 +80,7 @@ Kelivo SettingsProvider 继续拥有聊天字号与工具卡片/结果摘要偏�
 图片链路：Markdown → MessageImage → 当前连接/线程作用域 Provider → 原 apiPost/CapacitorHttp → POST /api/threads/:threadId/images → CodexStore.getThreadSummary 得到项目 cwd → 有界本机图片读取 → base64 JSON。请求复用设备鉴权，不在 URL 中放 token；路径 realpath 必须在会话 cwd 内，拒绝目录越界、符号链接逃逸、SVG/非图片及超过 8MiB 内容。只按需读取可见图片，切连接/会话取消并丢弃迟到结果，不持久化图片或凭证。远程 HTTPS 图片不带 Relay 凭证。
 
 修改限定 chat 展示模块/styles、App 的图片上下文、Relay 图片读取模块/路由、ProductShell/host 偏好桥及相关测试、版本与文档；不修改用户在线网关/模型，不重构通信或将 WebView file:// 作为取图捷径。
+
+## 2026-11-07 App 内更新补发
+
+复用现有独立 kelivo-preview 静态目录与原子上传脚本；先发布既有源码归档，再发布既有 APK 和清单，最后切换下载页。只修改静态发布文件，公网完整下载核验大小/SHA/字节、Range/CORS、previous 与原四通道；不重新构建、不移动既有标签。

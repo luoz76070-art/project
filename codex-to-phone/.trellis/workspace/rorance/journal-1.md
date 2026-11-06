@@ -1916,3 +1916,38 @@ APK29用户确认语音主流程通过；网关增加有限低权重短语，真
 ### Next Steps
 
 - 按docs/plans/2026-11-07-remote-rendering-device.md由用户决定启动真机覆盖与配套网关升级；在线网关和自托管更新源本轮保持。
+
+
+## Session 57: code7 App 内更新补发
+<!-- trellis-session: v=2 fp=075da73ce299c038 -->
+
+**Date**: 2026-11-07
+**Task**: code7 App 内更新补发
+**Package**: mobile
+**Branch**: `main`
+
+### Summary
+
+修复上一轮只上传GitHub导致App更新源仍code6的交付遗漏；独立源已补发code7。
+
+### Main Changes
+
+- 复用现有APK和对应源码原子发布，latest7/previous6，安装页同步；在线网关与原四通道保持。
+- README及工程入口同步；版本同步流程明确GitHub与App更新源同时完成。
+
+### Git Commits
+
+发布记录随本轮文档提交；对应产品源码提交见发布审计。
+
+### Testing
+
+- [OK] 公网APK60977575字节/源码21687913字节全量回下载，SHA和全部字节一致；Range206、CORS、previous及四旧清单不变通过。
+- [OK] 实际App清单解析识别6→7；更新/原子发布10项与原生下载39断言通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户从设置→应用更新安装code7；按既有真机计划安排网关升级与真实图片联动，不自动启动。

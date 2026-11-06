@@ -30,7 +30,7 @@ Mobile Codex 把 Kelivo 的 AI 客户端与 Codex To Phone 的电脑控制能力
 
 安装包约 58.2 MiB，包名为 `com.mobilecodex.kelivo.preview`，使用本地预览证书签名。它与原独立 Codex To Phone App 的包名不同。code6 使用者可直接覆盖安装；手机安装器会要求你确认。
 
-App 的「设置 → 应用更新」仍使用独立自托管通道。**本次 GitHub 提交不会同步更新该通道**；请使用上面的 GitHub APK 安装本版本。源码推送也不会自动升级你的电脑网关。
+App 的独立自托管更新源已同步 **0.1.5 / code7**。code6 使用者可打开「设置 → 应用更新 → 检查更新」，下载后按 Android 提示确认安装。code4/5 请先用上面的 APK 覆盖安装一次。更新包与对应源码的公网校验见[发布记录](docs/audits/2026-11-07/app-update.md)；电脑网关升级另按版本说明操作。
 
 ## 界面预览
 

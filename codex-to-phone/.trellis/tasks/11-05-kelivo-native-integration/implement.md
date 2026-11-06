@@ -171,3 +171,11 @@ App内更新本轮交付核验通过：见 `docs/audits/2026-11-06/kelivo-update
 - [x] 递增 preview 版本，完整 verify、Flutter 定向分析/测试、Android lint/单元/签名构建与对应源码归档。
 - [x] README、许可、发布目录 APK/校验信息；审查本项目既有改动及新增源码中的敏感配置，限定范围提交。
 - [x] fetch 并核对全部未推送提交仅属本项目，正常推送 main 和 preview 标签，回下载核对 APK SHA；记录真实手机/在线网关边界。
+
+## 2026-11-07 App 内更新补发
+
+- [x] 保存线上当前清单并核对 code6，核对本地 code7 APK/源码 SHA。
+- [x] 原子发布源码、APK、安装页，保留 code6 previous。
+- [x] 公网完整回下载及 App 清单解析、原四通道检查；补交付记录并推送现有 main。
+
+发布核验见 `docs/audits/2026-11-07/app-update.md` 与公开回执；整体整合任务仍 in_progress，真机覆盖/图片联动及59组完整对照待验。
