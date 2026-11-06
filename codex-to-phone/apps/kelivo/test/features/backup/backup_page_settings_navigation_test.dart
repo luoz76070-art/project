@@ -1,0 +1,471 @@
+import '../../support/business_test_harness.dart';
+
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+
+import 'package:Kelivo/core/database/business_preferences.dart';
+import 'package:Kelivo/core/models/backup.dart';
+import 'package:Kelivo/shared/widgets/ios_switch.dart';
+import 'package:Kelivo/core/database/business_repository.dart';
+import 'package:Kelivo/core/providers/backup_provider.dart';
+import 'package:Kelivo/core/providers/backup_reminder_provider.dart';
+import 'package:Kelivo/core/providers/local_snapshot_provider.dart';
+import 'package:Kelivo/core/providers/s3_backup_provider.dart';
+import 'package:Kelivo/core/providers/settings_provider.dart';
+import 'package:Kelivo/core/services/chat/chat_service.dart';
+import 'package:Kelivo/desktop/setting/backup_pane.dart';
+import 'package:Kelivo/features/backup/pages/backup_page.dart';
+import 'package:Kelivo/l10n/app_localizations.dart';
+
+Future<BackupReminderProvider> _createReminderProvider(
+  BusinessPreferences preferences,
+) async {
+  final provider = BackupReminderProvider(
+    preferences: preferences,
+    autoLoad: false,
+  );
+  await provider.load(startTimer: false);
+  return provider;
+}
+
+Widget _buildHarness({
+  required SettingsProvider settings,
+  required BackupReminderProvider reminder,
+  required BusinessRepository businessRepository,
+  required BusinessPreferences businessPreferences,
+}) {
+  return MultiProvider(
+    providers: [
+      Provider<BusinessRepository>.value(value: businessRepository),
+      Provider<BusinessPreferences>.value(value: businessPreferences),
+      ChangeNotifierProvider<SettingsProvider>.value(value: settings),
+      ChangeNotifierProvider<ChatService>(create: (_) => ChatService()),
+      ChangeNotifierProvider<BackupReminderProvider>.value(value: reminder),
+      ChangeNotifierProvider<LocalSnapshotProvider>(
+        create: (context) => LocalSnapshotProvider(
+          appDataDirectory: Directory.systemTemp.createTempSync(
+            'kelivo_backup_page_',
+          ),
+          chatService: context.read<ChatService>(),
+          businessRepository: businessRepository,
+          businessPreferences: businessPreferences,
+          autoLoad: false,
+        ),
+      ),
+    ],
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const BackupPage(),
+    ),
+  );
+}
+
+Widget _buildDesktopHarness({
+  required SettingsProvider settings,
+  required BackupReminderProvider reminder,
+  required BusinessRepository businessRepository,
+  required BusinessPreferences businessPreferences,
+}) {
+  final chatService = ChatService();
+
+  return MultiProvider(
+    providers: [
+      Provider<BusinessRepository>.value(value: businessRepository),
+      Provider<BusinessPreferences>.value(value: businessPreferences),
+      ChangeNotifierProvider<SettingsProvider>.value(value: settings),
+      ChangeNotifierProvider<ChatService>.value(value: chatService),
+      ChangeNotifierProvider<BackupReminderProvider>.value(value: reminder),
+      ChangeNotifierProvider<LocalSnapshotProvider>(
+        create: (context) => LocalSnapshotProvider(
+          appDataDirectory: Directory.systemTemp.createTempSync(
+            'kelivo_backup_page_',
+          ),
+          chatService: context.read<ChatService>(),
+          businessRepository: businessRepository,
+          businessPreferences: businessPreferences,
+          autoLoad: false,
+        ),
+      ),
+      ChangeNotifierProvider<BackupProvider>(
+        create: (_) => BackupProvider(
+          chatService: chatService,
+          businessRepository: businessRepository,
+          businessPreferences: businessPreferences,
+          initialConfig: settings.webDavConfig,
+        ),
+      ),
+      ChangeNotifierProvider<S3BackupProvider>(
+        create: (_) => S3BackupProvider(
+          chatService: chatService,
+          businessRepository: businessRepository,
+          businessPreferences: businessPreferences,
+          initialConfig: settings.s3Config,
+        ),
+      ),
+    ],
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const Scaffold(body: DesktopBackupPane()),
+    ),
+  );
+}
+
+Future<void> _pumpBackupPage(
+  WidgetTester tester, {
+  required SettingsProvider settings,
+  required BusinessTestHarness business,
+}) async {
+  final reminder = await _createReminderProvider(business.preferences);
+
+  await tester.pumpWidget(
+    _buildHarness(
+      settings: settings,
+      reminder: reminder,
+      businessRepository: business.repository,
+      businessPreferences: business.preferences,
+    ),
+  );
+  await tester.pump();
+}
+
+Future<void> _pumpDesktopBackupPane(
+  WidgetTester tester, {
+  required SettingsProvider settings,
+  required BusinessTestHarness business,
+}) async {
+  final reminder = await _createReminderProvider(business.preferences);
+
+  await tester.pumpWidget(
+    _buildDesktopHarness(
+      settings: settings,
+      reminder: reminder,
+      businessRepository: business.repository,
+      businessPreferences: business.preferences,
+    ),
+  );
+  await tester.pump();
+}
+
+Future<void> _openSettingsPage(WidgetTester tester, String label) async {
+  final target = find.text(label);
+  await tester.scrollUntilVisible(
+    target,
+    120,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(target);
+  await tester.pumpAndSettle();
+}
+
+void _expectAbove(WidgetTester tester, String upper, String lower) {
+  final upperTop = tester.getTopLeft(find.text(upper).first).dy;
+  final lowerTop = tester.getTopLeft(find.text(lower).first).dy;
+
+  expect(upperTop, lessThan(lowerTop));
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final desktop in [false, true]) {
+    testWidgets(
+      '${desktop ? 'desktop' : 'mobile'} keeps encryption enabled after leaving and reopening the page',
+      (tester) async {
+        await tester.binding.setSurfaceSize(
+          desktop ? const Size(1100, 800) : const Size(390, 844),
+        );
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final business = await createBusinessTestHarness();
+        final settings = SettingsProvider(business.preferences);
+        addTearDown(settings.dispose);
+        await settings.loaded;
+        Future<void> openPage() => desktop
+            ? _pumpDesktopBackupPane(
+                tester,
+                settings: settings,
+                business: business,
+              )
+            : _pumpBackupPage(tester, settings: settings, business: business);
+        await openPage();
+        final control = find.byKey(const ValueKey('backup-encryption-switch'));
+        await tester.ensureVisible(control);
+        await tester.tap(control);
+        await tester.pumpAndSettle();
+        for (final key in ['backup-password', 'backup-password-confirmation']) {
+          await tester.enterText(
+            find.descendant(
+              of: find.byKey(ValueKey(key)),
+              matching: find.byType(TextField),
+            ),
+            'session password',
+          );
+        }
+        await tester.pump();
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+        expect(settings.backupEncryptionEnabled, isTrue);
+        expect(tester.widget<IosSwitch>(control).value, isTrue);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await openPage();
+        await tester.ensureVisible(control);
+        expect(tester.widget<IosSwitch>(control).value, isTrue);
+        expect(
+          await settings.resolveBackupEncryptionPassword(() async {
+            fail('Reopening the page must reuse the session password.');
+          }),
+          'session password',
+        );
+        expect(
+          business.preferences.getBool('backup_encryption_enabled_v1'),
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets(
+      '${desktop ? 'desktop' : 'mobile'} saves category switches to both backup providers',
+      (tester) async {
+        await tester.binding.setSurfaceSize(
+          desktop ? const Size(1100, 800) : const Size(390, 844),
+        );
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final business = await createBusinessTestHarness();
+        final settings = SettingsProvider(business.preferences);
+        await settings.loaded;
+        if (desktop) {
+          await _pumpDesktopBackupPane(
+            tester,
+            settings: settings,
+            business: business,
+          );
+        } else {
+          await _pumpBackupPage(tester, settings: settings, business: business);
+        }
+        expect(find.text('Export to File').hitTestable(), findsOneWidget);
+        expect(find.text('Import Backup File').hitTestable(), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('backup-scope-providers')),
+          findsNothing,
+        );
+        final picker = find.byKey(const ValueKey('backup-scope-picker'));
+        expect(find.text('15/15'), findsOneWidget);
+        expect(tester.getSize(picker).height, lessThanOrEqualTo(48));
+        expect(
+          tester.getCenter(find.text('15/15')).dy,
+          tester.getCenter(find.text('Backup and import content')).dy,
+        );
+        await tester.tap(picker);
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(BottomSheet),
+          desktop ? findsNothing : findsOneWidget,
+        );
+        expect(find.byType(Dialog), desktop ? findsOneWidget : findsNothing);
+        for (final category in BackupCategory.values) {
+          expect(
+            tester
+                .widget<IosSwitch>(
+                  find.byKey(ValueKey('backup-scope-${category.name}')),
+                )
+                .value,
+            isTrue,
+          );
+        }
+        for (final category in [
+          BackupCategory.providers,
+          BackupCategory.files,
+          BackupCategory.environmentVariables,
+        ]) {
+          final control = find.byKey(ValueKey('backup-scope-${category.name}'));
+          await tester.ensureVisible(control);
+          await tester.pumpAndSettle();
+          await tester.tap(control);
+          await tester.pumpAndSettle();
+          expect(settings.webDavConfig.scope.includes(category), isTrue);
+        }
+        // Saving stays reachable even after scrolling to the final category.
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('backup-scope-settings')),
+        );
+        await tester.pumpAndSettle();
+        final save = find.byKey(const ValueKey('backup-scope-save'));
+        expect(save.hitTestable(), findsOneWidget);
+        await tester.tap(save);
+        await tester.pumpAndSettle();
+        expect(find.text('12/15'), findsOneWidget);
+        for (final category in [
+          BackupCategory.providers,
+          BackupCategory.files,
+          BackupCategory.environmentVariables,
+        ]) {
+          expect(settings.webDavConfig.scope.includes(category), isFalse);
+          expect(settings.s3Config.scope.includes(category), isFalse);
+        }
+        await tester.tap(find.byKey(const ValueKey('backup-scope-picker')));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<IosSwitch>(
+                find.byKey(const ValueKey('backup-scope-providers')),
+              )
+              .value,
+          isFalse,
+        );
+        await tester.tap(find.text('Deselect all'));
+        await tester.pumpAndSettle();
+        for (final category in BackupCategory.values) {
+          expect(
+            tester
+                .widget<IosSwitch>(
+                  find.byKey(ValueKey('backup-scope-${category.name}')),
+                )
+                .value,
+            isFalse,
+          );
+        }
+        await tester.tap(find.text('Select all'));
+        await tester.pumpAndSettle();
+        for (final category in BackupCategory.values) {
+          expect(
+            tester
+                .widget<IosSwitch>(
+                  find.byKey(ValueKey('backup-scope-${category.name}')),
+                )
+                .value,
+            isTrue,
+          );
+        }
+        await tester.tap(find.byKey(const ValueKey('backup-scope-cancel')));
+        await tester.pumpAndSettle();
+        expect(find.text('12/15'), findsOneWidget);
+        expect(
+          settings.webDavConfig.scope.includes(BackupCategory.skills),
+          isTrue,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        final reloaded = SettingsProvider(business.preferences);
+        await reloaded.loaded;
+        expect(
+          reloaded.webDavConfig.scope.excluded,
+          settings.webDavConfig.scope.excluded,
+        );
+        expect(
+          reloaded.s3Config.scope.excluded,
+          settings.webDavConfig.scope.excluded,
+        );
+      },
+    );
+  }
+
+  group('BackupPage mobile backup settings navigation', () {
+    testWidgets('opens WebDAV settings as a full page and saves config', (
+      tester,
+    ) async {
+      final business = await createBusinessTestHarness();
+      final settings = SettingsProvider(business.preferences);
+      await settings.loaded;
+
+      await _pumpBackupPage(tester, settings: settings, business: business);
+
+      await _openSettingsPage(tester, 'WebDAV Server Settings');
+
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.widgetWithText(AppBar, 'WebDAV Server Settings'), findsOne);
+      expect(find.text('WebDAV Server URL'), findsOneWidget);
+      expect(find.text('User-Agent'), findsOneWidget);
+
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.at(0), ' https://dav.example.com/root ');
+      await tester.enterText(fields.at(4), ' KelivoTest/1.0 ');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(AppBar, 'WebDAV Server Settings'),
+        findsNothing,
+      );
+      expect(settings.webDavConfig.url, 'https://dav.example.com/root');
+      expect(settings.webDavConfig.userAgent, 'KelivoTest/1.0');
+    });
+
+    testWidgets('shows local backup before WebDAV and S3 backup sections', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(900, 2400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final business = await createBusinessTestHarness();
+      final settings = SettingsProvider(business.preferences);
+      await settings.loaded;
+
+      await _pumpBackupPage(tester, settings: settings, business: business);
+
+      expect(find.text('Backup Reminder'), findsOneWidget);
+      expect(find.text('Local Backup'), findsOneWidget);
+      expect(find.text('WebDAV Backup'), findsOneWidget);
+      expect(find.text('S3 Backup'), findsOneWidget);
+      _expectAbove(tester, 'Local Backup', 'Backup Reminder');
+      _expectAbove(tester, 'Local Backup', 'WebDAV Backup');
+      _expectAbove(tester, 'WebDAV Backup', 'S3 Backup');
+    });
+
+    testWidgets('opens S3 settings as a full page and saves config', (
+      tester,
+    ) async {
+      final business = await createBusinessTestHarness();
+      final settings = SettingsProvider(business.preferences);
+      await settings.loaded;
+
+      await _pumpBackupPage(tester, settings: settings, business: business);
+
+      await _openSettingsPage(tester, 'S3 Settings');
+
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.widgetWithText(AppBar, 'S3 Settings'), findsOne);
+      expect(find.text('Endpoint'), findsOneWidget);
+      expect(find.text('User-Agent'), findsOneWidget);
+
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.at(0), ' https://s3.example.com ');
+      await tester.enterText(fields.at(7), ' KelivoS3/1.0 ');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(AppBar, 'S3 Settings'), findsNothing);
+      expect(settings.s3Config.endpoint, 'https://s3.example.com');
+      expect(settings.s3Config.userAgent, 'KelivoS3/1.0');
+    });
+
+    testWidgets('desktop shows local backup before WebDAV and S3 sections', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1100, 2600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final business = await createBusinessTestHarness();
+      final settings = SettingsProvider(business.preferences);
+      await settings.loaded;
+
+      await _pumpDesktopBackupPane(
+        tester,
+        settings: settings,
+        business: business,
+      );
+
+      expect(find.text('Backup Reminder'), findsOneWidget);
+      expect(find.text('Local Backup'), findsOneWidget);
+      expect(find.text('WebDAV Server Settings'), findsOneWidget);
+      expect(find.text('S3 Settings'), findsOneWidget);
+      _expectAbove(tester, 'Local Backup', 'Backup Reminder');
+      _expectAbove(tester, 'Local Backup', 'WebDAV Server Settings');
+      _expectAbove(tester, 'WebDAV Server Settings', 'S3 Settings');
+    });
+  });
+}

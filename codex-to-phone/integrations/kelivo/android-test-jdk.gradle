@@ -1,0 +1,17 @@
+// Keep Gradle/lint on JDK17; Robolectric's API36 sandbox needs JDK21+.
+if (gradle.parent != null) return
+
+def testJavaHome = System.getenv('MOBILE_CODEX_TEST_JAVA_HOME')
+if (!testJavaHome || !new File(testJavaHome, 'bin/java').isFile()) {
+    throw new GradleException('Set MOBILE_CODEX_TEST_JAVA_HOME to a JDK21+ installation')
+}
+
+allprojects {
+    tasks.withType(Test).configureEach {
+        executable = new File(testJavaHome, 'bin/java').absolutePath
+        if (providers.gradleProperty('kelivoRerunTests').orNull == 'true') outputs.upToDateWhen { false }
+        maxHeapSize = '2g'
+        maxParallelForks = 1
+        testLogging.exceptionFormat = 'full'
+    }
+}

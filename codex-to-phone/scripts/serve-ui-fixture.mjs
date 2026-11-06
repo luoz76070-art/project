@@ -6,21 +6,27 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ordinaryPrompts, contextEnvelopes } from './fixtures/user-prompts.mjs';
 
-const dist = fileURLToPath(new URL('../apps/mobile/dist/', import.meta.url));
+const dist = process.env.UI_FIXTURE_DIST ? path.resolve(process.env.UI_FIXTURE_DIST) : fileURLToPath(new URL('../apps/mobile/dist/', import.meta.url));
 const hotBundle = process.env.UI_FIXTURE_HOT_BUNDLE;
 const streams = new Set();
 const streamRoutes = new Map();
 const notifications = new Map();
 const counters = {};
 const clipboardFixture = { text: '', writes: 0, fail: false };
+const uploadFixture = { fail: false, delay: 0 };
+const imageFixture = { fail: false, delay: 0 };
 const diagnosticFixture = { gateway: 'ok', nativeVersionCode: null, activeVersion: '', pendingVersion: '', fileMode: 'saved', saves: 0, text: '' };
 const voiceFixture = { region: 'cn', workspace: '', qwenConfigured: true, deepseekConfigured: true, deepseekBaseUrl: 'https://api.deepseek.com', qwenBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', asrModel: 'qwen-audio-3.1-asr-flash', promptModel: 'deepseek-v4-flash', denied: false, failRefine: false, delay: 0, transcriptions: 0, refinements: 0, cancellations: 0 };
 let offline = false;
 const fixtureAppConfig = await fs.readFile(new URL('../apps/mobile/src/app/config.ts', import.meta.url), 'utf8');
-const nativeVersionCode = Number(fixtureAppConfig.match(/export const appVersionCode = (\d+);/u)?.[1]);
+const fixtureProductConfig = await fs.readFile(new URL('../apps/mobile/src/features/product/identity.ts', import.meta.url), 'utf8');
+const nativeVersionCode = Number(process.env.UI_FIXTURE_PRODUCT === '1'
+  ? fixtureProductConfig.match(/export const productVersionCode = (\d+);/u)?.[1]
+  : fixtureAppConfig.match(/export const appVersionCode = (\d+);/u)?.[1]);
 if (!Number.isSafeInteger(nativeVersionCode) || nativeVersionCode < 1) throw new Error('Fixture app version is missing');
 let apkState = { supported: true, revision: 0, phase: 'idle', receivedBytes: 0, totalBytes: 8388608, versionCode: nativeVersionCode + 1, versionName: `${nativeVersionCode + 1}-ui-fixture`, nativeVersionCode, canInstall: false, error: '' };
 const apkCounters = { downloads: 0, installs: 0 };
+let apkManifestMode = 'available';
 const states = new Map(['A', 'B'].map(name => [name, {
   userInputs: [], approvals: [], cursor: 100, generation: `fixture-${name}`, turnStatus: 'completed', activity: undefined, messages: [
     { id: `${name}-user`, role: 'user', text: `检查 ${name} 连接的实时消息和历史记录`, kind: 'user_message', timestamp: '2026-10-20T09:00:00Z' },
@@ -54,6 +60,28 @@ function confirmNative(state) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/fixture/images') {
+      if (url.searchParams.has('fail')) imageFixture.fail = url.searchParams.get('fail') === '1';
+      if (url.searchParams.has('delay')) imageFixture.delay = Math.min(10000, Number(url.searchParams.get('delay')) || 0);
+      return json(res, imageFixture);
+    }
+    if (url.pathname === '/fixture/rendering') {
+      const state = states.get('A'), complete = url.searchParams.get('phase') === 'completed';
+      const count = Math.max(1, Math.min(80, Number(url.searchParams.get('count') ?? 20)));
+      const message = (id, role, text, kind, phase) => ({ id, role, text, kind, phase, turnId: 'rendering-turn', timestamp: '2026-11-07T00:00:00Z' });
+      state.messages = [message('render-user', 'user', '检查电脑页的执行记录和图片展示', 'userMessage'),
+        message('render-commentary', 'assistant', '正在检查项目，执行明细可按需展开。', 'agentMessage', 'commentary'),
+        ...Array.from({ length: count }, (_, i) => message(`render-tool-${i}`, 'tool', `Command: rg check-${i + 1}\nOutput:\nsynthetic result ${i + 1}`, 'commandExecution'))];
+      if (complete) state.messages.push(message('render-final', 'assistant', '检查完成，图片与代码如下。\n\n![合成验收截图](/workspace/codex-to-phone/output/rendering-chart.png)\n\n```ts\nconst connected = true;\nconst imageReady = true;\n```', 'agentMessage', 'final_answer'));
+      state.turnStatus = complete ? 'completed' : 'inProgress'; state.activity = complete ? undefined : 'working'; state.cursor++;
+      for (const notify of notifications.values()) notify();
+      return json(res, { ok: true, count, complete });
+    }
+    if (url.pathname === '/fixture/upload') {
+      if (url.searchParams.has('fail')) uploadFixture.fail = url.searchParams.get('fail') === '1';
+      if (url.searchParams.has('delay')) uploadFixture.delay = Math.min(10000, Number(url.searchParams.get('delay')) || 0);
+      return json(res, uploadFixture);
+    }
     if (url.pathname === '/fixture/cache-storage.js') {
       res.writeHead(200, { 'content-type': 'text/javascript' });
       res.end(await fs.readFile(new URL('./fixtures/cache-storage.js', import.meta.url))); return;
@@ -116,18 +144,23 @@ const server = http.createServer(async (req, res) => {
         return voiceFixture.failRefine ? json(res, { error: 'voice_refine_unavailable' }, 502) : json(res, { text: '目标：分析手机会话按项目分组的方案。\n范围：Codex 和 DeepSeek，版本 APK26。\n约束：暂时不要执行或发布。' });
       }
     }
+    if (url.pathname === '/fixture/product-host.js') {
+      res.writeHead(200, { 'content-type': 'text/javascript' });
+      res.end(await fs.readFile(new URL('./fixtures/product-host.js', import.meta.url))); return;
+    }
     if (url.pathname === '/fixture/apk-native.js') {
       res.writeHead(200, { 'content-type': 'text/javascript' });
       res.end(await fs.readFile(new URL('./fixtures/apk-native.js', import.meta.url))); return;
     }
     if (url.pathname === '/fixture/apk') {
+      if (url.searchParams.has('manifest')) apkManifestMode = url.searchParams.get('manifest');
       const action = url.searchParams.get('action');
       const phase = url.searchParams.get('phase');
       if (action === 'download') { apkCounters.downloads++; apkState = { ...apkState, revision: apkState.revision + 1, phase: 'downloading', receivedBytes: 0, error: '' }; }
       if (action === 'install') { apkCounters.installs++; apkState = { ...apkState, revision: apkState.revision + 1, phase: apkState.canInstall ? 'awaiting_install' : 'permission_required', error: '' }; }
       if (phase) apkState = { ...apkState, revision: apkState.revision + 1, phase, receivedBytes: Number(url.searchParams.get('bytes')) || apkState.receivedBytes,
         canInstall: url.searchParams.get('allowed') === '1', error: url.searchParams.get('error') || '' };
-      return json(res, { ...apkState, counters: apkCounters });
+      return json(res, { ...apkState, manifestMode: apkManifestMode, counters: apkCounters });
     }
     if (url.pathname === '/fixture/counters') return json(res, { ...counters, activeStreams: [...streamRoutes.values()] });
     if (url.pathname === '/fixture/prompt-visibility') {
@@ -359,6 +392,15 @@ const server = http.createServer(async (req, res) => {
       counters[`${name}:${route}`] = (counters[`${name}:${route}`] ?? 0) + 1;
       if (offline) return json(res, { error: 'fixture_offline' }, 503);
       if (!route.endsWith('/events') && req.headers.authorization !== 'Bearer fixture-only') return json(res, { error: 'unauthorized' }, 401);
+      if (/^\/api\/threads\/[^/]+\/images$/u.test(route) && req.method === 'POST') {
+        let body = ''; for await (const chunk of req) body += chunk;
+        const input = JSON.parse(body);
+        if (imageFixture.delay) await new Promise(resolve => setTimeout(resolve, imageFixture.delay));
+        if (imageFixture.fail) return json(res, { error: 'image_not_found' }, 404);
+        if (!String(input.path).endsWith('/rendering-chart.png')) return json(res, { error: 'image_not_found' }, 404);
+        const image = await fs.readFile(new URL('./fixtures/rendering-chart.png', import.meta.url));
+        return json(res, { mimeType: 'image/png', size: image.length, dataUrl: `data:image/png;base64,${image.toString('base64')}` });
+      }
       if (route === '/api/threads' || route === '/api/live/threads') {
         const all = Array.from({ length: state.projects ? 160 : 145 }, (_, index) => {
           const row = index ? { ...thread(name), id: `fixture-${index}`, threadName: `${name} 会话 ${String(index).padStart(3, '0')}` } : thread(name);
@@ -376,6 +418,9 @@ const server = http.createServer(async (req, res) => {
       if (route === '/api/desktop/active') return json(res, { thread: state.background ? { ...thread(name), id: 'different-foreground-thread' } : thread(name), source: 'ipc-stream' });
       if (route === '/api/connection') return json(res, { ok: true });
       if (route === '/api/uploads' && req.method === 'POST') {
+        counters.uploadAttempts = (counters.uploadAttempts ?? 0) + 1;
+        if (uploadFixture.delay) await new Promise(resolve => setTimeout(resolve, uploadFixture.delay));
+        if (uploadFixture.fail) return json(res, { error: 'synthetic_upload_failure' }, 500);
         let body = ''; for await (const chunk of req) body += chunk;
         const input = JSON.parse(body);
         counters.uploads = (counters.uploads ?? 0) + 1;
@@ -481,6 +526,7 @@ const server = http.createServer(async (req, res) => {
           counters.queueSubmissions = (counters.queueSubmissions ?? 0) + 1;
           for (const notify of notifications.values()) notify();
           if (state.nativeReplyDelay) await new Promise(resolve => setTimeout(resolve, state.nativeReplyDelay));
+          if (state.nativeBehavior === 'queue-http-error') return json(res, { error: 'synthetic_lost_queue_receipt' }, 502);
           return json(res, { ok: true, mode: 'desktop-ipc-follower-control', action: 'queue-message', delivery: 'confirmed', thread: thread(name) });
         }
         const action = interrupt ? 'interrupt-turn' : state.control.activeTurnId ? 'steer-turn' : 'start-turn';
@@ -541,7 +587,8 @@ const server = http.createServer(async (req, res) => {
       content = content.toString().replace('<head>', `<head>${bootstrap}`);
       if (url.searchParams.get('cacheFixture') === '1') content = content.replace('</head>', '<script src="/fixture/cache-storage.js"></script></head>');
       if (url.searchParams.get('diagnosticsFixture') === '1') content = content.replace('</head>', '<meta name="mobile-codex-hot-bundle" content="fixture-loaded-old"></head>');
-      if (url.searchParams.get('apkFixture') === '1' || url.searchParams.get('voiceFixture') === '1') content = content.replace('</head>', '<script src="/fixture/apk-native.js"></script></head>');
+      if (url.searchParams.get('apkFixture') === '1' || url.searchParams.get('voiceFixture') === '1' || url.searchParams.get('productFixture') === '1') content = content.replace('</head>', '<script src="/fixture/apk-native.js"></script></head>');
+      if (url.searchParams.get('productFixture') === '1') content = content.replace('</head>', '<script src="/fixture/product-host.js"></script></head>');
       if (url.searchParams.get('textScale') === '150') content = content.replace('</head>', '<style>html { font-size: 150%; }</style></head>');
     }
     res.writeHead(200, { 'content-type': extension === '.js' ? 'text/javascript' : extension === '.css' ? 'text/css' : 'text/html' });

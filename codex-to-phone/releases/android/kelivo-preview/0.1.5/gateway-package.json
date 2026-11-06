@@ -1,0 +1,36 @@
+{
+  "version": "0.1.5-preview",
+  "gatewayBundleSha256": "a96929560c60980b51a2fe8253b3c4b3209b0594a6311414416de04f9eec4944",
+  "sourceArchive": "mobile-codex-kelivo-0.1.5-preview-source.tar.gz",
+  "sourceSha256": "d94bd7999e878cb6c2f1e00c0dbf3093263e1b74bd7c3c3b39d47175421b067c",
+  "files": [
+    {
+      "file": "LICENSE",
+      "sha256": "2772c31a36d374710eba71f94e771ab1368cc39902d0160987aece6d89741efd"
+    },
+    {
+      "file": "README.md",
+      "sha256": "cc7cd7ca98061ad46d8b1a512991762702969aa7126c5a5a3e51243405e32ac6"
+    },
+    {
+      "file": "lib/gateway.mjs",
+      "sha256": "a96929560c60980b51a2fe8253b3c4b3209b0594a6311414416de04f9eec4944"
+    },
+    {
+      "file": "plugin.json",
+      "sha256": "a2f001b96505136cdf27d1ce611a965037f044948fb767cb075c92fc7bdd6bb4"
+    },
+    {
+      "file": "scripts/mobile-codex.mjs",
+      "sha256": "07f3f1c040411b4b56b4253f54607cc207ff3f2f9b0fba6b6045febf6f1ce996"
+    },
+    {
+      "file": "skills/mobile-codex/SKILL.md",
+      "sha256": "e7c93c164b718a1030cecd7e895f480c14ce068d1d3ae978df954a8f05c6fcd6"
+    }
+  ],
+  "archive": "mobile-codex-gateway-0.1.5-preview.tar.gz",
+  "bytes": 334806,
+  "sha256": "5bfe4c82b0f867bf7ea61cf2421078ca634c57cdc086d5e118a8b89622166550",
+  "helpVerified": true
+}

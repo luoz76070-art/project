@@ -1,0 +1,1 @@
+-keep @com.getcapacitor.annotation.CapacitorPlugin class * { *; }

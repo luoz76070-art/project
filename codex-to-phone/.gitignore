@@ -30,6 +30,8 @@ apps/mobile/android/build/
 apps/mobile/android/**/build/
 apps/mobile/android/app/src/main/assets/public/
 *.apk
+# User-requested versioned Android preview delivery; other APKs remain ignored.
+!releases/android/kelivo-preview/**/*.apk
 *.exe
 *.app/
 *.zip

@@ -1,0 +1,15 @@
+Mobile Codex / Codex To Phone integration preview, modified 2026-11-07.
+
+The Android integration includes Kelivo v1.3.4 from
+https://github.com/Chevey339/kelivo, commit
+4a7da9b6f5d77caccb9f8aaf656232a93ab14708.
+Its copyright notices and GNU AGPL v3 license remain in apps/kelivo/LICENSE.
+The combined Android program is distributed under those AGPL terms.
+Original Codex To Phone source retains the MIT notice in the root LICENSE.
+Third-party components retain their original licenses and notices.
+
+Integration modifications include independent Android identity and navigation,
+appearance/state persistence, optional user-confirmed handoff, APK updates,
+compact execution rendering, authenticated project images and compatibility fixes.
+Source provenance and fixed tool versions are recorded in integrations/kelivo.
+Versioned APKs include corresponding source archives and SHA256 manifests.

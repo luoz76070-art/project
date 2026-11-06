@@ -22,7 +22,7 @@
 
 APK32紧凑footer需比较同viewport、同运行/草稿状态的前后高度；空草稿不渲染禁用双按钮，有文本或附件才显示原steer/queue直接动作。检查折叠队列数量、暂停/未知摘要、展开全文/取消、快捷键默认queue及停止保留草稿。`/fixture/native?active=1&queueStatus=waiting|paused|sending|uncertain`提供3条合成待发；测量命中时排除关闭的原生details隐藏子项，不能仅凭getBoundingClientRect非零算可见。原生fixture凭证位于sessionStorage，另开tab没有它，不能将其401视为真实手机连接证据。
 
-过程折叠回归覆盖commentary运行展开、明确final_answer流开始自动收起、手动重开后更新稳定、新任务重新展开、中断无终稿仍展开、跨用户边界与已知turn引导、未知phase保持正文和附件/原文不变；从真实messagesForRender入口断言已知工具保留且未知工具不误入组。fixture的`/fixture/process?phase=working|final|completed|next|interrupted|legacy|steering&agent=deepseek`只操作合成消息。DeepSeek在final流仍commentary，completed才提升；同ID更新必须改变分组，不重复最终正文。浏览器核对44px按钮的aria-expanded/aria-controls、终稿始终在过程区外、复制入口、深色/150%字号、三种窄屏及周边按钮命中；DeepSeek未知阶段旧正文和完整权限卡始终独立。麦克风/引导/排队/停止及允许/拒绝须检查中心与四边命中，点击麦克风只打开语音面板。不得把合成显示或复制反馈当Android原生验收。
+过程折叠回归覆盖commentary运行默认收起为动态摘要、点击展开、明确final_answer流开始自动收起、手动重开后更新稳定、新任务默认收起、中断无终稿停止运行提示但保留展开入口、跨用户边界与已知turn引导、未知phase保持正文和附件/原文不变；从真实messagesForRender入口断言已知工具保留且未知工具不误入组。fixture的`/fixture/process?phase=working|final|completed|next|interrupted|legacy|steering&agent=deepseek`只操作合成消息。DeepSeek在final流仍commentary，completed才提升；同ID更新必须改变分组，不重复最终正文。浏览器核对44px按钮的aria-expanded/aria-controls、终稿始终在过程区外、复制入口、深色/150%字号、三种窄屏及周边按钮命中；DeepSeek未知阶段旧正文和完整权限卡始终独立。麦克风/引导/排队/停止及允许/拒绝须检查中心与四边命中，点击麦克风只打开语音面板。不得把合成显示或复制反馈当Android原生验收。
 
 引导去重回归覆盖native accepted记录与rollout同turn相差33秒、双向到达、同ID旧缓存补齐、HTTP占位迟到、重复快照/重开、附件、同turn重复同文以及不同turn隔离；sourceItemId不同的用户同文/同时间必须保留。原始历史没有客户端提交ID时不能伪造；来源数量不等不猜缺页对应，正文内部空白不同不匹配。缓存0/1/2迁到身份版本3时保留草稿与待确认本地输入，新缓存继续支持离线。fixture的`/fixture/mirrored-steering?phase=native|history|repeat`只生成合成消息；浏览器核对单次为1、真正两次为2，不作为新版已上线或真机已验的依据。
 

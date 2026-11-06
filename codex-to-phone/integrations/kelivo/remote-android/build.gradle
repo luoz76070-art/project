@@ -1,0 +1,56 @@
+// Included by the Kelivo host; the standalone Capacitor app keeps its own build.
+apply plugin: 'com.android.library'
+
+def productRoot = file('../../..')
+def remoteApp = new File(productRoot, 'apps/mobile')
+def webDist = providers.gradleProperty('mobileCodexWebDist')
+    .map { file(it) }.getOrElse(new File(productRoot, 'output/kelivo/remote-web'))
+def remoteAssets = layout.buildDirectory.dir('generated/remote-assets')
+
+android {
+    namespace 'com.mobilecodex.remote'
+    compileSdk 36
+    defaultConfig {
+        minSdk 24
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+    sourceSets {
+        main {
+            java.srcDir new File(remoteApp, 'android/app/src/main/java')
+            res.srcDir new File(remoteApp, 'android/app/src/main/res')
+            assets.srcDir remoteAssets
+        }
+    }
+}
+
+tasks.register('prepareRemoteAssets', Sync) {
+    from(webDist) { into 'public' }
+    from('src/main/capacitor')
+    into remoteAssets
+    doFirst {
+        if (!new File(webDist, 'index.html').isFile()) {
+            throw new GradleException('Build the isolated remote Web bundle before the Kelivo host')
+        }
+        def markerFile = new File(webDist, 'remote-host.json')
+        if (!markerFile.isFile()) {
+            throw new GradleException('Run node scripts/build-kelivo-remote.mjs; standalone update channels cannot be packaged into the host')
+        }
+        def marker = new groovy.json.JsonSlurper().parse(markerFile)
+        def channel = new groovy.json.JsonSlurper().parse(new File(productRoot, 'integrations/kelivo/update-channel.json'))
+        if (marker.revision != 1 || marker.applicationId != 'com.mobilecodex.kelivo.preview' || marker.applicationId != channel.applicationId || marker.apkUpdateUrl != channel.manifestUrl || marker.hotUpdateUrl != '') {
+            throw new GradleException('Unexpected remote host build identity or update channel')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn 'prepareRemoteAssets' }
+
+dependencies {
+    implementation project(':capacitor-android')
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
+    implementation 'androidx.core:core-splashscreen:1.0.1'
+}

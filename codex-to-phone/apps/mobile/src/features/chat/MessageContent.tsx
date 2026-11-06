@@ -1,11 +1,14 @@
 import { Fragment, useMemo, type ReactNode } from "react";
+import { MessageImage } from "./MessageImage";
 
 function inline(text: string): ReactNode[] {
   // Bound inline matching work on unusually long or malformed Markdown lines.
   if (text.length > 8192) return [text];
   // Raw HTML is rendered as text.
-  return text.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^\s)]+\))/g).map((part, index) => {
+  return text.split(/(`[^`\n]+`|!\[[^\]\n]*\]\(\s*(?:<[^>\n]+>|(?:[^()\n]|\([^()\n]*\))+?)\s*\)|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^\s)]+\))/g).map((part, index) => {
     if (part.startsWith("`")) return <code key={index}>{part.slice(1, -1)}</code>;
+    const image = /^!\[([^\]\n]*)\]\(\s*(.*?)\s*\)$/u.exec(part);
+    if (image) return <MessageImage key={index} source={image[2]} alt={image[1]} />;
     if (part.startsWith("**")) return <strong key={index}>{part.slice(2, -2)}</strong>;
     const link = /^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/.exec(part);
     return link ? <a key={index} href={link[2]} target="_blank" rel="noreferrer">{link[1]}</a> : part;

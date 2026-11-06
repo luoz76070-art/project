@@ -1,0 +1,1118 @@
+import '../../request_image_context.dart';
+import '../../../custom_request_merger.dart';
+import '../../../../models/provider_oauth.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:http/http.dart' as http;
+
+import '../../../../models/model_spec.dart';
+import '../../../../models/token_usage.dart';
+import '../../../../providers/model_provider.dart';
+import '../../../../providers/settings_provider.dart';
+import '../../../../utils/multimodal_input_utils.dart';
+import '../../../../utils/provider_url.dart';
+import '../../../../../utils/sandbox_path_resolver.dart';
+import '../../../model_spec/model_spec_resolver.dart';
+import '../../../model_spec/vendor_defaults.dart';
+import '../../builtin_tools.dart';
+import '../../chat_api_helpers.dart';
+import '../../native_input_attachments.dart';
+import '../../tool_result_content.dart';
+import '../../generation/tool_loop_runner.dart';
+import '../../kimi_formula_search.dart';
+import '../../reasoning/reasoning_dialects.dart';
+import '../../stream/sse_framing.dart';
+import '../../stream/stream_chunk.dart';
+import '../../stream/stream_chunk_emit.dart';
+import '../../stream/stream_chunk_ids.dart';
+import 'chat_completions_api.dart';
+import 'chat_completions_decoder.dart';
+import 'openai_request_shaping.dart';
+import 'reasoning_details_replay.dart';
+import 'responses_api.dart';
+import 'responses_decoder.dart';
+import 'responses_history.dart';
+
+Uri _openAICompatibleUrl(ProviderConfig config) =>
+    Uri.parse(resolveRequestUrl(config));
+
+Stream<StreamChunk> sendOpenAIStream(
+  http.Client client,
+  ProviderConfig config,
+  String modelId,
+  List<Map<String, dynamic>> messages, {
+  String? conversationId,
+  List<String>? userImagePaths,
+  ReasoningRequest reasoning = ReasoningRequest.auto,
+  double? temperature,
+  double? topP,
+  int? maxTokens,
+  List<Map<String, dynamic>>? tools,
+  ToolCallHandler? onToolCall,
+  Map<String, String>? extraHeaders,
+  Map<String, dynamic>? extraBody,
+  bool stream = true,
+  bool builtInSearchOnly = false,
+  bool skipImageParsing = false,
+  StreamRoundRunner? retryRound,
+}) async* {
+  final upstreamModelId = apiModelId(config, modelId);
+  final cacheKey = conversationId?.trim() ?? '';
+  final promptCacheKey =
+      config.promptCacheKeyEnabled && !config.isOAuth && cacheKey.isNotEmpty
+      ? cacheKey
+      : null;
+  // Utility calls (title / summary generation) only want search injected.
+  final Iterable<String>? configuredBuiltInTools = builtInSearchOnly
+      ? builtInTools(
+          config,
+          modelId,
+        ).where((name) => name == BuiltInToolNames.search)
+      : null;
+  final url = _openAICompatibleUrl(config);
+
+  final spec = ModelSpecResolver.instance.spec(config, modelId);
+  final wantsImageOutput = spec.output.contains(Modality.image);
+  final bool canImageInput = spec.input.contains(Modality.image);
+  final vendor = VendorDefaults.forProvider(config);
+  final bool allowRemoteImages = canImageInput && spec.remoteImageUrls;
+  // OpenRouter sends deltas, not cumulative snapshots. The decoder joins
+  // fragments into complete blocks after collecting the response.
+  final reasoningDetailsAllowSnapshots =
+      !BuiltInToolsHelper.isOpenRouterProvider(config);
+  final bool needsReasoningEcho =
+      spec.reasoning.replay != ReasoningReplayPolicy.none;
+  void setMaxTokens(Map<String, dynamic> map) {
+    if (maxTokens != null) map[vendor.maxTokensKey] = maxTokens;
+  }
+
+  // Kimi K3 Formula web-search: fetch tool decls, then fiber-execute calls.
+  // Only names actually inserted after duplicate resolution are dispatched.
+  final formulaToolNames = <String>{};
+  List<Map<String, dynamic>> kimiFormulaTools = const <Map<String, dynamic>>[];
+  final builtInSearchEnabled = builtInTools(
+    config,
+    modelId,
+  ).contains(BuiltInToolNames.search);
+  if (BuiltInToolsHelper.isVercelProvider(config) &&
+      config.useResponseApi == true &&
+      builtInSearchEnabled &&
+      !BuiltInToolsHelper.supportsBuiltInSearchForModel(
+        cfg: config,
+        modelId: modelId,
+      )) {
+    throw UnsupportedError(
+      'Kelivo supports Vercel Responses native web search with OpenAI models. '
+      'Use Chat Completions for Vercel Gateway search with other models.',
+    );
+  }
+  if (config.useResponseApi != true &&
+      BuiltInToolsHelper.isMoonshotProvider(config) &&
+      builtInSearchEnabled) {
+    try {
+      kimiFormulaTools = await KimiFormulaSearch.fetchTools(
+        client: client,
+        config: config,
+      );
+    } catch (_) {
+      kimiFormulaTools = const <Map<String, dynamic>>[];
+    }
+  }
+  Future<Object?> resolveToolCall(
+    String name,
+    Map<String, dynamic> args, {
+    String? toolCallId,
+  }) async {
+    if (formulaToolNames.contains(name)) {
+      return KimiFormulaSearch.executeFiber(
+        client: client,
+        config: config,
+        name: name,
+        arguments: jsonEncode(args),
+      );
+    }
+    if (onToolCall != null) {
+      return onToolCall(name, args, toolCallId: toolCallId);
+    }
+    throw Exception('No tool handler for $name');
+  }
+
+  final ToolCallHandler? effectiveOnToolCall =
+      (onToolCall != null || kimiFormulaTools.isNotEmpty)
+      ? resolveToolCall
+      : null;
+
+  Map<String, dynamic> body;
+  // Keep initial Responses request context so we can perform follow-up requests when tools are called
+  List<Map<String, dynamic>> responsesInitialInput =
+      const <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> responsesToolsSpec =
+      const <Map<String, dynamic>>[];
+  String responsesInstructions = '';
+  List<dynamic>? responsesIncludeParam;
+  final responsesRecorder = ResponsesTurnRecorder(
+    responsesReplayScope(config, modelId),
+  );
+  if (config.useResponseApi == true) {
+    messages = filterResponsesReasoningHistory(messages, spec.reasoning.replay);
+    final input = <Map<String, dynamic>>[];
+    // Extract system messages into `instructions` (Responses API best practice)
+    String instructions = '';
+    // Prepare tools list for Responses path (may be augmented with built-in web search)
+    final List<Map<String, dynamic>> toolList = [];
+    if (tools != null && tools.isNotEmpty) {
+      for (final t in tools) {
+        toolList.add(Map<String, dynamic>.from(t));
+      }
+    }
+
+    void addResponsesBuiltInTool(Map<String, dynamic> entry) {
+      final type = (entry['type'] ?? '').toString();
+      if (type.isEmpty) return;
+      final exists = toolList.any((e) => (e['type'] ?? '').toString() == type);
+      if (!exists) toolList.add(entry);
+    }
+
+    final builtInPayload = BuiltInToolsHelper.buildResponsesTools(
+      cfg: config,
+      modelId: modelId,
+      upstreamModelId: upstreamModelId,
+      configuredTools: configuredBuiltInTools,
+    );
+    for (final tool in builtInPayload.tools) {
+      addResponsesBuiltInTool(tool);
+    }
+    // Collect assistant images to attach to the last user message.
+    // Use last *user* index so tool follow-ups still receive stashed media.
+    final List<String> lastAssistantImageUrls = <String>[];
+    int lastResponsesUserIndex = -1;
+    for (int i = messages.length - 1; i >= 0; i--) {
+      if ((messages[i]['role'] ?? '').toString() == 'user') {
+        lastResponsesUserIndex = i;
+        break;
+      }
+    }
+    for (int i = 0; i < messages.length; i++) {
+      final m = messages[i];
+      final originalContent = m['content'];
+      final raw = originalContent is List
+          ? textFromContentParts(originalContent)
+          : (originalContent ?? '').toString();
+      final roleRaw = (m['role'] ?? 'user').toString();
+
+      if (roleRaw == 'assistant' &&
+          m[multimodalInternalResponsesItemKey] is Map) {
+        input.add(responsesInputItem(m));
+        continue;
+      }
+
+      // Responses API supports a top-level `instructions` field that has higher priority
+      if (roleRaw == 'system') {
+        if (raw.isNotEmpty) {
+          instructions = instructions.isEmpty ? raw : ('$instructions\n\n$raw');
+        }
+        continue;
+      }
+
+      // Handle tool result messages (role: 'tool') - convert to function_call_output format
+      if (roleRaw == 'tool') {
+        final toolCallId = (m['tool_call_id'] ?? '').toString();
+        final content = (m['content'] ?? '').toString();
+        if (toolCallId.isNotEmpty) {
+          input.add({
+            'type': 'function_call_output',
+            'call_id': toolCallId,
+            'output': (await ToolResultContent.read(
+              (m['name'] ?? '').toString(),
+              content,
+              metadata: (m['metadata'] as Map?)?.cast<String, dynamic>(),
+              toolCallId: m['tool_call_id']?.toString(),
+              canImageInput: canImageInput,
+            )).responsesOutput,
+          });
+        }
+        continue;
+      }
+
+      final nativeParts =
+          await NativeInputAttachments(
+            config: config,
+            spec: spec,
+            protocol: NativeInputProtocol.responses,
+          ).build(
+            m,
+            userPaths: i == lastResponsesUserIndex ? userImagePaths : null,
+          );
+      void addMessage(Map<String, dynamic> message) {
+        if (nativeParts.isNotEmpty) {
+          final content = message['content'];
+          message['content'] = [
+            if (content is List)
+              ...content
+            else if (content is String && content.isNotEmpty)
+              {'type': 'input_text', 'text': content},
+            ...nativeParts,
+          ];
+        }
+        input.add(message);
+      }
+
+      final isAssistant = roleRaw == 'assistant';
+      // Reconstructed assistant text precedes its calls. Insert it here so
+      // no message separates a tool-call batch from its matching results.
+      final assistantMessageIndex = input.length;
+
+      // Handle assistant messages with tool_calls - convert to function_call format
+      if (isAssistant && m['tool_calls'] is List) {
+        final toolCalls = m['tool_calls'] as List;
+        for (final tc in toolCalls) {
+          if (tc is! Map) continue;
+          final callId = (tc['id'] ?? '').toString();
+          final fn = tc['function'];
+          if (fn is! Map) continue;
+          final name = (fn['name'] ?? '').toString();
+          final arguments = (fn['arguments'] ?? '{}').toString();
+          if (callId.isNotEmpty && name.isNotEmpty) {
+            input.add({
+              'type': 'function_call',
+              'call_id': callId,
+              'name': name,
+              'arguments': arguments,
+            });
+          }
+        }
+        // Skip adding the assistant message content if it only contains tool calls
+        if (raw.trim().isEmpty || raw.trim() == '\n\n') continue;
+      }
+
+      // Only parse images if there are images to process.
+      // Semantic media detection only - custom attachment markers are not
+      // recognized. Attachments arrive via structured media-path keys /
+      // userImagePaths, plus Markdown ![](...).
+      final hasMarkdownImages = shouldParseMarkdownImages(
+        raw,
+        skipImageParsing: skipImageParsing,
+      );
+      final internalMediaRefs = parseInternalMediaRefs(
+        m[multimodalInternalMediaPathsKey],
+      );
+      // Consume injected media refs for user and assistant history turns.
+      final hasInternalMedia = canImageInput && internalMediaRefs.isNotEmpty;
+      final hasAttachedImages =
+          canImageInput &&
+          (m['role'] == 'user') &&
+          i == lastResponsesUserIndex &&
+          (userImagePaths?.isNotEmpty == true);
+      // For the last user message, also attach the last assistant image if available
+      final shouldAttachAssistantImage =
+          canImageInput &&
+          (m['role'] == 'user') &&
+          i == lastResponsesUserIndex &&
+          lastAssistantImageUrls.isNotEmpty;
+
+      if (hasMarkdownImages ||
+          hasAttachedImages ||
+          hasInternalMedia ||
+          shouldAttachAssistantImage) {
+        final parsed = await parseTextAndImages(
+          raw,
+          literalText: internalLiteralText(m),
+          imageReferences: internalImageReferences(m),
+          allowRemoteImages: allowRemoteImages,
+          allowLocalImages: canImageInput,
+          allowDataImages: canImageInput,
+          keepRemoteMarkdownText: true,
+          keepDisallowedImageText: canImageInput,
+          skipImageParsing: skipImageParsing,
+        );
+        if (!canImageInput) {
+          if (isAssistant) {
+            input.insert(assistantMessageIndex, {
+              'type': 'message',
+              'role': 'assistant',
+              'status': 'completed',
+              'content': [
+                {'type': 'output_text', 'text': parsed.text},
+              ],
+            });
+          } else {
+            addMessage({'role': roleRaw, 'content': parsed.text});
+          }
+          continue;
+        }
+
+        final parts = <Map<String, dynamic>>[];
+        final seenImageSources = <String>{};
+        final seenImageUrls = <String>{};
+        String normalizeSrc(String src) => SandboxPathResolver.dedupeKey(src);
+
+        void addImage(String url) {
+          if (url.isEmpty) return;
+          if (!allowRemoteImages && isRemoteHttpUrl(url)) return;
+          if (seenImageUrls.add(url)) {
+            parts.add({'type': 'input_image', 'image_url': url});
+          }
+        }
+
+        if (parsed.text.isNotEmpty) {
+          // Use output_text for assistant, input_text for user
+          parts.add({
+            'type': isAssistant ? 'output_text' : 'input_text',
+            'text': parsed.text,
+          });
+        }
+        // Images extracted from this message's text
+        for (final ref in parsed.images) {
+          final normalized = normalizeSrc(ref.src);
+          if (!seenImageSources.add(normalized)) continue;
+          final String? url;
+          if (ref.kind == 'data') {
+            url = ref.src;
+          } else if (ref.kind == 'path') {
+            url = await tryEncodeBase64DataUrl(ref.src);
+            if (url == null) continue;
+          } else {
+            url = ref.src; // http(s)
+          }
+          // For assistant messages, collect images; for user messages, add directly
+          if (isAssistant) {
+            if (!lastAssistantImageUrls.contains(url)) {
+              lastAssistantImageUrls.add(url);
+            }
+          } else {
+            addImage(url);
+          }
+        }
+        // Structured / attached media refs (user + assistant history turns)
+        final supplementalRefs = supplementalMediaRefs(
+          internalRaw: m[multimodalInternalMediaPathsKey],
+          userPaths: userImagePaths,
+          includeUserPaths: hasAttachedImages,
+        );
+        for (final mediaRef in supplementalRefs) {
+          final p = mediaRef.uri;
+          final String mime = mimeForInternalMediaRef(mediaRef);
+          final bool isAv = isAudioMime(mime) || isVideoMime(mime);
+          if ((isAv || isPdfMime(mime)) && !isAssistant) continue;
+          if (isAv) {
+            // Responses path has no first-class A/V input parts here; never
+            // encode video/audio as input_image. Keep a text reference for both
+            // remote and local paths so pure A/V attachments do not become
+            // content: [] (API reject / silent drop).
+            final normalized = normalizeSrc(p);
+            if (seenImageSources.add(normalized)) {
+              parts.add({
+                'type': isAssistant ? 'output_text' : 'input_text',
+                'text': p,
+              });
+            }
+            continue;
+          }
+          if (!allowRemoteImages && isRemoteHttpUrl(p)) {
+            // Keep the remote reference visible as text when image embed is off.
+            final normalized = normalizeSrc(p);
+            if (!seenImageSources.add(normalized)) continue;
+            parts.add({
+              'type': isAssistant ? 'output_text' : 'input_text',
+              'text': p,
+            });
+            continue;
+          }
+          final normalized = normalizeSrc(p);
+          if (!seenImageSources.add(normalized)) continue;
+          final dataUrl = (isRemoteHttpUrl(p) || p.startsWith('data:'))
+              ? p
+              : await tryEncodeBase64DataUrl(p, explicitMime: mediaRef.mime);
+          if (dataUrl == null) continue;
+          // Assistant Responses messages may only contain output_text/refusal.
+          // Mirror the markdown path: stash for the following user turn.
+          if (isAssistant) {
+            if (!lastAssistantImageUrls.contains(dataUrl)) {
+              lastAssistantImageUrls.add(dataUrl);
+            }
+          } else {
+            addImage(dataUrl);
+          }
+        }
+        // Attach all stashed assistant images to the last user message
+        if (shouldAttachAssistantImage) {
+          for (final url in lastAssistantImageUrls) {
+            addImage(url);
+          }
+        }
+        // Use proper message object format for assistant messages
+        if (isAssistant) {
+          // Never emit input_image inside assistant completed output.
+          final assistantContent = <Map<String, dynamic>>[
+            for (final part in parts)
+              if (part['type'] == 'output_text' || part['type'] == 'refusal')
+                part,
+          ];
+          if (assistantContent.isEmpty) {
+            assistantContent.add({'type': 'output_text', 'text': parsed.text});
+          }
+          input.insert(assistantMessageIndex, {
+            'type': 'message',
+            'role': 'assistant',
+            'status': 'completed',
+            'content': assistantContent,
+          });
+        } else {
+          addMessage({'role': roleRaw, 'content': parts});
+        }
+      } else {
+        // No images
+        if (isAssistant) {
+          // Use proper message object format for assistant messages
+          input.insert(assistantMessageIndex, {
+            'type': 'message',
+            'role': 'assistant',
+            'status': 'completed',
+            'content': [
+              {'type': 'output_text', 'text': raw},
+            ],
+          });
+        } else {
+          addMessage({'role': roleRaw, 'content': raw});
+        }
+      }
+    }
+    body = {
+      'model': upstreamModelId,
+      'input': input,
+      'stream': stream,
+      if (instructions.isNotEmpty) 'instructions': instructions,
+      if (temperature != null) 'temperature': temperature,
+      if (topP != null) 'top_p': topP,
+      if (maxTokens != null) 'max_output_tokens': maxTokens,
+      if (toolList.isNotEmpty) 'tools': toResponsesToolsFormat(toolList),
+      if (toolList.isNotEmpty) 'tool_choice': 'auto',
+    };
+    // OpenAI-compatible native search can optionally expose source details.
+    // OpenRouter rejects the `include` parameter, so skip it there.
+    if (!BuiltInToolsHelper.isDashScopeProvider(config) &&
+        !BuiltInToolsHelper.isOpenRouterProvider(config)) {
+      try {
+        final ov = config.modelOverrides[modelId];
+        final ws = (ov is Map ? ov['webSearch'] : null);
+        if (ws is Map && ws['include_sources'] == true) {
+          body['include'] = ['web_search_call.action.sources'];
+        }
+      } catch (_) {}
+    }
+    if (Uri.tryParse(config.baseUrl)?.host == 'api.openai.com') {
+      body['include'] = [
+        ...?body['include'] as List?,
+        'reasoning.encrypted_content',
+      ];
+    }
+    // Save initial Responses context
+    try {
+      responsesInitialInput = List<Map<String, dynamic>>.from(
+        (body['input'] as List).map((e) => (e as Map).cast<String, dynamic>()),
+      );
+    } catch (_) {
+      responsesInitialInput = const <Map<String, dynamic>>[];
+    }
+    try {
+      if (body['tools'] is List) {
+        responsesToolsSpec = List<Map<String, dynamic>>.from(
+          (body['tools'] as List).map(
+            (e) => (e as Map).cast<String, dynamic>(),
+          ),
+        );
+      }
+    } catch (_) {
+      responsesToolsSpec = const <Map<String, dynamic>>[];
+    }
+    try {
+      responsesInstructions = (body['instructions'] ?? '').toString();
+    } catch (_) {
+      responsesInstructions = '';
+    }
+    try {
+      responsesIncludeParam = body['include'] as List?;
+    } catch (_) {
+      responsesIncludeParam = null;
+    }
+  } else {
+    final mm = await buildOpenAIChatCompletionMessages(
+      messages,
+      userMediaPaths: userImagePaths,
+      nativeInputs: NativeInputAttachments(
+        config: config,
+        spec: spec,
+        protocol: NativeInputProtocol.chatCompletions,
+      ),
+      canImageInput: canImageInput,
+      allowRemoteImages: allowRemoteImages,
+      reasoningReplay: spec.reasoning.replay,
+      replayField: spec.reasoning.replayField,
+      skipImageParsing: skipImageParsing,
+    );
+    body = {
+      'model': upstreamModelId,
+      'messages': mm,
+      'stream': stream,
+      if (temperature != null) 'temperature': temperature,
+      if (topP != null) 'top_p': topP,
+      if (tools != null && tools.isNotEmpty)
+        'tools': copyChatCompletionTools(tools),
+      if (tools != null && tools.isNotEmpty) 'tool_choice': 'auto',
+    };
+    setMaxTokens(body);
+  }
+
+  final request = http.Request('POST', url);
+  final headers = customHeaders(
+    config,
+    modelId,
+    baseHeaders: <String, String>{
+      'Authorization': 'Bearer ${apiKeyForRequest(config, modelId)}',
+      'Content-Type': 'application/json',
+      'Accept': stream ? 'text/event-stream' : 'application/json',
+    },
+    assistantHeaders: extraHeaders,
+  );
+  request.headers.addAll(headers);
+  maybeAddStreamingUsageOptions(body, stream: stream, config: config);
+  if (config.useResponseApi != true) {
+    formulaToolNames.addAll(
+      KimiFormulaSearch.mergeTools(body, kimiFormulaTools),
+    );
+  }
+  applyOpenRouterClaudePromptCaching(body, config: config, spec: spec);
+
+  applyOpenAIResolvedRequest(
+    body,
+    spec: spec,
+    reasoning: reasoning,
+    transport: config.useResponseApi == true
+        ? ReasoningTransport.responses
+        : ReasoningTransport.chatCompletions,
+  );
+  // Custom body keys go last so they win over the reasoning dialect.
+  final extraBodyCfg = customBody(config, modelId, assistantBody: extraBody);
+  CustomRequestMerger.applyBody(body, extraBodyCfg);
+  if (promptCacheKey != null) {
+    body.putIfAbsent('prompt_cache_key', () => promptCacheKey);
+  }
+  // Built-in tools run after the custom body and merge by type so custom
+  // function tools and provider server tools coexist.
+  Object? builtInSearchQuery;
+  if (config.useResponseApi != true) {
+    builtInSearchQuery = applyChatCompletionsBuiltInTools(
+      body,
+      config: config,
+      modelId: modelId,
+      upstreamModelId: upstreamModelId,
+      configuredTools: configuredBuiltInTools,
+    );
+  }
+  request.body = await RequestImageContext.encodeBody(body);
+
+  final response = await client.send(request);
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    final errorBody = await response.stream.bytesToString();
+    throw HttpException('HTTP ${response.statusCode}: $errorBody');
+  }
+
+  // Non-streaming path: parse one-shot JSON and optionally follow tool calls.
+  if (!stream) {
+    final txt = await decodeUtf8Stream(response.stream);
+    try {
+      final obj = jsonDecode(txt);
+      // Responses API non-stream
+      if (config.useResponseApi == true) {
+        for (final chunk
+            in ResponsesStreamDecoder(sourceId: 'finish').decodeSearchResults(
+              obj['response'] is Map ? obj['response'] as Map : obj as Map,
+            )) {
+          yield chunk;
+        }
+        String outText = '';
+        final rawOutput = obj['output'] ?? obj['response']?['output'];
+        final reasoningText = responsesReasoningText(rawOutput);
+        try {
+          outText = (obj['output_text'] ?? '').toString();
+        } catch (_) {}
+        if (outText.isEmpty) {
+          try {
+            outText = (obj['response']?['output_text'] ?? '').toString();
+          } catch (_) {}
+        }
+        final shouldReadOutputText = outText.isEmpty;
+        final images = <({String uri, String mimeType})>[];
+        try {
+          final out = rawOutput as List?;
+          if (out != null) {
+            final buf = StringBuffer(outText);
+            for (final it in out) {
+              if (it is! Map) continue;
+              if (isResponsesImageGenerationType(it['type'])) {
+                final source = responsesImageGenerationSource(it);
+                if (source.isNotEmpty) {
+                  if (isRemoteHttpUrl(source)) {
+                    // Already renderable; keep the remote URL as-is.
+                    images.add((
+                      uri: source,
+                      mimeType: mimeTypeFromImageUri(source) ?? 'image/png',
+                    ));
+                  } else {
+                    final saved = await saveResponsesImageGeneration(
+                      source,
+                      outputFormat:
+                          (it['output_format'] ?? it['outputFormat'] ?? '')
+                              .toString(),
+                    );
+                    if (saved != null) images.add(saved);
+                  }
+                }
+                continue;
+              }
+              if (!shouldReadOutputText) continue;
+              if (it['type'] == 'output_text') {
+                final c = (it['content'] ?? '').toString();
+                if (c.isNotEmpty) buf.write(c);
+              } else if (it['type'] == 'message') {
+                final content = it['content'] as List?;
+                if (content != null) {
+                  for (final part in content) {
+                    if (part is Map &&
+                        (part['type'] == 'output_text' ||
+                            part['type'] == 'text')) {
+                      final t = (part['text'] ?? part['content'] ?? '')
+                          .toString();
+                      if (t.isNotEmpty) buf.write(t);
+                    }
+                  }
+                }
+              }
+            }
+            outText = buf.toString();
+          }
+        } catch (_) {}
+        final usage = mergeOpenAICompatibleUsage(
+          null,
+          obj['usage'] ?? obj['response']?['usage'],
+        );
+        final ids = StreamChunkIds('finish');
+        yield* emitImages(images, ids: ids);
+        final outputItems = <Map<String, dynamic>>[
+          if (rawOutput is List)
+            for (final item in rawOutput.whereType<Map>())
+              item.cast<String, dynamic>(),
+        ];
+        final calls = responsesCallsFromOutput(outputItems);
+        yield responsesRecorder.record(outputItems, calls);
+        if (calls.isNotEmpty && effectiveOnToolCall != null) {
+          yield* emitDelta(
+            ids: ids,
+            content: outText,
+            reasoning: reasoningText,
+            usage: usage,
+          );
+          yield* runOpenAIResponsesToolFollowUps(
+            recorder: responsesRecorder,
+            client: client,
+            config: config,
+            modelId: modelId,
+            upstreamModelId: upstreamModelId,
+            url: url,
+            spec: spec,
+            initialInput: responsesInitialInput,
+            firstOutputItems: outputItems,
+            initialCalls: calls,
+            responsesToolsSpec: responsesToolsSpec,
+            responsesInstructions: responsesInstructions,
+            responsesIncludeParam: responsesIncludeParam,
+            onToolCall: effectiveOnToolCall,
+            extraHeaders: extraHeaders,
+            extraBody: extraBody,
+            promptCacheKey: promptCacheKey,
+            temperature: temperature,
+            topP: topP,
+            maxTokens: maxTokens,
+            reasoning: reasoning,
+            initialUsage: usage,
+            streamRound: 1,
+            approxPromptTokens: (jsonEncode(messages).length / 4).round(),
+            approxCompletionChars: outText.length,
+            stream: false,
+            retryRound: retryRound,
+          );
+          return;
+        }
+        yield* emitDone(
+          ids: ids,
+          content: outText,
+          reasoning: reasoningText.isEmpty ? null : reasoningText,
+          usage: usage,
+          totalTokens: usage?.totalTokens ?? 0,
+        );
+        return;
+      }
+
+      // Chat Completions non-stream with tool-calls follow-ups
+      final lastObj = obj is Map
+          ? Map<String, dynamic>.from(obj)
+          : <String, dynamic>{};
+      final firstUsage = openaiUsageFromObj(lastObj);
+      final firstChoice = openaiFirstChoice(lastObj);
+      if (firstChoice == null) {
+        yield* emitDone(
+          ids: StreamChunkIds('finish'),
+          content: (lastObj['output_text'] ?? '').toString(),
+          usage: firstUsage,
+          totalTokens: firstUsage?.totalTokens ?? 0,
+          finishReason: (lastObj['finish_reason'] ?? '').toString().isEmpty
+              ? null
+              : lastObj['finish_reason'].toString(),
+        );
+        return;
+      }
+      final firstCalls = openaiCallsFromCompletionMessage(
+        (firstChoice['message'] as Map?)?.cast<String, dynamic>(),
+      );
+      if (firstCalls.isNotEmpty && effectiveOnToolCall != null) {
+        yield* runOpenAIChatCompletionsNonStreamToolFollowUps(
+          client: client,
+          config: config,
+          modelId: modelId,
+          upstreamModelId: upstreamModelId,
+          url: url,
+          spec: spec,
+          messages: messages,
+          requestBody: body,
+          firstObj: lastObj,
+          initialCalls: firstCalls,
+          onToolCall: effectiveOnToolCall,
+          userImagePaths: userImagePaths,
+          canImageInput: canImageInput,
+          allowRemoteImages: allowRemoteImages,
+          skipImageParsing: skipImageParsing,
+          needsReasoningEcho: needsReasoningEcho,
+          extraHeaders: extraHeaders,
+          initialUsage: firstUsage,
+          retryRound: retryRound,
+        );
+        return;
+      }
+      final visible = openaiVisibleOutputFromMessage(
+        (firstChoice['message'] as Map?)?.cast<String, dynamic>(),
+      );
+      final firstMessage = openaiFirstChoiceMessage(lastObj);
+      final ids = StreamChunkIds('finish');
+      for (final chunk in ChatCompletionsStreamDecoder(
+        sourceId: 'finish',
+      ).decodeCitations(lastObj)) {
+        yield chunk;
+      }
+      yield* emitImages(visible.images, ids: ids);
+      yield* emitDone(
+        ids: ids,
+        content: visible.content,
+        reasoning: openaiReasoningText(firstMessage),
+        reasoningDetails: mergeReasoningDetails(
+          firstMessage?['reasoning_details'],
+        ),
+        usage: firstUsage,
+        totalTokens: firstUsage?.totalTokens ?? 0,
+        finishReason: (firstChoice['finish_reason'] ?? '').toString().isEmpty
+            ? null
+            : firstChoice['finish_reason'].toString(),
+      );
+      return;
+    } catch (e) {
+      throw HttpException('Invalid JSON: $e');
+    }
+  }
+
+  // Streaming path
+  final sse = response.stream.transform(utf8.decoder);
+  int totalTokens = 0;
+  TokenUsage? usage;
+  // Fallback approx token calculation when provider doesn't include usage
+  int approxTokensFromChars(int chars) => (chars / 4).round();
+  final int approxPromptChars = messages.fold<int>(
+    0,
+    (acc, m) => acc + ((m['content'] ?? '').toString().length),
+  );
+  final int approxPromptTokens = approxTokensFromChars(approxPromptChars);
+  int approxCompletionChars = 0;
+  String reasoningBuffer = '';
+  String assistantContentBuffer = '';
+
+  // Track potential tool calls (OpenAI Chat Completions)
+  final Map<int, Map<String, dynamic>> toolAcc =
+      <int, Map<String, dynamic>>{}; // index -> {id,name,args,extra_content?}
+  // Track potential tool calls (OpenAI Responses API)
+  final Map<String, Map<String, String>> toolAccResp =
+      <String, Map<String, String>>{}; // id/name -> {name,args}
+  // Responses API: track by output_index to capture call_id reliably
+  final Map<int, Map<String, String>> respToolCallsByIndex =
+      <int, Map<String, String>>{}; // index -> {call_id,name,args,series_id}
+  List<Map<String, dynamic>> lastResponseOutputItems =
+      const <Map<String, dynamic>>[];
+  var streamRound = 0;
+  final responsesDecoder = config.useResponseApi == true
+      ? ResponsesStreamDecoder(
+          initialUsage: usage,
+          sourceId: 'round-${streamRound++}',
+        )
+      : null;
+  final chatDecoder = config.useResponseApi == true
+      ? null
+      : ChatCompletionsStreamDecoder(
+          wantsImageOutput: wantsImageOutput,
+          needsReasoningEcho: needsReasoningEcho,
+          allowReasoningSnapshots: reasoningDetailsAllowSnapshots,
+          initialUsage: usage,
+          sourceId: 'round-${streamRound++}',
+        );
+
+  await for (final event in parseSseEventStrings(
+    sse,
+    recoverAdjacentJsonDataRecords: config.useResponseApi != true,
+  )) {
+    final data = event.data;
+    if (data.isNotEmpty && data != '[DONE]') {
+      throwIfInBandStreamError(data);
+    }
+    try {
+      if (config.useResponseApi == true) {
+        final decoder = responsesDecoder!;
+        final decoded = decoder.accept(event);
+        for (final chunk in decoded.chunks) {
+          yield chunk;
+        }
+        if (!decoded.completed) continue;
+        for (final chunk in decoder.onClosed()) {
+          yield chunk;
+        }
+
+        usage = decoder.usage ?? usage;
+        totalTokens = usage?.totalTokens ?? totalTokens;
+        approxCompletionChars = decoder.approxCompletionChars;
+        lastResponseOutputItems = decoder.outputItems;
+        respToolCallsByIndex
+          ..clear()
+          ..addAll({
+            for (final call in decoder.takeFunctionCalls())
+              call.index: call.toIndexFields(),
+          });
+        final recordedCalls = responsesCallsFromIndexMap(respToolCallsByIndex);
+        yield responsesRecorder.record(
+          withResponsesFunctionCallItems(
+            lastResponseOutputItems,
+            recordedCalls,
+          ),
+          recordedCalls,
+        );
+        if (!decoder.emittedImageEvents) {
+          var fallbackCount = 0;
+          for (final image in decoder.takeImages()) {
+            if (image.base64.isEmpty) continue;
+            final mdImg = await saveResponsesImageGenerationMarkdown(
+              image.base64,
+              outputFormat: image.outputFormat,
+            );
+            if (mdImg.isEmpty) continue;
+            fallbackCount++;
+            yield* emitDelta(
+              ids: StreamChunkIds('round-0'),
+              content: mdImg,
+              usage: usage,
+              totalTokens: totalTokens,
+            );
+          }
+          if (fallbackCount > 0) {
+            logImageFallback(
+              provider: config.id,
+              model: modelId,
+              reason: 'responses_decoder_missed_image count=$fallbackCount',
+            );
+          }
+        }
+        if (!decoder.emittedCitationEvents && decoder.citations.isNotEmpty) {
+          yield ServerToolStart(id: 'builtin_search', toolName: 'search_web');
+          yield ServerToolEnd(
+            id: 'builtin_search',
+            output: <String, dynamic>{'items': decoder.citations},
+          );
+        }
+        // Responses tool calling follow-up handling
+        final bool hasRespCalls =
+            respToolCallsByIndex.isNotEmpty || toolAccResp.isNotEmpty;
+        if (effectiveOnToolCall != null && hasRespCalls) {
+          final callInfos = respToolCallsByIndex.isNotEmpty
+              ? responsesCallsFromIndexMap(respToolCallsByIndex)
+              : [
+                  for (final entry
+                      in toolAccResp.entries.toList().asMap().entries)
+                    emitToolCall(
+                      id: effectiveToolCallId(
+                        entry.value.key,
+                        'call',
+                        entry.key,
+                      ),
+                      name: (entry.value.value['name'] ?? '').toString(),
+                      arguments: () {
+                        try {
+                          return (jsonDecode(entry.value.value['args'] ?? '{}')
+                                  as Map)
+                              .cast<String, dynamic>();
+                        } catch (_) {
+                          return <String, dynamic>{};
+                        }
+                      }(),
+                    ),
+                ];
+          yield* runOpenAIResponsesToolFollowUps(
+            recorder: responsesRecorder,
+            client: client,
+            config: config,
+            modelId: modelId,
+            upstreamModelId: upstreamModelId,
+            url: url,
+            spec: spec,
+            initialInput: responsesInitialInput,
+            firstOutputItems: lastResponseOutputItems,
+            initialCalls: callInfos,
+            responsesToolsSpec: responsesToolsSpec,
+            responsesInstructions: responsesInstructions,
+            responsesIncludeParam: responsesIncludeParam,
+            onToolCall: effectiveOnToolCall,
+            extraHeaders: extraHeaders,
+            extraBody: extraBody,
+            promptCacheKey: promptCacheKey,
+            temperature: temperature,
+            topP: topP,
+            maxTokens: maxTokens,
+            reasoning: reasoning,
+            initialUsage: usage,
+            streamRound: streamRound,
+            approxPromptTokens: approxPromptTokens,
+            approxCompletionChars: approxCompletionChars,
+            retryRound: retryRound,
+          );
+          return;
+        }
+
+        final approxTotal =
+            approxPromptTokens + approxTokensFromChars(approxCompletionChars);
+        yield* emitDone(
+          ids: StreamChunkIds('finish'),
+          usage: usage,
+          totalTokens: usage?.totalTokens ?? approxTotal,
+        );
+        return;
+      } else {
+        final decoder = chatDecoder!;
+        final decoded = decoder.accept(event);
+        for (final chunk in decoded.chunks) {
+          yield chunk;
+        }
+        toolAcc
+          ..clear()
+          ..addAll(decoder.toolCalls);
+        usage = decoder.usage ?? usage;
+        if (usage != null) totalTokens = usage.totalTokens;
+        approxCompletionChars = decoder.approxCompletionChars;
+        reasoningBuffer = decoder.reasoningEcho;
+        assistantContentBuffer = decoder.assistantContent;
+        // Usage can arrive after finish_reason, including tool_calls. Drain
+        // through [DONE] or EOF before starting the next API request.
+        if (data == '[DONE]') break;
+      }
+    } on ProviderOAuthException {
+      rethrow;
+    } on HttpException {
+      // In-band error frames raised inside this block (follow-up tool-call
+      // streams call throwIfInBandStreamError in here) and failed follow-up
+      // requests must surface as stream errors; swallowing them would let
+      // the no-[DONE] fallback below persist truncated output as a normal
+      // completion.
+      rethrow;
+    } catch (e) {
+      // Skip malformed JSON
+    }
+  }
+
+  // Close the first request after [DONE] or EOF, then continue client tools.
+  for (final chunk in chatDecoder?.onClosed() ?? const <StreamChunk>[]) {
+    yield chunk;
+  }
+  for (final chunk in responsesDecoder?.onClosed() ?? const <StreamChunk>[]) {
+    yield chunk;
+  }
+  if (responsesDecoder != null) {
+    usage = responsesDecoder.usage ?? usage;
+    approxCompletionChars = responsesDecoder.approxCompletionChars;
+    final output = responsesDecoder.outputItems;
+    if (output.isNotEmpty) {
+      // EOF can follow complete output_item.done events without a terminal
+      // response event. Retain those native items, but do not synthesize or
+      // execute function calls whose response never completed.
+      yield responsesRecorder.record(
+        output,
+        responsesCallsFromIndexMap({
+          for (final call in responsesDecoder.takeFunctionCalls())
+            call.index: call.toIndexFields(),
+        }),
+      );
+    }
+  }
+  if (chatDecoder != null &&
+      effectiveOnToolCall != null &&
+      toolAcc.isNotEmpty) {
+    yield* runOpenAIChatCompletionsToolFollowUps(
+      client: client,
+      config: config,
+      modelId: modelId,
+      upstreamModelId: upstreamModelId,
+      url: url,
+      spec: spec,
+      messages: messages,
+      firstToolAcc: toolAcc,
+      firstAssistantContent: assistantContentBuffer,
+      firstReasoning: reasoningBuffer,
+      firstReasoningDetails: chatDecoder.reasoningDetails,
+      onToolCall: effectiveOnToolCall,
+      userImagePaths: userImagePaths,
+      canImageInput: canImageInput,
+      allowRemoteImages: allowRemoteImages,
+      skipImageParsing: skipImageParsing,
+      reasoning: reasoning,
+      temperature: temperature,
+      topP: topP,
+      tools: tools,
+      builtInSearchQuery: builtInSearchQuery,
+      extraBodyCfg: extraBodyCfg,
+      promptCacheKey: promptCacheKey,
+      extraHeaders: extraHeaders,
+      wantsImageOutput: wantsImageOutput,
+      needsReasoningEcho: needsReasoningEcho,
+      reasoningDetailsAllowSnapshots: reasoningDetailsAllowSnapshots,
+      applyMaxTokens: setMaxTokens,
+      initialUsage: usage,
+      streamRound: streamRound,
+      approxPromptTokens: approxPromptTokens,
+      approxCompletionChars: approxCompletionChars,
+      includeReasoningDetailsOnDone: true,
+      retryRound: retryRound,
+    );
+    return;
+  }
+  final approxTotal =
+      usage?.totalTokens ??
+      (approxPromptTokens + approxTokensFromChars(approxCompletionChars));
+  yield* emitDone(
+    ids: StreamChunkIds('finish'),
+    reasoningDetails: chatDecoder?.reasoningDetails,
+    usage: usage,
+    totalTokens: approxTotal,
+  );
+}

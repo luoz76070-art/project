@@ -1,3 +1,5 @@
+import { loadReadingPositions, saveReadingPositions } from "../chat/readingPositions";
+import { productBeforeNavigate, isKelivoHost } from "../product/host";
 import { useEffect, useRef, useState } from "react";
 import { VoiceInput } from "../voice/VoiceInput";
 import { ArrowUp, ChevronLeft, CircleStop, Loader2, RefreshCcw } from "lucide-react";
@@ -10,7 +12,7 @@ import { createSnapshotReducer } from "../connection/snapshotPatch";
 import { writeClipboard } from "../../shared/clipboard";
 import { AgentQuestions } from "./AgentQuestions";
 import { AgentQueue } from "./AgentQueue";
-import { agentDelivery, agentHistoryWindow, loadAgentDrafts, offlineAgent, reconcileAgentDraft, saveAgentDrafts, verifyAgentSnapshot, type PendingAgentDraft } from "./runtime";
+import { agentDelivery, agentHistoryWindow, loadAgentDrafts, loadAgentView, saveAgentView, loadPendingAgentDraft, savePendingAgentDraft, offlineAgent, reconcileAgentDraft, saveAgentDrafts, verifyAgentSnapshot, type PendingAgentDraft } from "./runtime";
 import type { AgentDelivery, AgentPermission, AgentSession, AgentSessionSnapshot } from "./types";
 import { groupByProject, sessionInRange, sessionListRefreshMs } from "../threads/model";
 import { ProjectGroups } from "../threads/ProjectGroups";
@@ -24,6 +26,7 @@ const friendlyError = (error: unknown) => {
 };
 
 export default function AgentWorkspace({ endpoint, token, scope, onBack }: { endpoint: string; token: string; scope: string; onBack: () => void }) {
+  const restoreView = useRef(isKelivoHost ? loadAgentView(scope) : null);
   const [agents, setAgents] = useState<Agent[]>([]), [agent, setAgent] = useState<Agent | null>(null);
   const [sessions, setSessions] = useState<AgentSession[]>([]), [selected, setSelected] = useState<AgentSession | null>(null);
   const [query, setQuery] = useState(""), [cursor, setCursor] = useState<string | null>(null);
@@ -34,8 +37,10 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
   const controller = useRef<AbortController | null>(null), requestId = useRef(0);
   useEffect(() => {
     const flush = () => saveAgentDrafts(scope, draftsRef.current);
+    const beforeNavigate = (event: Event) => { if (!flush()) event.preventDefault(); };
     window.addEventListener("pagehide", flush);
-    return () => { window.removeEventListener("pagehide", flush); flush(); };
+    window.addEventListener(productBeforeNavigate, beforeNavigate);
+    return () => { window.removeEventListener("pagehide", flush); window.removeEventListener(productBeforeNavigate, beforeNavigate); flush(); };
   }, [scope]);
   useEffect(() => { const timer = setTimeout(() => saveAgentDrafts(scope, draftsRef.current), 700); return () => clearTimeout(timer); }, [drafts, scope]);
   useEffect(() => {
@@ -50,11 +55,16 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
       if (request.id !== requestId.current) return;
       if (!Array.isArray(data.agents)) throw new Error("invalid agents");
       setAgents(data.agents.filter(item => (item.id === "opencode" && item.transport === "opencode-v2-http-sse") || (item.id === "claude" && item.transport === "claude-mods-http") || (item.id === "deepseek" && item.transport === "deepseek-cordis-http-sse")));
+      const restore = restoreView.current;
+      const target = data.agents.find(item => item.id === restore?.agentId);
+      if (target) void loadSessions(target);
+      else restoreView.current = null;
     } catch (caught) { if (!request.signal.aborted) setError(friendlyError(caught)); }
     finally { if (!request.signal.aborted) setLoading(false); }
   }
   async function loadSessions(target: Agent, append = false, selectedRange = range, silent = false) {
     const request = begin(silent); setAgent(target);
+    if (isKelivoHost && !restoreView.current) saveAgentView(scope, target.id, null);
     try {
       const params = new URLSearchParams({ ...(query.trim() ? { search: query.trim() } : {}), ...(append && cursor ? { cursor } : {}), ...(target.id === "deepseek" ? { range: selectedRange } : {}) });
       const data = await apiGet<{ sessions: AgentSession[]; cursor: string | null }>(buildUrl(endpoint, `/api/agents/${target.id}/sessions?${params}`), token, request.signal);
@@ -63,6 +73,11 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
       setSessions(current => silent ? [...new Map([...current, ...data.sessions].map(item => [item.id, item])).values()].filter(item => sessionInRange(item.updatedAt, selectedRange) || data.sessions.some(next => next.id === item.id)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         : append ? [...new Map([...current, ...data.sessions].map(item => [item.id, item])).values()] : data.sessions);
       if (!silent || sessions.length < 50) setCursor(data.cursor);
+      if (restoreView.current?.agentId === target.id) {
+        const restored = data.sessions.find(item => item.id === restoreView.current?.sessionId);
+        restoreView.current = null;
+        if (restored) setSelected(restored);
+      }
     } catch (caught) { if (!request.signal.aborted) setError(friendlyError(caught)); }
     finally { if (!request.signal.aborted) setLoading(false); }
   }
@@ -74,6 +89,7 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
   }, [agent?.id, selected?.id, loading, range, query, cursor, sessions.length, endpoint, token]);
   function back() {
+    if (isKelivoHost) saveAgentView(scope, selected ? agent?.id ?? null : null, null);
     if (selected) { setSelected(null); if (agent) void loadSessions(agent); }
     else if (agent) { ++requestId.current; controller.current?.abort(); setAgent(null); setSessions([]); setCursor(null); setError(""); setLoading(false); }
     else onBack();
@@ -85,7 +101,11 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
       {!selected && <button className="icon-button" aria-label="刷新 Agent 列表" disabled={loading} onClick={() => void (agent ? loadSessions(agent) : loadAgents())}><RefreshCcw size={18} className={loading ? "spin" : ""} /></button>}
     </header>
     {selected && agent ? <AgentChat key={`${agent.id}:${selected.id}`} endpoint={endpoint} token={token} agent={agent} session={selected}
-      draft={drafts[`${agent.id}:${selected.id}`] ?? ""} onDraft={value => setDrafts(current => ({ ...current, [`${agent.id}:${selected.id}`]: value }))} />
+      scopeKey={scope} draft={drafts[`${agent.id}:${selected.id}`] ?? ""} onDraft={value => setDrafts(current => {
+        const key = `${agent.id}:${selected.id}`, next = { ...current };
+        delete next[key];
+        return { ...next, [key]: value };
+      })} />
       : <section className="agent-session-list">
         {error && <p className="connection-notice" role="status">{error}</p>}
         {!agent && <>
@@ -97,8 +117,8 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
           {agent.id === "deepseek" && <SessionRangeControl range={range} disabled={loading} onChange={next => { setRange(next); void loadSessions(agent, false, next); }} />}
           <form className="search-field" onSubmit={event => { event.preventDefault(); void loadSessions(agent); }}><input aria-label="搜索 Agent 会话" placeholder="搜索会话" value={query} maxLength={200} onChange={event => setQuery(event.target.value)} /><button type="submit" disabled={loading}>搜索</button></form>
           {agent.id === "deepseek" ? <ProjectGroups key={agent.id} scope={scope} agentId={agent.id} groups={groupByProject(sessions, session => session.directory)} search={query}>
-            {session => <button className="agent-session-row" key={session.id} onClick={() => setSelected(session)}><strong>{session.title || "未命名会话"}</strong><time>{new Date(session.updatedAt).toLocaleString()}</time></button>}
-          </ProjectGroups> : sessions.map(session => <button className="agent-session-row" key={session.id} onClick={() => setSelected(session)}><strong>{session.title || "未命名会话"}</strong><small>{session.directory}</small><time>{new Date(session.updatedAt).toLocaleString()}</time></button>)}
+            {session => <button className="agent-session-row" key={session.id} onClick={() => { if (isKelivoHost) saveAgentView(scope, agent.id, session.id); setSelected(session); }}><strong>{session.title || "未命名会话"}</strong><time>{new Date(session.updatedAt).toLocaleString()}</time></button>}
+          </ProjectGroups> : sessions.map(session => <button className="agent-session-row" key={session.id} onClick={() => { if (isKelivoHost) saveAgentView(scope, agent.id, session.id); setSelected(session); }}><strong>{session.title || "未命名会话"}</strong><small>{session.directory}</small><time>{new Date(session.updatedAt).toLocaleString()}</time></button>)}
           {!loading && !sessions.length && !error && <p>{agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</p>}
           {cursor && <button className="action-button" disabled={loading} onClick={() => void loadSessions(agent, true)}>加载更多会话</button>}
         </>}
@@ -107,19 +127,29 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
   </main>;
 }
 
-function AgentChat({ endpoint, token, agent, session, draft, onDraft }: {
-  endpoint: string; token: string; agent: Agent; session: AgentSession; draft: string; onDraft: (value: string) => void;
+function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey }: {
+  scopeKey: string; endpoint: string; token: string; agent: Agent; session: AgentSession; draft: string; onDraft: (value: string) => void;
 }) {
   const [snapshot, setSnapshot] = useState<AgentSessionSnapshot | null>(null), snapshotRef = useRef(snapshot); snapshotRef.current = snapshot;
   const draftRef = useRef(draft); draftRef.current = draft;
-  const pendingDraft = useRef<PendingAgentDraft | null>(null);
+  const draftSession = `${agent.id}:${session.id}`;
+  const pendingDraft = useRef<PendingAgentDraft | null>(loadPendingAgentDraft(scopeKey, draftSession));
   const [stream, setStream] = useState<SubscriptionState>("connecting"), [error, setError] = useState("");
   const [busy, setBusy] = useState(false), busyRef = useRef(false), [delivery, setDelivery] = useState<"steer" | "queue">(agent.id === "opencode" ? "steer" : "queue");
   const [history, setHistory] = useState<CodexMessage[]>([]), [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const historyRef = useRef(history); historyRef.current = history;
   const historyInitialized = useRef(false), [historyBusy, setHistoryBusy] = useState(false);
   const historyLock = useRef(false), viewport = useRef<HTMLDivElement>(null), scope = useRef<AbortController | null>(null);
-  const nearBottom = useRef(true), initialized = useRef(false);
+  const readingScope = `agent:${scopeKey}`;
+  const reading = useRef(loadReadingPositions(readingScope));
+  const restoredTop = useRef(reading.current[draftSession]);
+  const nearBottom = useRef(restoredTop.current === undefined), initialized = useRef(false);
+  useEffect(() => {
+    const flush = () => saveReadingPositions(readingScope, reading.current);
+    window.addEventListener("pagehide", flush);
+    window.addEventListener(productBeforeNavigate, flush);
+    return () => { flush(); window.removeEventListener("pagehide", flush); window.removeEventListener(productBeforeNavigate, flush); };
+  }, [readingScope]);
   const base = `/api/agents/${encodeURIComponent(agent.id)}/sessions/${encodeURIComponent(session.id)}`;
   useEffect(() => {
     const controller = new AbortController(); scope.current = controller;
@@ -134,7 +164,9 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft }: {
         if (!historyInitialized.current) { historyInitialized.current = true; setHistoryCursor(next.historyCursor); }
         if (!historyRef.current.length && nearBottom.current && !next.questions.length && !next.permissions.length) requestAnimationFrame(() => viewport.current?.scrollTo({ top: viewport.current.scrollHeight }));
         if (!initialized.current || next.questions.length || next.permissions.length) requestAnimationFrame(() => {
-          if (!historyRef.current.length && (!initialized.current || nearBottom.current)) {
+          if (!initialized.current && restoredTop.current !== undefined && viewport.current) {
+            viewport.current.scrollTop = restoredTop.current;
+          } else if (!historyRef.current.length && (!initialized.current || nearBottom.current)) {
             const card = viewport.current?.querySelector<HTMLElement>(".user-input-card, .agent-permission");
             if (card && viewport.current) viewport.current.scrollTop += card.getBoundingClientRect().top - viewport.current.getBoundingClientRect().top - 12;
           }
@@ -149,6 +181,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft }: {
   const control = online ? snapshot?.control : null;
   function acceptMessageReceipt(receipt: AgentSessionSnapshot["submission"], queue?: AgentSessionSnapshot["queue"]) {
     const next = reconcileAgentDraft(draftRef.current, pendingDraft.current, receipt, queue);
+    if (pendingDraft.current !== next.pending && !savePendingAgentDraft(scopeKey, draftSession, next.pending)) return;
     pendingDraft.current = next.pending;
     if (next.draft !== draftRef.current) { draftRef.current = next.draft; onDraft(next.draft); }
   }
@@ -157,7 +190,12 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft }: {
     if (!currentScope || currentScope.signal.aborted || busyRef.current || !current?.connected || !current.control) return false;
     busyRef.current = true; setBusy(true); setError("");
     const clientMessageId = crypto.randomUUID(), controlToken = current.control.token;
-    if (action === "message") pendingDraft.current = { clientMessageId, text: draftRef.current };
+    if (action === "message") {
+      if (pendingDraft.current) { busyRef.current = false; setBusy(false); setError("上一条输入结果待确认，请先等待电脑同步。"); return false; }
+      const pending = { clientMessageId, text: draftRef.current };
+      if (!savePendingAgentDraft(scopeKey, draftSession, pending)) { busyRef.current = false; setBusy(false); setError("无法保存输入，请保留当前页面并重试。"); return false; }
+      pendingDraft.current = pending;
+    }
     if (action === "message" || action === "interrupt") setSnapshot(value => value ? { ...value, submission: { clientMessageId, action, delivery: "submitted" } } : value);
     try {
       const result = await apiPost<AgentDelivery>(buildUrl(endpoint, `${base}${suffix}`), token, { clientMessageId, controlToken, ...extra }, currentScope.signal);
@@ -174,7 +212,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft }: {
       if (currentScope.signal.aborted) return true;
       const definite = [400, 401, 403, 404, 409, 410, 429].includes((caught as { status?: number })?.status ?? 0);
       if (definite && (action === "message" || action === "interrupt")) {
-        if (pendingDraft.current?.clientMessageId === clientMessageId) pendingDraft.current = null;
+        if (pendingDraft.current?.clientMessageId === clientMessageId && savePendingAgentDraft(scopeKey, draftSession, null)) pendingDraft.current = null;
         setSnapshot(value => value?.submission?.clientMessageId === clientMessageId && value.submission.delivery !== "confirmed" ? { ...value, submission: null } : value);
       }
       if (!definite && (action === "message" || action === "interrupt")) setSnapshot(value => agentDelivery(value, clientMessageId, action, { delivery: "uncertain" }));
@@ -199,12 +237,12 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft }: {
   const messages = [...new Map([...history, ...(agent.id === "deepseek" && history.length ? [] : snapshot?.messages ?? [])].map(message => [message.id, message])).values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id));
   const unresolved = snapshot?.submission && snapshot.submission.delivery !== "confirmed";
   const queuedSubmission = snapshot?.queue?.items.some(item => item.clientMessageId === snapshot.submission?.clientMessageId);
-  const sendEnabled = Boolean(control?.canSend && !busy && !unresolved && draft.trim());
+  const sendEnabled = Boolean(control?.canSend && !busy && !unresolved && !pendingDraft.current && draft.trim());
   const waiting = Boolean(snapshot?.questions.length || snapshot?.permissions.length);
   const progress = !online ? "正在核验任务状态" : waiting ? "等待你的处理" : snapshot?.activity === "working" ? `${agent.label} 正在执行` : snapshot?.activity === "outputting" ? `${agent.label} 正在输出` : `${agent.label} 正在思考`;
   return <section className="agent-chat">
     <div className="agent-connection" role="status"><span className={`status-dot ${online ? "ok" : "error"}`} />{online ? `${agent.label} 已连接` : stream === "unauthorized" ? "凭证已失效，请重新配对" : stream === "paused" ? "连接已暂停，返回前台后恢复" : "正在恢复连接…"}</div>
-    <div className="messages-viewport" ref={viewport} onScroll={() => { const element = viewport.current; if (element) nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100; }}>
+    <div className="messages-viewport" ref={viewport} onScroll={() => { const element = viewport.current; if (element) { nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100; reading.current[draftSession] = element.scrollTop; } }}>
       {snapshot?.partialText && <p className="connection-notice" role="status">{agent.id === "opencode" ? "已从连接时刻继续同步，当前文本段结束后会补齐前文。" : agent.id === "deepseek" ? "当前同步用户与助手文本，可加载更早消息；单条长文本可能截断，附件及工具过程请在电脑查看。" : "当前显示最近会话文本；更早历史或连接前的部分输出尚未同步。"}</p>}
       {agent.id === "claude" && <p className="setting-description">消息会在当前任务结束后处理。同步到手机的提问可在下方回答；审批仅作用于本次请求。其余提示请在电脑处理。</p>}
       {agent.id === "deepseek" && <p className="setting-description">查看历史不会启动任务；发送后继续原会话，运行中可追加。可在下方回答提问，查看完整工具参数后允许一次或拒绝。</p>}
@@ -212,7 +250,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft }: {
       {historyCursor && (agent.id === "deepseek" || history.length < 190) && <button className="history-button" disabled={historyBusy} onClick={() => void older()}>{historyBusy ? "读取历史中…" : "加载更早的消息"}</button>}
       {agent.id === "deepseek" && history.length > 0 && <button className="history-button" disabled={historyBusy} onClick={() => { setHistory([]); setHistoryCursor(snapshot?.historyCursor ?? null); nearBottom.current = true; requestAnimationFrame(() => viewport.current?.scrollTo({ top: viewport.current.scrollHeight })); }}>正在浏览历史 · 返回最新</button>}
       {agent.id !== "deepseek" && history.length >= 190 && <p className="setting-description">已达到手机历史显示上限，更早记录可在电脑查看。</p>}
-      <MessageTimeline messages={messages} renderMessage={message => <MessageBubble message={message} assistantLabel={agent.label} smooth={false} smoothPending={false} onSmoothDone={() => {}} onCopy={() => void writeClipboard(message.text)} />} />
+      <MessageTimeline messages={messages} running={snapshot?.status === "running"} renderMessage={message => <MessageBubble message={message} assistantLabel={agent.label} smooth={false} smoothPending={false} onSmoothDone={() => {}} onCopy={() => void writeClipboard(message.text)} />} />
       {snapshot?.questions.map(question => <AgentQuestions key={question.id} request={question} agentLabel={agent.label} disabled={!online || busy} onRespond={answers => operate("question", `/questions/${question.id}/respond`, { answers }, question.id)} />)}
       {snapshot?.permissions.map(permission => <PermissionCard key={permission.id} permission={permission} agentLabel={agent.label} disabled={!online || busy} onRespond={decision => operate("permission", `/permissions/${permission.id}/respond`, { decision }, permission.id)} />)}
       {snapshot?.queue && <AgentQueue queue={snapshot.queue} disabled={!online || busy} onCancel={id => operate("queue-cancel", `/queue/${encodeURIComponent(id)}/cancel`, {}, id)} />}

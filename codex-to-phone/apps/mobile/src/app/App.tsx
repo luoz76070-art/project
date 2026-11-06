@@ -1,8 +1,14 @@
+import { ProductRemoteShell } from "../features/product/ProductRemoteShell";
+import { isKelivoHost, navigateProduct, productBeforeNavigate, productOpenUpdates, takeProductSettingsLaunch, ProductHost } from "../features/product/host";
+import { productVersionCode, productVersionLabel } from "../features/product/identity";
+import { HandoffCard } from '../features/product/HandoffCard';
+import { handoffReceiptAcceptance, type ProductHandoff } from '../features/product/handoff';
+import { loadReadingPositions, saveReadingPositions } from "../features/chat/readingPositions";
 import { loadWorkspaceCache, saveWorkspaceCache } from "../features/threads/cache";
 import { PairingPanel } from "../features/connection/PairingPanel";
-import React, { useState, useRef, useMemo, useEffect } from "react";
+import React, { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { type ConnectionProfile, type ThemeMode, type SplitMode, type ApprovalPolicy, type SandboxMode, type ThreadSummary, type ThreadRuntime, type DiagnosticStep, type RelayStatus, type UpdateState, type HotUpdateState, type LoadThreadsOptions, type HotUpdateManifest, type DesktopActiveResponse, type CodexMessage, type LiveTurnSnapshot, type SendRoute, type PendingAttachment, type DesktopControlResponse, type UploadResponse, type DesktopStreamSnapshot, type LiveApproval, type LiveApprovalDecision, type UserInputRequest } from "./types";
-import { defaultProfileId, defaultTheme, defaultSplitMode, defaultApprovalPolicy, defaultSandboxMode, defaultSidePaneSize, defaultTopPaneSize, newThreadId, updateManifestUrl, appVersionCode, hotUpdateManifestUrl, desktopPollActiveMs, desktopPollIdleMs, liveSnapshotThrottleMs, livePollFallbackMs, statusKeepaliveMs, appVersionLabel } from "./config";
+import { defaultProfileId, defaultTheme, defaultSplitMode, defaultApprovalPolicy, defaultSandboxMode, defaultSidePaneSize, defaultTopPaneSize, newThreadId, updateManifestUrl, appVersionCode as standaloneVersionCode, hotUpdateManifestUrl, desktopPollActiveMs, desktopPollIdleMs, liveSnapshotThrottleMs, livePollFallbackMs, statusKeepaliveMs, appVersionLabel as standaloneVersionLabel } from "./config";
 import { loadThreadRuntimeCache, readThreadMessageCacheForDiagnostics, defaultRuntime, getRuntime, saveThreadRuntimeCache, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, approvalResponsePatch, threadCacheSaveNotice, type ThreadCacheSaveResult } from "../features/chat/runtime";
 import { makeMessageDiagnostics, readDiagnosticDom } from "../features/chat/messageDiagnostics";
 import { readDiagnosticEnvironment, makeDiagnosticsExport, saveDiagnosticFile } from "../features/chat/diagnosticExport";
@@ -20,7 +26,7 @@ import { makeDiagnosticText, connectionBadge, openHealthUrl } from "../features/
 import { Capacitor } from "@capacitor/core";
 import { NativeHotUpdate } from "../features/updates/native";
 import { useApkUpdate } from "../features/updates/useApkUpdate";
-import { apkBusy, apkCanContinue, apkStatusText, parseAndroidUpdateManifest } from "../features/updates/apk";
+import { apkBusy, apkCanContinue, apkStatusText, readAndroidUpdateManifest } from "../features/updates/apk";
 import { ApkUpdateProgress } from "../features/updates/ApkUpdateProgress";
 import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mimeTypeFromName, isImageFile, revokeAttachmentPreviews } from "../features/chat/attachments";
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
@@ -29,27 +35,43 @@ import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Lo
 import { formatDate } from "../shared/format";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { MessageBubble, MessageTimeline, GenerationStatus, ApprovalCard, AttachmentTray } from "../features/chat/components";
+import { MessageMediaProvider } from "../features/chat/MessageImage";
 import { writeClipboard } from "../shared/clipboard";
 import { VoiceInput } from "../features/voice/VoiceInput";
 import { VoiceSettings } from "../features/voice/VoiceSettings";
 
 import { createSnapshotReducer } from "../features/connection/snapshotPatch";
 import { subscribeEvents, type SubscriptionState } from "../features/connection/subscription";
+const appVersionCode = isKelivoHost ? productVersionCode : standaloneVersionCode;
+const appVersionLabel = isKelivoHost ? productVersionLabel : standaloneVersionLabel;
 const AgentWorkspace = React.lazy(() => import("../features/agents/AgentWorkspace"));
 
 export function App() {
-  const [agentMode, setAgentMode] = useState(false);
   const [connection, setConnection] = useState<ConnectionProfile>(() => {
     const profiles = loadConnectionProfiles();
     return profiles.find((profile) => profile.id === defaultProfileId) ?? profiles[0];
   });
   const scope = `${connection.id}:${connection.cacheNamespace ?? connection.updatedAt}:${normalizeEndpoint(connection.endpoint)}`;
-  return agentMode
-    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => setAgentMode(false)} /></React.Suspense>
-    : <Workspace key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => setAgentMode(true)} />;
+  const [agentMode, setAgentMode] = useState(() => { try { return isKelivoHost && localStorage.getItem("productRemoteMode") === "agent"; } catch { return false; } });
+  const [handoff, setHandoff] = useState<ProductHandoff | null>(null);
+  const receiveHandoff = useCallback((value: ProductHandoff | null) => {
+    setHandoff(value);
+    if (value) setAgentMode(false);
+  }, []);
+  function selectAgentMode(value: boolean) {
+    if (isKelivoHost) { try { localStorage.setItem("productRemoteMode", value ? "agent" : "codex"); } catch { /* In-memory selection remains. */ } }
+    setAgentMode(value);
+  }
+  const openComputerSettings = useCallback(() => {
+    setAgentMode(false);
+    try { localStorage.setItem("productRemoteMode", "codex"); } catch { /* The current settings page is still usable. */ }
+  }, []);
+  return <ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff}>{agentMode
+    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => selectAgentMode(false)} /></React.Suspense>
+    : <Workspace key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}</ProductRemoteShell>;
 }
 
-function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void }) {
+function Workspace({ connection, scope, onApply, onOpenAgents, handoff, onHandoff }: { connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
   const scopeAbortRef = useRef(new AbortController());
   const diagnosticJournalRef = useRef(createConnectionJournal());
   const diagnosticEpochRef = useRef(0);
@@ -99,7 +121,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
   const [copied, setCopied] = useState("");
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(() => isKelivoHost && takeProductSettingsLaunch());
   const [copyingMessageDiagnostics, setCopyingMessageDiagnostics] = useState(false);
   const [messageDiagnosticsStatus, setMessageDiagnosticsStatus] = useState("");
   const messageDiagnosticsLock = useRef(false);
@@ -137,12 +159,12 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
   const workspaceGridRef = useRef<HTMLElement | null>(null);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const listRefreshReady = useRef(false);
-  const scrollPositionsRef = useRef<Record<string, number>>({});
+  const scrollPositionsRef = useRef<Record<string, number>>(loadReadingPositions(scope));
   const selectedRef = useRef<ThreadSummary | null>(null);
   const activeRuntimeRef = useRef<ThreadRuntime>(defaultRuntime());
   const sendLockRef = useRef(false);
   const forceBottomRef = useRef(false);
-  const atBottomRef = useRef(true);
+  const atBottomRef = useRef(!selected || scrollPositionsRef.current[selected.id] === undefined);
   const activeThreadKey = selected?.id ?? (isNewThread ? newThreadId : "");
   useEffect(() => { diagnosticEpochRef.current++; setMessageDiagnosticsStatus(""); }, [activeThreadKey, settingsOpen]);
   const activeRuntime = getRuntime(threadState, activeThreadKey);
@@ -211,8 +233,17 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
   );
   const canControlSelected = Boolean(isNewThread || selected);
   const hasMessageContent = Boolean(draft.trim() || attachments.length > 0);
-  const canSubmitMessage = hasMessageContent && canControlSelected && !submittingMessage && (!sending || isLiveTurnActive) && (!(selected && isDesktopSource(selected)) || desktopSend.ready);
+  const canSubmitMessage = hasMessageContent && canControlSelected && !submittingMessage && !(activeRuntime.pendingMessageSource === 'handoff' && activeRuntime.pendingMessageId) && (!sending || isLiveTurnActive) && (!(selected && isDesktopSource(selected)) || desktopSend.ready);
   const canSend = canSubmitMessage && !(isLiveTurnActive && nativeDesktop && !canQueue);
+  const handoffAcceptance = handoff ? handoffReceiptAcceptance(handoff, scope, selected?.id, desktopCapability) : null;
+  useEffect(() => {
+    if (!handoff || !handoffAcceptance) return;
+    let active = true;
+    ProductHost.handoff({ action: 'confirm', id: handoff.id, clientMessageId: handoff.id, acceptance: handoffAcceptance })
+      .then(result => { if (active && result.handoff) onHandoff(result.handoff); })
+      .catch(() => { /* Retain the durable unknown lock until confirmation can be saved. */ });
+    return () => { active = false; };
+  }, [handoff, handoffAcceptance, onHandoff]);
   const controlText = canUseDesktopIpc
     ? activeRuntime.sending
       ? nativeDesktop ? "运行中，可选择引导或排队" : "运行中，可继续引导或打断"
@@ -485,9 +516,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
     updateCheckLock.current = true;
     setUpdateState((current) => ({ ...current, checking: true, error: "" }));
     try {
-      const url = new URL(updateManifestUrl);
-      url.searchParams.set("t", String(Date.now()));
-      const manifest = parseAndroidUpdateManifest(await apiGet<unknown>(url.href));
+      const manifest = await readAndroidUpdateManifest(updateManifestUrl, url => requestGet(url));
       const available = Number(manifest.versionCode) > appVersionCode;
       setUpdateState({
         checking: false,
@@ -722,12 +751,16 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
   async function submitMessage(delivery?: "steer" | "queue") {
     const threadKey = activeThreadKey;
     const runtime = getRuntime(threadState, threadKey);
+    if (runtime.pendingMessageSource === 'handoff' && runtime.pendingMessageId) {
+      setStatus('交接结果待确认，请先查看交接任务卡。');
+      return;
+    }
     const userText = runtime.draft.trim();
     const pendingAttachments = runtime.attachments;
     const message = composeMessageWithAttachments(userText, pendingAttachments);
     if (!threadKey || !message) return;
     const clientMessageId = runtime.pendingMessageText === message && runtime.pendingMessageId ? runtime.pendingMessageId : crypto.randomUUID();
-    patchRuntime(threadKey, { pendingMessageId: clientMessageId, pendingMessageText: message });
+    patchRuntime(threadKey, { pendingMessageId: clientMessageId, pendingMessageText: message, pendingMessageSource: undefined });
     const control = desktopSendControl(runtime, relayStatus?.desktopControl?.mode);
     const mode = control.native ? delivery ?? (control.guard?.expectedTurnId ? "queue" : "start") : "auto";
     const sendRoute = await resolveSendRoute();
@@ -851,16 +884,18 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
     clientMessageId: string,
     requestedMode: "auto" | "start" | "steer" | "queue",
     capturedGuard: ReturnType<typeof desktopSendControl>["guard"],
-  ): Promise<"sent" | "fallback"> {
-    if (!selected?.id) return "fallback";
-    if (sending && !activeRuntime.sending) return "fallback";
-    if (selectedRef.current?.id !== threadKey) return "sent";
+    handoffSubmission = false,
+  ): Promise<"sent" | "fallback" | "confirmed" | "queued" | "uncertain" | "rejected"> {
+    const outcome = (delivery: 'confirmed' | 'queued' | 'uncertain' | 'rejected') => handoffSubmission ? delivery : 'sent' as const;
+    if (scopeAbortRef.current.signal.aborted || !selected?.id) return handoffSubmission ? 'rejected' : 'fallback';
+    if (sending && !activeRuntime.sending) return handoffSubmission ? 'rejected' : 'fallback';
+    if (selected.id !== threadKey || selectedRef.current?.id !== threadKey) return outcome('rejected');
     const control = desktopSendControl(activeRuntimeRef.current, relayStatus?.desktopControl?.mode);
-    if (!control.ready) {
+    if (!control.ready || (handoffSubmission && !control.native)) {
       const detail = "正在同步桌面控制状态，请稍后手动发送；草稿已保留。";
       patchRuntime(threadKey, { status: detail, desktopSendFeedback: detail });
       setStatus(detail);
-      return "sent";
+      return outcome('rejected');
     }
     const native = control.native;
     const mode = native ? requestedMode : "auto";
@@ -890,8 +925,8 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
       if (!data.ok && !data.delivery) throw new Error(data.error ?? "Desktop 控制请求失败");
       if (data.action === "queue-message") {
         updateRuntime(threadKey, runtime => ({ ...runtime, ...desktopControlResponsePatch(runtime, data, clientMessageId) }));
-        setStatus("已排队，当前任务结束后执行");
-        return "sent";
+        setStatus(data.delivery === 'confirmed' ? "已排队，当前任务结束后执行" : "排队结果待确认，请勿重复发送");
+        return outcome(data.delivery === 'confirmed' ? 'queued' : 'uncertain');
       }
       const optimistic: CodexMessage = {
         id: `desktop-local-${clientMessageId}`,
@@ -906,7 +941,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
       if (data.delivery) {
         updateRuntime(threadKey, runtime => ({ ...runtime, ...desktopControlResponsePatch(runtime, data, clientMessageId) }));
         setStatus(data.delivery === "confirmed" ? "桌面已确认收到消息" : "提交结果待确认，正在同步会话");
-        return "sent";
+        return outcome(data.delivery === 'confirmed' ? 'confirmed' : 'uncertain');
       }
       patchRuntime(threadKey, { pendingMessageId: undefined, pendingMessageText: undefined });
       const statusText = data.warning ? "已提交到桌面 Codex，等待同步确认" : desktopActionText(data.action);
@@ -924,7 +959,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
             : "已接入 Desktop IPC；手机发送会进入电脑 Codex 当前线程。",
       });
       setStatus(statusText);
-      return "sent";
+      return outcome('uncertain');
     } catch (error) {
       const detail = toFriendlyFetchError(error);
       const rejected = [400, 401, 403, 409, 429].includes((error as { status?: number }).status ?? 0);
@@ -946,8 +981,33 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
         };
       });
       if (selectedRef.current?.id === threadKey && !(native && desktopMessageReceived(activeRuntimeRef.current, clientMessageId))) setStatus(detail);
-      return "sent";
+      const received = native && desktopMessageReceived(activeRuntimeRef.current, clientMessageId);
+      const queued = activeRuntimeRef.current.desktopControl?.queue?.items.some(item => item.clientMessageId === clientMessageId);
+      return outcome(received ? queued ? 'queued' : 'confirmed' : rejected ? 'rejected' : 'uncertain');
     }
+  }
+
+  async function sendHandoffMessage(message: string, id: string, expectedThreadId: string): Promise<'confirmed' | 'queued' | 'uncertain' | 'rejected'> {
+    const target = selectedRef.current;
+    const runtime = activeRuntimeRef.current;
+    const control = desktopSendControl(runtime, relayStatus?.desktopControl?.mode);
+    if (sendLockRef.current || scopeAbortRef.current.signal.aborted || !target || target.id !== expectedThreadId || !isDesktopSource(target) || !control.native || !control.ready ||
+      (runtime.pendingMessageId && runtime.pendingMessageId !== id)) return 'rejected';
+    sendLockRef.current = true; setSubmittingMessage(true);
+    try {
+      patchRuntime(target.id, { pendingMessageId: id, pendingMessageText: message, pendingMessageSource: 'handoff' });
+      const result = await sendDesktopMessage(target.id, message, runtime.draft, [], id,
+        control.guard?.expectedTurnId ? 'queue' : 'start', control.guard, true);
+      return result === 'confirmed' || result === 'queued' || result === 'uncertain' ? result : 'rejected';
+    } finally { sendLockRef.current = false; setSubmittingMessage(false); }
+  }
+
+  async function uploadHandoffFile(file: File): Promise<PendingAttachment> {
+    if (!token.trim() || file.size > 25 * 1024 * 1024) throw new Error('请先连接电脑并选择25MB以内的附件。');
+    const response = await apiPost<UploadResponse>(buildUrl(endpoint, '/api/uploads'), token, { fileName: file.name, dataBase64: await fileToBase64(file) });
+    return { id: crypto.randomUUID(), fileName: response.upload.originalName || response.upload.fileName || file.name,
+      path: response.upload.path, relativePath: response.upload.relativePath, size: response.upload.size,
+      createdAt: response.upload.createdAt, mimeType: file.type || mimeTypeFromName(file.name), previewUrl: null };
   }
 
   async function cancelQueuedMessage(clientMessageId: string) {
@@ -1265,6 +1325,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
   }
 
   useEffect(() => {
+    if (isKelivoHost) return;
     applyTheme(theme);
     localStorage.setItem("themeMode", theme);
     if (theme !== "system") return;
@@ -1303,11 +1364,14 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
   const workspaceCacheRef = useRef({ threads, selectedId: selected?.id ?? null, isNewThread });
   workspaceCacheRef.current = { threads, selectedId: selected?.id ?? null, isNewThread };
   const cacheTimerRef = useRef<number | null>(null);
+  const uploadBusyRef = useRef(uploading); uploadBusyRef.current = uploading;
   cacheStateRef.current = threadState;
   function persistWorkspaceCache() {
     const result = saveThreadRuntimeCache(cacheStateRef.current, scope);
     setCacheSaveResult(current => current.status === result.status ? current : result);
     if (result.status !== "input-failed") saveWorkspaceCache(scope, workspaceCacheRef.current);
+    saveReadingPositions(scope, scrollPositionsRef.current);
+    return result;
   }
   useEffect(() => {
     if (cacheTimerRef.current === null) {
@@ -1323,11 +1387,16 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
       cacheTimerRef.current = null;
       persistWorkspaceCache();
     };
+    const beforeNavigate = (event: Event) => {
+      if (uploadBusyRef.current || persistWorkspaceCache().status === "input-failed") event.preventDefault();
+    };
+    window.addEventListener(productBeforeNavigate, beforeNavigate);
     const onHidden = () => { if (document.hidden) flush(); };
     window.addEventListener("pagehide", flush);
     document.addEventListener("visibilitychange", onHidden);
     return () => {
       flush();
+      window.removeEventListener(productBeforeNavigate, beforeNavigate);
       window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", onHidden);
     };
@@ -1349,6 +1418,9 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
       forceBottomRef.current = false;
       setHasNewMessages(false);
       return;
+    }
+    if (selected?.id && scrollPositionsRef.current[selected.id] !== undefined && !element.scrollTop) {
+      element.scrollTop = scrollPositionsRef.current[selected.id];
     }
     setHasNewMessages(visibleMessages.length > 0);
   }, [visibleMessages, selected?.id, isNewThread, pendingInputId]);
@@ -1600,7 +1672,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
     const readyTimer = window.setTimeout(() => {
       if (!failed && Capacitor.isNativePlatform()) void NativeHotUpdate.markReady().catch(() => undefined);
     }, 5000);
-    void Promise.all([checkForUpdates(false), checkHotUpdate(false)]);
+    if (!isKelivoHost) void Promise.all([checkForUpdates(false), checkHotUpdate(false)]);
     return () => {
       window.clearTimeout(readyTimer);
       window.removeEventListener("error", onError);
@@ -1611,6 +1683,10 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
 
   return (
     <main className={`codex-shell ${layoutClass} ${resizingPane ? "is-resizing" : ""}`} style={shellStyle}>
+      {handoff && <HandoffCard key={handoff.id} handoff={handoff} scope={scope} threads={threads} selectedId={selected?.id}
+        ready={Boolean(nativeDesktop && desktopSend.ready && !submittingMessage && !uploading && !activeRuntime.pendingMessageId && (!isLiveTurnActive || canQueue))}
+        queue={isLiveTurnActive} changed={onHandoff} select={thread => void openThread(thread)}
+        refresh={() => { setThreadRange('all'); void loadThreads({ range: 'all', append: threadRange === 'all' && threadPage.hasMore }); }} upload={uploadHandoffFile} send={sendHandoffMessage} />}
       <header className="topbar glass-surface">
         <button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="打开线程列表">
           <Menu size={22} />
@@ -1776,7 +1852,8 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
                 <p>{isNewThread ? "输入消息后会在当前电脑上启动 Codex turn。" : "从左侧选择线程，或创建新线程继续工作。"}</p>
               </div>
             )}
-            <MessageTimeline key={activeThreadKey} messages={visibleMessages} renderMessage={(message) => (
+            <MessageMediaProvider key={activeThreadKey} endpoint={endpoint} token={token} threadId={activeThreadKey}>
+            <MessageTimeline messages={visibleMessages} running={isLiveTurnActive} renderMessage={(message) => (
               <React.Fragment>
                 <MessageBubble
                   message={message}
@@ -1799,6 +1876,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
                 )}
               </React.Fragment>
             )} />
+            </MessageMediaProvider>
             {(activeRuntime.userInputs ?? []).map(request => (
               <UserInputCard key={request.id} request={request} disabled={connectionState !== "ok" || streamState !== "online"} onRespond={answers => respondUserInput(request, answers)} />
             ))}
@@ -1980,7 +2058,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
           <button className="action-button" disabled={!selected?.id || copyingMessageDiagnostics} onClick={() => void exportMessageDiagnostics("file")}><Download size={16} /><span>保存详细报告</span></button></div>
           {messageDiagnosticsStatus && <p className="update-note" role="status">{messageDiagnosticsStatus}</p>}
         </details></section>
-        <section className="settings-section"><details className="settings-disclosure"><summary>版本与更新</summary>
+        {isKelivoHost ? <section className="settings-section"><h3>应用版本</h3><p>{appVersionLabel}</p><button className="action-button" onClick={() => window.dispatchEvent(new Event(productOpenUpdates))}><Download size={18} /><span>应用更新</span></button></section> : <section className="settings-section"><details className="settings-disclosure"><summary>版本与更新</summary>
           <div className="version-card">
             <span>手机版本</span>
             <strong>{appVersionLabel}</strong>
@@ -2048,7 +2126,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
               <span>回退热更新</span>
             </button>
           </div>
-        </details></section>
+        </details></section>}
 
         <section className="settings-section">
           <h3>电脑状态</h3>
@@ -2078,7 +2156,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
 
         <section className="settings-section">
           <h3>主题</h3>
-          <div className="segmented">
+          {isKelivoHost ? <button className="action-button" onClick={() => void navigateProduct("settings").catch(() => setStatus("请等待草稿保存后再切换设置。"))}><Settings size={16} />统一外观设置</button> : <div className="segmented">
             <button className={theme === "system" ? "active" : ""} onClick={() => setTheme("system")}>
               <Monitor size={15} />
               <span>系统</span>
@@ -2091,7 +2169,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents }: { connection: C
               <Moon size={15} />
               <span>深色</span>
             </button>
-          </div>
+          </div>}
         </section>
 
         <section className="settings-section">

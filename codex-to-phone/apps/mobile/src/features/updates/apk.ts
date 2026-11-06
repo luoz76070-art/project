@@ -41,6 +41,13 @@ export function parseAndroidUpdateManifest(value: unknown): AndroidUpdateManifes
     mandatory: data.mandatory === true, publishedAt: typeof data.publishedAt === "string" ? data.publishedAt : undefined };
 }
 
+export async function readAndroidUpdateManifest(source: string, read: (url: string) => Promise<unknown>): Promise<AndroidUpdateManifest> {
+  if (!source) throw new Error("当前构建未配置在线更新地址");
+  const url = new URL(source);
+  url.searchParams.set("t", String(Date.now()));
+  return parseAndroidUpdateManifest(await read(url.href));
+}
+
 export function newerApkStatus(current: ApkUpdateStatus | null, incoming: ApkUpdateStatus): ApkUpdateStatus {
   return current && current.revision > incoming.revision ? current : incoming;
 }

@@ -1,4 +1,4 @@
-import { type ThreadRuntime, type CodexMessage, type DesktopControlCapability, type DesktopControlResponse, type LiveApproval } from "../../app/types";
+import { type ThreadRuntime, type CodexMessage, type DesktopControlCapability, type DesktopControlResponse, type LiveApproval, type PendingAttachment } from "../../app/types";
 import { composeMessageWithAttachments } from "./attachments";
 import { reconcileMessages } from "./messageReconciliation";
 const threadRuntimeCacheKey = "mobileCodexThreadRuntimeCacheV2";
@@ -8,7 +8,7 @@ const threadInputCacheKey = "mobileCodexThreadInputCacheV1";
 const inputCacheByteBudget = 1024 * 1024;
 const messageCacheByteBudget = 2 * 1024 * 1024;
 
-type CachedInput = Pick<ThreadRuntime, "draft" | "pendingMessageId" | "pendingMessageText"> & { localMessages?: CodexMessage[] };
+type CachedInput = Pick<ThreadRuntime, "draft" | "pendingMessageId" | "pendingMessageText" | "pendingMessageSource"> & { localMessages?: CodexMessage[]; attachments?: PendingAttachment[] };
 type CachedThread = Partial<CachedInput> & {
   messageIdentityVersion?: number; messages?: CodexMessage[]; cursor?: number;
   generation?: string; historyBefore?: number; lastAccessedAt?: number;
@@ -78,7 +78,7 @@ export function desktopRejectedSendPatch(runtime: ThreadRuntime, code: unknown, 
   if ((code === "desktop_control_refresh_required" || code === "desktop_turn_changed") &&
       runtime.pendingMessageId === clientMessageId && !runtime.desktopSubmission &&
       runtime.desktopControl?.submission?.clientMessageId !== clientMessageId) {
-    return { pendingMessageId: undefined, pendingMessageText: undefined };
+    return { pendingMessageId: undefined, pendingMessageText: undefined, pendingMessageSource: undefined };
   }
   return {};
 }
@@ -87,10 +87,10 @@ function desktopAcceptedSendPatch(runtime: ThreadRuntime, clientMessageId: strin
   const matching = runtime.pendingMessageId === clientMessageId;
   const submission = runtime.desktopSubmission?.clientMessageId === clientMessageId;
   if (!matching && !submission) return {};
-  const unchanged = matching && runtime.pendingMessageText === composeMessageWithAttachments(runtime.draft, runtime.attachments);
+  const unchanged = matching && runtime.pendingMessageSource !== 'handoff' && runtime.pendingMessageText === composeMessageWithAttachments(runtime.draft, runtime.attachments);
   const feedback = action === "queue-message" ? "已排队，当前任务结束后执行" : action === "steer-turn" ? "桌面已确认收到引导" : "桌面已确认收到消息";
   return {
-    ...(matching ? { pendingMessageId: undefined, pendingMessageText: undefined } : {}),
+    ...(matching ? { pendingMessageId: undefined, pendingMessageText: undefined, pendingMessageSource: undefined } : {}),
     ...(!runtime.desktopSubmission || submission ? { desktopSubmission: undefined } : {}),
     ...(unchanged ? { draft: "", attachments: [] } : {}),
     desktopSendFeedback: feedback,
@@ -194,17 +194,28 @@ function localInputMessage(message: CodexMessage): boolean {
   return message.role === "user" && (message.kind === "local" || message.kind === "steeringUserMessage" || /^(local-|desktop-local-|steer-local-)/u.test(message.id));
 }
 
+function restoredAttachments(value: unknown): PendingAttachment[] {
+  return (Array.isArray(value) ? value : []).filter(item => item && typeof item === "object" &&
+    ["id", "fileName", "path", "relativePath", "createdAt", "mimeType"].every(key => typeof item[key] === "string" && item[key].length <= 8192) &&
+    Number.isFinite(item.size) && item.size >= 0).slice(0, 32).map(item => ({
+      id: item.id, fileName: item.fileName, path: item.path, relativePath: item.relativePath,
+      createdAt: item.createdAt, mimeType: item.mimeType, size: item.size, previewUrl: null,
+    }));
+}
+
 function inputFromRuntime(runtime: Partial<ThreadRuntime>): CachedInput {
   return {
     draft: typeof runtime.draft === "string" ? runtime.draft : "",
+    attachments: restoredAttachments(runtime.attachments),
     pendingMessageId: typeof runtime.pendingMessageId === "string" ? runtime.pendingMessageId : undefined,
     pendingMessageText: typeof runtime.pendingMessageText === "string" ? runtime.pendingMessageText : undefined,
+    pendingMessageSource: runtime.pendingMessageId && runtime.pendingMessageSource === 'handoff' ? 'handoff' : undefined,
     localMessages: reconcileMessages([], (Array.isArray(runtime.messages) ? runtime.messages : []).filter(message => cacheableMessage(message) && localInputMessage(message))),
   };
 }
 
 function hasInput(input: CachedInput): boolean {
-  return Boolean(input.draft || input.pendingMessageId || input.pendingMessageText || input.localMessages?.length);
+  return Boolean(input.draft || input.pendingMessageId || input.pendingMessageText || input.localMessages?.length || input.attachments?.length);
 }
 
 export function loadThreadRuntimeCache(scope = "legacy-disabled"): Record<string, ThreadRuntime> {
@@ -230,7 +241,8 @@ export function loadThreadRuntimeCache(scope = "legacy-disabled"): Record<string
     result[threadId] = {
       ...defaultRuntime(), messages,
       draft: typeof input.draft === "string" ? input.draft : "",
-      pendingMessageId: input.pendingMessageId, pendingMessageText: input.pendingMessageText,
+      attachments: restoredAttachments(input.attachments),
+      pendingMessageId: input.pendingMessageId, pendingMessageText: input.pendingMessageText, pendingMessageSource: input.pendingMessageSource,
       generation: refresh ? undefined : item.generation,
       historyBefore: refresh ? undefined : item.historyBefore,
       lastAccessedAt: item.lastAccessedAt,

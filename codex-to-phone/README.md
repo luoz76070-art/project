@@ -1,360 +1,121 @@
-# Codex To Phone
+<div align="center">
 
-> 把 Mac 上的 Codex Desktop 延伸到 Android 手机：远程查看线程、跟随输出、发送消息、上传附件，并继续控制正在运行的会话。
+# Mobile Codex
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-111827.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/Node.js-20%2B-2f855a.svg)](https://nodejs.org/)
-[![Android](https://img.shields.io/badge/client-Android-3ddc84.svg)](apps/mobile)
-[![macOS](https://img.shields.io/badge/relay-macOS-111827.svg)](scripts/helper/MobileCodexRelay.swift)
+**Kelivo AI 聊天 · Codex 电脑工作台 · 一个 App**
 
-Codex To Phone 不是远程桌面，也不会把 Codex 账号放到手机上。Codex 仍在电脑上运行，手机通过你自己控制的 Relay 和 Broker 查看最近会话并提交输入。
+[![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)](#下载)
+[![Preview](https://img.shields.io/badge/preview-0.1.5-blue)](releases/android/kelivo-preview/0.1.5/)
+[![Flutter](https://img.shields.io/badge/Flutter-3.47.6-02569B?logo=flutter)](apps/kelivo)
+[![License](https://img.shields.io/badge/整合发行-AGPL--3.0-555)](apps/kelivo/LICENSE)
 
-当前开发预览为APK35 `1.3.14-input-replacement-preview`：明确临时输入到正式输入的替换关系，迁移历史记录旧别名并修复已有版本3缓存，保留草稿、待确认及真实同文多次输入；配套网关提供独立于120条尾窗的有界身份索引。手机84项、后端相关113项、消息/类型/构建及实际浏览器过渡检查通过，完整Android lint 0错误/8警告。同签名preview35/previous34已发布，正式18/hot保持，App内检查更新。网关已切换，86项只读健康检查及两Agent首帧/重连通过；原手机重复记录和覆盖安装待真机验收，无需复制长诊断。见[修正与交付](docs/audits/2026-10-24/input-replacement.md)。
+[下载](#下载) · [界面预览](#界面预览) · [开始使用](#开始使用) · [开发与构建](#开发与构建) · [验证记录](docs/audits/2026-11-07/remote-rendering.md)
 
-源码采用“分步本地提交，完整版本验收后集中推送GitHub”的流程；本项目位于父仓库`project`的`codex-to-phone/`子目录，提交和推送前必须核对项目范围。预览版本与正式验收分开标记，手机/网关部署仍沿各自发布流程。具体步骤见[版本同步约定](docs/ops/version-sync.md)。
+</div>
 
-上一轮用户已确认APK24→25 App内升级成功、原连接保留，以及DeepSeek手机同一会话普通收发完整且无重复；审批、追加/中断及切网等仍分别待验，长期测试暂缓。见[兼容性与真机验收](docs/audits/2026-10-22/android-compat.md)及[更新链路交付](docs/audits/2026-10-22/in-app-update.md)。
+Mobile Codex 把 Kelivo 的 AI 客户端与 Codex To Phone 的电脑控制能力放进同一个 Android App，统一使用 Kelivo 的配色、导航和聊天风格。
 
-上一项已交付APK23 `1.3.2-project-groups-preview`：Codex与DeepSeek默认近30天、可查看更早，均按项目文件夹分组并记住展开/折叠；同名目录按完整路径区分，搜索临时展开。列表前台每30秒刷新摘要，正文按需读取。固定网关已更新，本地/公网Codex近期69/全部126、DeepSeek11会话/3项目通过；后端321/321、手机46/46及类型/构建、窄屏检查通过。APK23同签名独立预览已完整下载校验，需手机覆盖安装，正式18/hot保持；原会话发送和权限决定另验。下载与边界见[本轮交付](docs/audits/2026-10-22/project-groups.md)，历史接入见[DeepSeek配置](plugins/mobile-deepseek/README.md)。
+你可以在「AI」页独立聊天，也可以在「电脑」页继续电脑上的 Codex 会话。需要衔接时，主动将某条 AI 回复交给电脑，编辑并确认发送。切换入口无需调用模型判断，也不会自动创建电脑任务。
 
-```text
-Android App
-    |
-    | HTTPS
-    v
-Public Broker
-    ^
-    | outbound WSS tunnel
-    |
-Mac native gateway  ->  Codex Desktop IPC
-```
+当前交付为 **0.1.5-native-preview / versionCode 7**，面向 Android arm64 手机。源码保留不等于所有功能都完成验收；完整 Kelivo 功能对照、最低系统、系统插件与部分真实联动仍在逐项检查，详见[验收账本](docs/audits/2026-11-06/kelivo-parity-evidence.md)。
 
-## 能做什么
+## 下载
 
-- 在 Android 上查看 Codex Desktop 的线程列表和最近消息。
-- Codex与DeepSeek默认近30天，可按需加载更早会话；按项目目录分组并记住折叠状态。
-- 从手机向指定 Codex Desktop 线程发送文字和附件。
-- 录音后经百炼转写、DeepSeek整理，预览编辑后回填草稿；模型Key在手机设置配置，真实效果待验。
-- 显示“正在思考”“正在输出”“等待审批”等运行状态。
-- 低延迟同步 Codex 文本结果，并在手机端平滑显示。
-- 支持 Light、Dark、System 三种主题。
-- 通过自建 Broker 跨网络使用，不要求手机和电脑连接同一 Wi-Fi。
-- 支持带 SHA-256 校验和自动回滚的前端热更新，以及自托管 APK 版本更新。
+| 文件 | 用途 |
+| --- | --- |
+| [Android APK：0.1.5 预览版](https://github.com/luoz76070-art/project/raw/refs/heads/main/codex-to-phone/releases/android/kelivo-preview/0.1.5/mobile-codex-kelivo-0.1.5-preview-arm64.apk) | Android 7.0+、arm64-v8a；同包名预览覆盖安装 |
+| [对应源码归档](releases/android/kelivo-preview/0.1.5/mobile-codex-kelivo-0.1.5-preview-source.tar.gz) | 与本 APK 对应的源码、依赖锁、构建入口和逐文件 SHA256 |
+| [配套电脑网关](releases/android/kelivo-preview/0.1.5/mobile-codex-gateway-0.1.5-preview.tar.gz) | 包含本地图片读取接口的自包含 Node 网关，无个人配置 |
+| [校验值与版本说明](releases/android/kelivo-preview/0.1.5/) | SHA256、APK 元数据、兼容边界及网关升级步骤 |
 
-默认界面只展示用户输入和 Codex 文本结果。工具日志、补丁内容、环境上下文和桥接内部消息不会占据聊天区。
+安装包约 58.2 MiB，包名为 `com.mobilecodex.kelivo.preview`，使用本地预览证书签名。它与原独立 Codex To Phone App 的包名不同。code6 使用者可直接覆盖安装；手机安装器会要求你确认。
 
-## 源码结构与优化进度
+App 的「设置 → 应用更新」仍使用独立自托管通道。**本次 GitHub 提交不会同步更新该通道**；请使用上面的 GitHub APK 安装本版本。源码推送也不会自动升级你的电脑网关。
 
-项目已接入 Trellis；源码布局与任务入口见 [工程布局](docs/project-layout.md)，原始问题见 [源码审核](docs/audits/2026-10-20/README.md)。本轮已实施公网流、自动恢复、缓存/档案隔离、索引分页、设备配对和 Codex 手机版 UI；[优化交付与统一实测](docs/audits/2026-10-20/delivery.md) 记录当前 APK、验证结果及真机待办。
+## 界面预览
 
-本地隔离回归使用 `corepack pnpm test:transport`；该命令不会提交模型任务。
+<p align="center">
+  <img src="docs/images/remote-rendering-light.jpg" width="260" alt="电脑页浅色：折叠执行摘要、图片和紧凑代码" />
+  <img src="docs/images/remote-rendering-dark.jpg" width="260" alt="电脑页深色：相同布局与图片展示" />
+</p>
 
-## 当前实现
+以上是本版本真实前端在隔离浏览器中的截图，使用合成会话与图片，不包含个人项目或模型任务。
 
-| 组件 | 技术 | 作用 |
-| --- | --- | --- |
-| Android App | React 19、Vite 7、Capacitor 7 | 手机 UI、连接管理、消息同步、附件和更新检查 |
-| Local Relay | Node.js、TypeScript、Fastify | 读取 Codex 会话、提供 API、控制当前线程 |
-| Public Broker | Fastify、WebSocket | 转发 Android 请求和 Mac 主动建立的加密隧道 |
-| Mac 原生网关 | 插件自包含 Node bundle | 单进程运行 Relay + Tunnel，经 Desktop IPC 控制原会话 |
-| 旧 Mac Relay App / Input Helper | Swift、AppKit、macOS Accessibility | 旧版回退方式；源码与构建入口保留，当前原生网关不依赖两个 App |
-| Protocol Types | Codex app-server generated types | 解析线程、turn、审批和增量事件 |
+## 功能
 
-当前已发布手机版本为 `1.2.2-update-restore` / versionCode 18，已恢复手机更新源，包含工作状态修复与前序优化，等待统一真机实测。下述插件开发预览尚未包含在该APK中。原更新通道交付与安装说明见 [手机更新恢复](docs/audits/2026-10-20/update-restore.md)。主验证环境是 **macOS + Codex Desktop + Android**。Windows 相关代码仍保留，但不是当前重点支持路径。
+| 入口 | 能做什么 |
+| --- | --- |
+| AI | 复用 Kelivo 的模型配置、多供应商聊天、Markdown、工具、MCP、工作区和备份等源码；无需连接电脑即可使用 |
+| 电脑 | 按项目查看会话，跟随输出，发送文字与附件，处理已适配的问答、审批、排队和停止操作 |
+| 可选交接 | 从 AI 回复准备一张任务卡，自选电脑已有会话，编辑后确认发送；不自动转发整段历史 |
+| 统一设置 | 主题、聊天字号与工具显示偏好；独立的 APK 更新入口 |
 
-本次版本的功能、修复、验证范围和已知限制见 [更新说明](CHANGELOG.md)。公开仓库包含源码和构建说明；APK、Mac App、部署凭证及本地验收日志不随源码提交。正式1.2.2的旧版App说明保留供回退，当前开发环境已迁移至原生网关。
+本次电脑页改进：
 
-开发中的 [Agent 网关](docs/agent-gateway.md) 已实现只读探测、手机提问卡片与原请求应答，以及原会话发送/追加/中断通道和三类Desktop审批。2026-10-21 已按用户授权切换原生候选网关，选择卡已真实验证，其余控制继续分项验收。[插件开发预览](plugins/mobile-codex/README.md)通过`corepack pnpm build:plugin`生成独立插件包，提供单进程Relay+Tunnel、配对与设备管理CLI；实际Codex插件尚未安装，当前直接运行固定包。旧App已归档清理，源码、构建命令与旧配置保留。`test:gateway`、`test:user-input`、`test:desktop-native`、`test:desktop-approvals`、`test:managed-gateway` 使用合成服务；`probe:gateway` 是单独的本机只读检查，不运行真实模型任务。
+- 连续执行动态更新同一条摘要，默认收起；点击展开明细，最终回复单独显示。
+- 默认正文 15px、代码 12px、工具输出约 11px；长输出在块内滚动，聊天字号跟随 Kelivo 偏好。
+- Markdown 图片直接显示，点击查看大图，可切换原尺寸并重试加载。
+- 本地图片经过电脑网关鉴权，仅允许当前 Codex 会话项目目录内的 PNG、JPEG、GIF、WebP、AVIF，单图不超过 8 MiB。HTTPS 图片也可显示。
 
-同一网关的OpenCode及[Claude Code预览](plugins/mobile-claude/README.md)已完成原会话控制、手机问答与审批的源码/合成验证；Claude仅排队输入和单次审批，本机版本低于开发契约，尚未真实加载。OpenCode已修正为固定2.0.16协议，最终后端210项、手机37项及窄屏浏览器检查通过，生产APK仍1.2.2/versionCode18；[统一验收计划](docs/test-and-acceptance-plan.md)记录插件安装、真实原会话与Android公网的剩余步骤，长期连接测试暂缓。
+本地图片需要 **本版本配套网关**；旧网关会显示升级提示。当前本地取图支持 Codex 会话，其他 Agent 的本地图片尚未接入。只有路径、没有 Markdown 图片引用的文本不会自动变成图片。
 
-已生成[1.3.0/versionCode19候选包](docs/audits/2026-10-21/agent-gateway-candidate.md)：同签名APK、独立插件ZIP和完整单文件热更新。用户确认手机连接成功并同步120线程后反馈发送409；最新[手机修复预览APK20](docs/audits/2026-10-21/phone-send-409.md)已发布，补齐发送前能力检查与具体错误提示，真实发送待复测。正式更新清单仍18；宿主版本兼容与原会话控制等验收继续见[迁移交接](docs/audits/2026-10-21/gateway-migration.md)。
+## 开始使用
 
-## 当前 Mac 原生网关入口
+### AI 聊天
 
-当前后台运行程序为`~/Library/Application Support/Mobile Codex Gateway/releases/<固定版本>/mobile-codex/lib/gateway.mjs`，配置为同一Gateway目录下的`gateway.json`，日志为`gateway.log`。它由独立Node进程运行，当前未注册登录自启动。固定目录中的`scripts/mobile-codex.mjs`提供`status/start/stop/pair`，具体安装与初始化见[插件说明](plugins/mobile-codex/README.md)。已有配置时先查看status，不要重复init或另起旧App。
+安装后进入「AI」，在设置中添加你使用的供应商、地址和模型凭证，再选择模型开始聊天。模型服务由你配置；AI 聊天与电脑连接各自独立。
 
-2026-10-21已将工程根目录的Relay/Input两个生成App压缩归档并移除；原生网关PID、配置及公网连接保持。实际程序位置、清理和恢复记录见[旧Mac应用清理](docs/audits/2026-10-21/legacy-mac-app-cleanup.md)。
+### 连接电脑
 
-## 快速开始（旧版 App 回退方式）
+电脑需运行 Codex Desktop 和本项目网关；跨网络访问还需你自己的 HTTPS Broker。网关通过主动连接 Broker 传输消息，手机不需要与电脑处于同一 Wi-Fi。
 
-以下Mac步骤适用于旧App方式；当前原生网关按上节管理，不需要重建App或授予辅助功能权限。Android构建步骤继续适用。
+首次从源码准备：
 
-### 环境要求
-
-- macOS 13 或更高版本
-- 已安装并登录 Codex Desktop
-- Node.js 20 或更高版本
-- Android 8 或更高版本
-- 构建 APK 时需要 JDK 21 或更高版本和 Android SDK；本轮使用 JDK 25 + Gradle 9.4.1
-
-### 1. 获取源码
-
-本项目目前位于 `project` 仓库的 `codex-to-phone` 子目录：
-
-```bash
+```sh
 git clone https://github.com/luoz76070-art/project.git
 cd project/codex-to-phone
-corepack enable
 corepack pnpm install --frozen-lockfile
+corepack pnpm build:plugin
+node dist-plugin/mobile-codex/scripts/mobile-codex.mjs status
+node dist-plugin/mobile-codex/scripts/mobile-codex.mjs init --workspace /absolute/path/to/your/project
 ```
 
-### 2. 构建 Mac Relay
+按照[网关配置说明](plugins/mobile-codex/README.md)补全私有 Broker 配置，再执行：
 
-```bash
-corepack pnpm mac:package
+```sh
+node dist-plugin/mobile-codex/scripts/mobile-codex.mjs start
+node dist-plugin/mobile-codex/scripts/mobile-codex.mjs pair
 ```
 
-项目根目录会生成：
+在手机「电脑 → 设置」粘贴一次性配对信息，连接后选择已有会话。`pair` 只生成短期配对信息，不调用模型。已有配置请先 `status`，沿用原配置和工作目录，按[版本包说明](releases/android/kelivo-preview/0.1.5/README.md)切换网关程序。
 
-```text
-Mobile Codex Relay.app
-Mobile Codex Input.app
-```
+[Broker 部署](docs/remote-broker.md) · [网关管理](plugins/mobile-codex/README.md) · [其他 Agent 接入](docs/agent-gateway.md)
 
-这两个 App 包含本机路径和本机构建信息，因此不会提交到 Git。每台 Mac 都应从源码重新构建。
+## 开发与构建
 
-### 3. 启动 Relay
+| 目录 | 职责 |
+| --- | --- |
+| `apps/kelivo` | 固定上游 Kelivo v1.3.4、Flutter AI 与统一宿主 |
+| `apps/mobile` | React / Capacitor 电脑工作台，保留原独立 App 入口 |
+| `apps/relay` | Fastify API、Codex Desktop IPC、Broker 与 Tunnel |
+| `integrations/kelivo` | 来源清单、宿主桥接、Android 组合与构建契约 |
+| `plugins` | 电脑网关及其他 Agent 的接入包 |
+| `releases/android/kelivo-preview` | 用户明确要求入库的版本化 APK、源码和校验信息 |
 
-双击 `Mobile Codex Relay.app`。首次启动会在以下位置生成随机 Token、Relay ID 和 Relay Secret：
+Node.js 22+、pnpm 10.20.0。原生构建使用固定 Flutter 3.47.6、Android SDK 36、NDK 28.2、JDK 17 与 JDK 21+；完整路径和镜像设置见[原生构建说明](integrations/kelivo/README.md)。
 
-```text
-~/Library/Application Support/Mobile Codex Relay/config.json
-```
-
-优先在 Mac App 点击 `Pair phone`，把复制的配对信息粘贴到手机设置中。配对码 5 分钟内有效且仅用一次，手机取得独立、可撤销的设备凭证；Endpoint/管理员 Token 保留为手工恢复入口。
-
-### 4. 授予输入权限
-
-打开：
-
-```text
-系统设置 -> 隐私与安全性 -> 辅助功能
-```
-
-为当前工程中的 `Mobile Codex Relay.app` 与 `Mobile Codex Input.app` 开启辅助功能权限，用于把手机消息提交到可见的 Codex Desktop 输入框。当前 Relay 直接启动输入助手，系统可能将控制权限归属到 Relay；只授权 Input 仍可能失败。若迁移或重建后开关已开却报未授权，移除旧副本的授权项，再手动添加当前工程中的两个 App。不要授权旧工程路径，也不要在输入结果未知时反复发送。排查步骤见 [公网连接维护](docs/ops/remote-connection-repair.md#mac-输入权限)。
-
-### 5. 构建 Android APK
-
-第一次构建先安装 Android 工具：
-
-```bash
-corepack pnpm android:setup:mac
-```
-
-先按下文“在线更新”保存本地生产更新源，再构建 APK：
-
-```bash
-corepack pnpm android:apk:mac -- 1.2.2-update-restore
-```
-
-产物位于：
-
-```text
-dist-apk/mobile-codex-1.2.2-update-restore-debug.apk
-```
-
-在 Android 上安装后，打开设置，填写 Relay Endpoint 和 Token，然后执行“测试连接”。
-
-## 远程使用
-
-正式远程场景使用 Public Broker。Mac 和手机都只需要能够主动访问 Broker，不需要公网 IP、路由器端口转发或同一局域网。
-
-### 1. 配置 Broker 凭证
-
-生成两个不同的随机值：
-
-```bash
-openssl rand -hex 32
-openssl rand -hex 32
-```
-
-其中一个作为手机访问 Relay 的 `token`，另一个作为 Broker 隧道的 `relaySecret`。不要混用。
-
-### 2. 启动 Broker
-
-```bash
-export MOBILE_CODEX_BROKER_HOST=127.0.0.1
-export MOBILE_CODEX_BROKER_PORT=18888
-export MOBILE_CODEX_BROKER_RELAYS='{"my-mac":"replace-with-at-least-24-random-characters"}'
-
-corepack pnpm --filter @mobile-codex/relay build
-corepack pnpm --filter @mobile-codex/relay broker:start
-```
-
-使用 Nginx、Caddy 或其他反向代理把 `https://broker.example.com` 转发到 `127.0.0.1:18888`，并启用 WebSocket upgrade。
-
-### 3. 配置 Mac Relay
-
-编辑：
-
-```text
-~/Library/Application Support/Mobile Codex Relay/config.json
-```
-
-示例：
-
-```json
-{
-  "port": 8787,
-  "token": "replace-with-a-separate-phone-access-token",
-  "brokerUrl": "https://broker.example.com",
-  "relayId": "my-mac",
-  "relaySecret": "replace-with-at-least-24-random-characters"
-}
-```
-
-重新打开 `Mobile Codex Relay.app`。Android App 中填写：
-
-```text
-Endpoint: https://broker.example.com/r/my-mac
-Token: replace-with-a-separate-phone-access-token
-```
-
-完整的反向代理和验证步骤见 [公网 Broker 部署](docs/remote-broker.md)。
-
-## 在线更新
-
-手机入口为“设置 → 版本与更新 → 检查更新 → 下载并安装”。APK24起在App内下载校验并调用系统安装器，首次来源授权返回可继续；旧APK需先手动覆盖安装24一次。更新地址使用构建配置，预览包必须选择preview清单。将双通道地址保存到被 Git 忽略的 `apps/mobile/.env.production.local`，避免下次打包遗漏；也支持环境变量覆盖：
-
-```bash
-cat > apps/mobile/.env.production.local <<'EOF'
-VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL=https://downloads.example.com/mobile-codex/android/latest.json
-VITE_MOBILE_CODEX_HOT_MANIFEST_URL=https://downloads.example.com/mobile-codex/hot/latest.json
-EOF
-corepack pnpm android:apk:mac -- 1.2.2-update-restore
-```
-
-请替换示例域名。具名 APK 构建要求两个地址齐全且有效，缺失时立即失败；仅本地 `mac-local` 调试包允许两个地址都为空。未带更新源的旧 APK 16/17 需要先从手机浏览器下载修复 APK 并覆盖安装一次，之后可在 App 内继续检查更新，无需卸载或清除数据。
-
-生产环境的热更新 Manifest 和 bundle 地址必须使用 HTTPS。仅本机开发调试允许使用 `http://localhost`、`http://127.0.0.1` 或 `http://[::1]`；更新下载不跟随 HTTP 重定向。
-
-发布脚本同样不包含服务器、账号或 SSH 私钥默认值：
-
-```bash
-export MOBILE_CODEX_RELEASE_HOST=deploy@example.com
-export MOBILE_CODEX_RELEASE_SSH_KEY=$HOME/.ssh/id_ed25519
-export MOBILE_CODEX_RELEASE_DIR=/var/www/mobile-codex/releases/android
-export MOBILE_CODEX_RELEASE_BASE_URL=https://downloads.example.com/mobile-codex/android
-
-scripts/publish-android-update.sh \
-  dist-apk/mobile-codex-1.2.2-update-restore-debug.apk \
-  1.2.2-update-restore \
-  18 \
-  "Your release notes"
-```
-
-仅修改 React UI、样式或前端状态逻辑时，可以构建并发布热更新：
-
-```bash
-corepack pnpm android:hot-bundle -- 1.2.2-web.1
-
-scripts/publish-hot-update.sh \
-  dist-hot/mobile-codex-1.2.2-web.1.html \
-  1.2.2-web.1 \
-  18 \
-  "UI update"
-```
-
-热更新会先校验 SHA-256，再切换到应用私有目录中的单文件 bundle；未成功确认加载时，下次启动自动回滚。原生代码、权限、Capacitor 插件和不兼容协议变化必须发布 APK。
-
-详情见 [Android 在线更新](docs/online-update.md)。
-
-## 常用命令
-
-统一检查与Android工具链说明见[本地验证入口](docs/verification.md)。
-
-```bash
-# 核心隔离检查（lint、类型、构建、测试）
+```sh
+corepack pnpm install --frozen-lockfile
 corepack pnpm verify
-
-# 核心检查 + Android Java编译与lint
-corepack pnpm verify:all
-
-# 类型检查
-corepack pnpm typecheck
-
-# 消息顺序和重复消息回归测试
-corepack pnpm test:messages
-
-# Codex CLI 路径解析回归测试
-corepack pnpm test:codex-executable
-
-# 构建 Relay 和移动端 Web
-corepack pnpm build
-
-# 开发模式启动 Relay
-corepack pnpm dev:relay
-
-# 开发模式启动移动端
-corepack pnpm dev:mobile
-
-# 构建 Mac App 和输入 Helper
-corepack pnpm mac:package
-
-# Relay 本地烟测
-corepack pnpm smoke
+node scripts/verify-kelivo.mjs --preview --repeat-tests
 ```
 
-## 安全说明
+APK 输出：`output/kelivo/mobile-codex-kelivo-0.1.5-preview-arm64.apk`。发布目录包含构建元数据及对应源码；缓存、签名私钥、模型凭证和个人数据不入库。自己的构建签名与这里的预览证书不同，不能据此承诺覆盖安装或字节完全相同。
 
-- 不要把 `.env.local`、`config.json`、Token、Relay Secret、SSH 私钥、APK 或本地日志提交到 Git。
-- Public Broker 默认要求通过 `MOBILE_CODEX_BROKER_RELAYS` 明确配置允许连接的 Relay。
-- Relay Secret 通过 WebSocket `Authorization` 请求头发送，不会写入连接 URL。
-- Relay API 使用独立 Bearer Token；Broker 只负责转发，不应保存完整会话。
-- 生产环境必须使用 HTTPS/WSS，并限制服务器日志、备份和访问权限。
-- 手机端获得的是远程执行入口。只应连接自己控制的电脑、Broker 和 Codex 环境。
+本轮隔离检查：完整 JS/TS verify、Flutter 产品测试及 Dart 分析、原生 340 项测试、完整 Android lint 通过；宿主/远控保留 56/1 条既有 lint 警告。已核对 APK 签名及内置 Web 文件，浏览器检查覆盖折叠、图片、大图、重试、深色和窄屏。**code7 的手机覆盖安装与真实图片联动仍待用户复测**，详见[本轮记录](docs/audits/2026-11-07/remote-rendering.md)。
 
-更多边界和漏洞报告方式见 [SECURITY.md](SECURITY.md)。
+## 致谢与许可
 
-## 项目结构
+AI 部分来自 [Chevey339/Kelivo](https://github.com/Chevey339/kelivo)，固定 v1.3.4 / `4a7da9b6`，保留上游业务、平台源码、测试和依赖。感谢 Kelivo 及其贡献者；Mobile Codex 是独立整合预览。
 
-```text
-apps/mobile          React + Capacitor Android 客户端
-apps/relay           Relay、Broker、Codex 会话读取与控制
-generated-protocol   Codex app-server 协议类型
-scripts              Mac/Windows helper、构建和发布脚本
-docs                 架构、部署、更新、测试和历史记录
-marketing            项目介绍素材和演示 HTML
-```
-
-## 演进过程
-
-- `Phase 0`：单会话二维码和浏览器页面，验证 PC 到手机的可见性。
-- `Phase 1`：增加手机输入，验证 app-server、Desktop IPC 和 UI 注入路线。
-- `Phase 2`：引入 Public Broker，摆脱局域网和临时隧道域名。
-- `Phase 3`：用 React + Capacitor Android App 替代扫码网页。
-- `Phase 4`：增加线程分组、最近记录、平滑输出、状态标签、附件缩略图和在线更新。
-- `1.1.12`：保留连接后的记录，过滤环境上下文卡片，补充 Codex 运行状态。
-- `1.1.13`：按桌面事件顺序同步消息，保留连续相同输入，并只合并同一事件的双来源副本。
-- `1.1.14`：修复 macOS GUI 环境找不到 Codex CLI 的 `spawn codex ENOENT`，增加可校验、可回滚的热更新和 APK 双通道更新。
-
-早期方案的完成内容和限制记录在 [legacy-notes.md](docs/legacy-notes.md)。
-
-## 已知限制
-
-- macOS 输入控制依赖 Accessibility 权限和可见的 Codex Desktop 窗口。
-- Codex Desktop 内部行为升级后，线程聚焦或会话格式可能需要适配。
-- 当前 APK 以侧载方式安装，更新时仍需 Android 系统确认。
-- Broker 是转发层，不是高可用集群；长期运行需要自行配置进程守护、TLS、监控和备份。
-- 本项目不是 OpenAI 官方产品，也不代表 OpenAI 提供或支持的远程控制能力。
-
-## 文档
-
-- [使用和部署](docs/usage.md)
-- [公网 Broker](docs/remote-broker.md)
-- [Android 在线更新](docs/online-update.md)
-- [架构与可行性](docs/architecture-feasibility.md)
-- [测试与验收](docs/test-and-acceptance-plan.md)
-- [项目档案入口](docs/project-index.md)
-- [参与贡献](CONTRIBUTING.md)
-
-## 参与贡献
-
-仓库公开，任何 GitHub 用户都可以 Fork 项目并提交 Pull Request。提交前请运行消息回归测试、类型检查和生产构建，并确保改动不包含 Token、私有地址、会话数据或本机绝对路径。
-
-直接提交到主仓库的权限只授予经过确认的协作者，需要由仓库管理员按 GitHub 用户名逐个邀请。完整流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-## License
-
-[MIT](LICENSE)
+整合 Android 程序按随附 [GNU AGPL v3](apps/kelivo/LICENSE) 发行。原 Codex To Phone 源码保留 [MIT 许可](LICENSE) 与版权声明；对应源码归档分别附上 AGPL、原 MIT 和第三方声明。各依赖沿用其原许可。来源与修改清单见 [integrations/kelivo](integrations/kelivo/README.md) 及源码包内的 `SOURCE-MANIFEST.json`。

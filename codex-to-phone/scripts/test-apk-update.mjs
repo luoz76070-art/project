@@ -11,9 +11,24 @@ test.after(() => fs.rm(temp, { recursive: true, force: true }));
 const source = await fs.readFile(new URL('../apps/mobile/src/features/updates/apk.ts', import.meta.url), 'utf8');
 const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
 await fs.writeFile(path.join(temp, 'apk.mjs'), output.outputText);
-const { parseAndroidUpdateManifest, newerApkStatus, apkCanContinue, apkBusy, apkProgress, apkStatusText, watchApkUpdate } = await import(path.join(temp, 'apk.mjs'));
+const { parseAndroidUpdateManifest, readAndroidUpdateManifest, newerApkStatus, apkCanContinue, apkBusy, apkProgress, apkStatusText, watchApkUpdate } = await import(path.join(temp, 'apk.mjs'));
 const manifest = { platform: 'android', versionCode: 25, versionName: '1.3.4-fixture', apkUrl: 'https://example.com/app.apk', size: 4000000, sha256: 'AB'.repeat(32) };
 const status = { supported: true, revision: 1, phase: 'idle', receivedBytes: 0, totalBytes: 4000000, versionCode: 25, versionName: 'fixture', nativeVersionCode: 24, canInstall: false, error: '' };
+
+test('manifest reading keeps the selected channel, avoids stale caches and propagates failures for retry', async () => {
+  const source = 'https://example.invalid/android/kelivo-preview/latest.json?channel=preview';
+  const requests = [];
+  const read = async url => { requests.push(new URL(url)); return manifest; };
+  assert.equal((await readAndroidUpdateManifest(source, read)).versionCode, manifest.versionCode);
+  assert.equal(requests[0].pathname, '/android/kelivo-preview/latest.json');
+  assert.equal(requests[0].searchParams.get('channel'), 'preview');
+  assert.match(requests[0].searchParams.get('t'), /^\d+$/);
+  await assert.rejects(readAndroidUpdateManifest('', read), /未配置/);
+  assert.equal(requests.length, 1);
+  await assert.rejects(readAndroidUpdateManifest(source, async () => { throw new Error('offline'); }), /offline/);
+  await assert.rejects(readAndroidUpdateManifest(source, async () => ({ ...manifest, sha256: 'bad' })), /无效/);
+  assert.equal((await readAndroidUpdateManifest(source, read)).sha256, manifest.sha256.toLowerCase());
+});
 
 test('APK manifest requires complete native integrity metadata and secure URLs', () => {
   assert.equal(parseAndroidUpdateManifest(manifest).sha256, manifest.sha256.toLowerCase());

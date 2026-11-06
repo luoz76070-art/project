@@ -1,6 +1,6 @@
 # Mobile Codex 工程档案入口
 
-更新时间：2026-11-04
+更新时间：2026-11-07
 
 ## 作用
 
@@ -10,12 +10,14 @@
 
 项目名：Mobile Codex / Codex To Phone
 
+Kelivo 整合候选（2026-11-04，现有远控视觉试迁移已实施）：用户已确定全 App 统一为 Kelivo 风格，AI 助手与电脑远控各自独立使用，另加可选“交给电脑”。完整功能目标保留，原保留两套界面的 5–10 个工作日预览目标撤回；详见[整合方案](plans/2026-11-04-kelivo-fast-integration.md)、[产品需求](product-requirements.md)及[UI 规范](ui-interaction-spec.md)。下述当前 APK、网关和验收状态仍记录现有产品。
+
 目标：把 Android 手机变成 Mac 上 Codex Desktop 的移动工作台。电脑继续运行 Codex Desktop 和 Relay，手机不是远程桌面画面，而是通过 Relay/Broker 读取会话、查看最新文本结果、发送输入、上传附件，并在离开局域网后继续远程控制。
 
 当前主入口：
 
 - Android APK：`dist-apk/mobile-codex-1.2.2-update-restore-debug.apk`（versionCode 18，已恢复原手机更新通道并发布，待真机验收）
-- Android独立预览：`dist-apk/mobile-codex-1.3.17-deepseek-queue-preview-debug.apk`（versionCode38，preview38/previous37已发布。DeepSeek待发查看/定向取消、紧凑控制区与禁用引导入口，配套插件0.2.5及网关已上线。手机升级与真实控制待验，见[APK38记录](audits/2026-10-31/deepseek-queue.md)；APK37两条指定旧输入无重复已由用户确认）。
+- Android独立预览：`dist-apk/mobile-codex-1.3.17-deepseek-queue-preview-debug.apk`（versionCode38，preview38/previous37已发布。DeepSeek待发查看/定向取消、紧凑控制区与禁用引导入口，配套插件0.2.5及网关已上线。用户已确认升级、原连接和正文正常；运行中引导、排队顺序、取消待发及权限允许一次通过，拒绝/权限恢复/停止待验，见[APK38记录](audits/2026-10-31/deepseek-queue.md)；APK37两条指定旧输入无重复已由用户确认）。
 - Mac 原生网关：`~/Library/Application Support/Mobile Codex Gateway/releases/<固定版本>/mobile-codex/lib/gateway.mjs`，当前单Node进程、native IPC；[插件管理入口](../plugins/mobile-codex/README.md)。
 - 旧 Mac Relay/Input App：生成App已压缩归档并移除，源码与构建入口保留；[清理及恢复记录](audits/2026-10-21/legacy-mac-app-cleanup.md)。
 - Relay/Broker：`apps/relay`
@@ -24,15 +26,36 @@
 
 ## Trellis 与当前优化
 
+本轮[电脑执行摘要与图片修复](audits/2026-11-07/remote-rendering.md)：code7 `0.1.5-native-preview`，默认折叠同轮执行、紧凑字号/偏好桥、Codex 项目图片鉴权加载与大图。README 和版本化 APK/对应源码/配套网关交付到现有 GitHub `project/codex-to-phone`；[版本目录](../releases/android/kelivo-preview/0.1.5/)。本轮不升级在线网关或自托管更新通道，真机 code7 覆盖与真实图片联动待验；旧记录保留其当时状态，整体59组对照继续未完成。
+
+
+最新[整合 App 内更新](audits/2026-11-06/kelivo-update.md)：code6 `0.1.4-native-preview` 增加统一设置“应用更新”，无需配对电脑，复用原 APK 下载/完整性/签名与安装恢复能力；绑定独立 kelivo-preview 源，整合热更新保持为空。code4/5需先手动覆盖一次，随后可在App内检查并安装后续版本。完整verify手机155/后端403/入口8、Flutter定向19、原生340与完整lint0错误（56/1警告）、浏览器五场景及成品核验通过。Android36实际code4→6覆盖、更新入口/硬件返回及重启后原双草稿恢复通过，手机系统授权/安装继续待验；对应源码与公网最终核验见审计。整体in_progress，59组0/59，原Desktop新建与其余真机联动未完成。
+
+前轮[电脑页对齐AI视觉](audits/2026-11-06/kelivo-visual.md)：按用户最新图2 AI为基准调整图1电脑页，移除过程大蓝底，统一消息/完整时间、轻输入框和导航，Flutter实际浅深语义颜色贯通Web。浏览器六场景及控制交互、手机154/Flutter定向18/原生338通过，完整lint0错误（56/1警告）；根verify后端首次1项退出超时，单独及完整403项复跑通过，其余检查通过。新本地签名code5 `0.1.3-native-preview`为60,965,067字节，SHA256 `7cc14d0461b4b7da1c08a259efc514b844ba460c6f03aa04c04b226e19b779a8`，包内资源/身份/插件核验通过。未上传下载页，未运行本轮真机/模拟器或真实任务；公开code4/旧通道/网关保持，总任务继续。
+
+最新[新App首条真实输入与连接](audits/2026-11-06/kelivo-live-connection.md)：用户确认“测试一下效果”来自整合新App电脑页，当前会话实际收到；手机→电脑输入链路通过。本地/公网鉴权、拒绝无凭证、Android预检/CORS、native网关及connected Tunnel六项只读检查通过，原配置字节保持。手机回复回显/无重复仍待用户确认，未读取其他会话或另发任务；实际手机版本/SHA未独立核对，59组整组0/59保持。
+
+最新[Kelivo手机安装交付](audits/2026-11-06/kelivo-phone-download.md)：最终code4独立预览已上传[手机下载页](https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/index.html)，附对应工作区源码、许可和构建/安装说明；APK保持60,973,251字节及SHA256 `e3fa92e2e0d0ef3ec29a5af1996f390ffa7683e0999734dcb211431cdbf92a06`。使用独立`android/kelivo-preview`目录，原正式/preview/previous/hot通道保持；APK/源码公网完整回下载大小/SHA/字节一致、Range206和原四清单不变已验证，详见审计。不切换网关、未执行真实任务或Git写入；用户真机安装、真实联动、原Desktop新建及59组完整对照继续待验，整体in_progress，文稿清理搁置。下文“未发布”为当时历史状态。
+
+最新[Kelivo设备与本地能力验收](audits/2026-11-06/kelivo-device.md)：已修复电脑系统栏及电脑前台实际系统明暗同步，并修复150%系统字体横屏空白页裁切。最终code4本地签名包`output/kelivo/mobile-codex-kelivo-0.1.2-preview-arm64.apk`为60,973,251字节，SHA256 `e3fa92e2e0d0ef3ec29a5af1996f390ffa7683e0999734dcb211431cdbf92a06`；包内身份/插件/5个Web文件、实际安装SHA一致，Android36模拟器13项及覆盖后显式进程重启草稿恢复通过。原生338项、完整lint0错误56/1警告，Flutter产品/菜单18项、完整Dart分析及备份定向184项通过；收尾完整远控verify手机152/后端403、入口8和其余步骤通过，早期超时及失败仍保留。本轮未重跑Flutter/markstream全量。5052来源无缺失、28来源修改/16非忽略新增；[59组账本](audits/2026-11-06/kelivo-parity-evidence.md)仍整组0/59。[设备与全功能计划](plans/2026-11-06-kelivo-device-parity.md)已启动，真机/API24、系统插件/回收、授权真实联动、原Desktop新建与全部对照继续进行；未发布、部署、真实任务或Git写入。模拟器及本轮空闲构建进程已关闭，剩余9.63GiB；文稿清理搁置。以下code3及更早状态为历史。
+
+上轮[Kelivo交接与原生预览验收](audits/2026-11-06/kelivo-handoff.md)：已接线单条AI正文→同张卡编辑/项目/已有Desktop会话/附件→确认一次；原生提交锁、未知不重发、队列/接收区分与同文普通草稿隔离已验证。修复Android16键盘遮挡及WebView错误明暗源，最终原生全量333项和完整lint0错误（56/1警告）通过，远控verify手机152/后端403、Flutter定向17项与分析通过；未重跑上轮Flutter全量。Android36模拟器安装最终SHA并通过6项离线流程；本地签名`output/kelivo/mobile-codex-kelivo-0.1.1-preview-arm64.apk`（code3，60,973,771字节，SHA前缀`ec663ce1`）包内/已安装SHA一致。未发布或真机验收，原Desktop新建、真实联动与完整对照继续待验；[59组账本](audits/2026-11-06/kelivo-parity-evidence.md)整组0/59，[接续计划](plans/2026-11-06-kelivo-device-parity.md)当时待启动（现已启动），总任务保持进行中。文稿清理搁置。以下code2及更早状态为历史。
+
+最新[Kelivo产品接线与签名预览](audits/2026-11-05/kelivo-product.md)：固定上游已正式引入`apps/kelivo`，AI／电脑／设置同级入口、全局主题、独立草稿/选择恢复及新包身份已接线；完整原生lint为0错误（宿主56/远控1警告），318项原生测试复跑通过，原远控verify通过（手机132/后端403），Agent退出前保存保护7项、验证入口8项通过。Flutter最终全量11,437通过、3跳过、0失败。含最后草稿修补的本地签名arm64预览为`output/kelivo/mobile-codex-kelivo-0.1.0-preview-arm64.apk`（code2，SHA前缀`0283ceac`），最终包签名/身份/插件及5个Web文件重新核对通过；尚未发布或真机验收，浏览器结果、旧包模拟器首帧与原生完整行为分别记录。可选交接、原Desktop新建和59组完整验收保留在[接续计划](plans/2026-11-05-kelivo-product-acceptance.md)，总任务仍进行中。以下未签名探针/58错误为前轮历史结果。
+
+最新[Kelivo 原生构建检查收尾](audits/2026-11-05/kelivo-native-closeout.md)：用户选择先完成构建检查、产品接线下一轮做。组合release再次成功，60.9MB APK与清理前完全一致；固定上游约60.6MB也保留。远控library完整lint为0错误/1警告，宿主58错误/56警告与原版逐项相同，质量门仍未通过；已分类核查，UCropActivity实际存在于两包。新增独立测试JDK配置，原版及组合原生测试复核各305/305通过，组合首次4项FileObserver shadow异常保留待查。两包仍未签名未安装；统一双入口、主题/恢复、更新/OAuth身份、可选交接和全59组验收未完成。[下一轮计划](plans/2026-11-05-kelivo-native-next.md)待用户启动，复现见[integrations/kelivo](../integrations/kelivo/README.md)，原始过程见[前次审计](audits/2026-11-05/kelivo-native.md)。
+
+最新[Kelivo 风格试迁移](audits/2026-11-04/kelivo-style.md)：现有远控聊天、侧栏、输入、设置、过程/问答/审批与 Agent 采用固定 v1.3.4 的浅深主题和圆角组件参考；完整隔离 verify 通过（手机126/后端403），浏览器窄屏、大字号及控制交互已验。未构建新 APK、部署或真机验收；AI 完整功能、双独立入口、可选交接和原生组合仍在后续方案中。
+
 最新[Codex未加载会话恢复](audits/2026-11-04/codex-cold-thread-recovery.md)：原会话按需加载修复及真机验收完成，13项新增回归、手机126/后端403及其余检查通过；第二个冷会话约11秒恢复。新版固定网关已上线，配置及宿主保留，本地/公网健康、recent28/all123列表与四会话控制通过。用户确认APK38正文/草稿按钮正常、实际手机发送成功，重开后输入和完整回复各一次。列表活动时间与连接状态表达保留为[下一轮候选](plans/2026-11-03-codex-connection-recovery.md)，尚未启动。
 
 最新[Codex列表与发送置灰排查](audits/2026-11-03/codex-connection.md)：当前本地/公网鉴权、Tunnel及IPC正常，recent28/all123一致，桌面抽样30个ID均在全部列表。两个已加载会话控制就绪，两个未加载会话SSE200但无控制快照，Kelivo样本owner发现超时；已定位未加载会话控制缺口，尚待对应用户实际置灰样本。另有桌面元数据/日志活动时间口径差异，不能直接判新消息丢失。只读检查，无产品改动、部署或模型发送；[修复候选](plans/2026-11-03-codex-connection-recovery.md)已落盘，DeepSeek剩余验收暂停。
 
-最新[DeepSeek待发取消与APK38预览](audits/2026-10-31/deepseek-queue.md)：插件0.2.5、配套网关与preview38已交付。当前手机待发项可查看/定向取消，未知结果不重试；引导/排队/停止集中一行，能力不足时保留禁用入口。完整verify（手机126/后端389）、最终DeepSeek70、三版官方各14项、浏览器小高度/150%字号、Android0错误8警告与公网19项通过。用户最新确认上次“已连接且停止可用”，具体入口缺失根因仍未取证；正在等待手机升级与引导/排队取消/权限/停止真机验收。
+最新[DeepSeek待发取消与APK38预览](audits/2026-10-31/deepseek-queue.md)：插件0.2.5、配套网关与preview38已交付。当前手机待发项可查看/定向取消，未知结果不重试；引导/排队/停止集中一行，能力不足时保留禁用入口。完整verify（手机126/后端389）、最终DeepSeek70、三版官方各14项、浏览器小高度/150%字号、Android0错误8警告与公网19项通过。用户已确认APK38升级、原连接及正文正常；第18轮实际手机引导在同轮确认一次并改变终稿，截图变灰发生在发送后等待消费，官方rc.5已隔离复现该状态。引导、排队顺序与取消待发通过，继续权限/停止；用户已授权仅此测试会话临时切换，桌面及原日志确认workspace-write/ask，允许一次真机验收通过；2026-11-03继续，拒绝/原模式恢复/停止待验。等待文案搁置，原APK36入口缺失的具体现场根因仍未取证。
 
 最新[临时轮次重复输入修复](audits/2026-10-30/indexed-turn-input.md)：用户APK36详细报告精确定位turn-N-input吸收正式native别名后未同步提升轮次，两组身份/时间与旧代码回放逐字段一致。手机最小修复及旧缓存恢复通过125/125、消息/类型/lint/构建、浏览器8项；APK37 `1.3.16-turn-identity-preview`已发布preview，previous36，Android0错误8警告、同签名成品与公网19项通过。用户已确认升级37后“现在测试一下是否重复”和“已恢复，切收到回复”各显示一次；网关/原任务保持，DeepSeek剩余控制验收继续保留。
 
-当前[DeepSeek手机真实控制验收](audits/2026-10-30/deepseek-control-acceptance.md)已由用户启动，指定默认工作区“末流211电子信息考研专业课名单”。首项输入已到达并启动原任务，但上游模型全账号冷却导致执行失败，手机漏显该错误。用户保留原模型等待服务恢复；重开后宿主实际升至rc.5，现已加载插件0.2.4并切换配套网关，明确显示原模型失败原因。rc.5官方25项、DeepSeek64/64、后端384/384、手机122/122及lint/typecheck/构建通过；桥接17项、本地/公网35项和Codex重连12项通过。APK36沿用，用户已确认失败提示；随后原模型恢复、手机收发及重开无重复验收通过。本地/公网成功终稿与idle一致，引导首轮实际等待90秒但无追加输入，用户已确认运行期间入口缺失。APK36代码一致，4组窄屏合成与一次引导发送正常、Agent状态回归12/12；真机原因尚未复现，用户后续确认已连接且停止可用；APK38修正布局并补齐取消，具体现场原因与全部控制真机验收仍待，见上方最新记录。
+当前[DeepSeek手机真实控制验收](audits/2026-10-30/deepseek-control-acceptance.md)已由用户启动，指定默认工作区“末流211电子信息考研专业课名单”。首项输入已到达并启动原任务，但上游模型全账号冷却导致执行失败，手机漏显该错误。用户保留原模型等待服务恢复；重开后宿主实际升至rc.5，现已加载插件0.2.4并切换配套网关，明确显示原模型失败原因。rc.5官方25项、DeepSeek64/64、后端384/384、手机122/122及lint/typecheck/构建通过；桥接17项、本地/公网35项和Codex重连12项通过。APK36沿用，用户已确认失败提示；随后原模型恢复、手机收发及重开无重复验收通过。本地/公网成功终稿与idle一致，引导首轮实际等待90秒但无追加输入，用户已确认运行期间入口缺失。APK36代码一致，4组窄屏合成与一次引导发送正常、Agent状态回归12/12；真机原因尚未复现，用户后续确认已连接且停止可用；APK38修正布局并补齐取消，其第18轮真实运行中引导现已通过；原APK36现场原因仍未确认，排队顺序与取消待发也已通过，权限/停止待验，见上方最新记录。
 
 最新[DeepSeek rc.3兼容与手机复联](audits/2026-10-30/deepseek-rc3-compat.md)：插件0.2.2精确支持rc.2/rc.3，真实版本上报与网关白名单同步；两版官方各25项、DeepSeek60项及完整verify通过（手机121/后端380）。原插件已在原宿主加载，14会话首帧和重连通过；原网关已安全切换，本地/公网31项及Codex重连12项通过。用户已确认APK36列表、正文与重新打开正常，本轮完成；后续[真实控制验收计划](plans/2026-10-30-deepseek-control-acceptance.md)已启动，进展见上方记录。
 

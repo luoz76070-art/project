@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { ESLint } from 'eslint';
 import { verificationSteps, runSteps, executeStep, projectRoot } from './verify.mjs';
 import { javaMajor, validateJavaVersions, lintCounts } from './verify-android.mjs';
+import { verifyKelivoLock } from './verify-kelivo.mjs';
 
 test('verification runs sequentially and stops at the first failed check', async () => {
   const seen = [], stages = [{ name: 'build' }, { name: 'test' }, { name: 'later' }];
@@ -60,4 +61,17 @@ test('Android entry fails explicitly for an unavailable override without launchi
   assert.equal(result.status, 1);
   assert.match(result.stderr, /MOBILE_CODEX_LINT_JAVA_HOME/);
   assert.equal(result.stderr.includes('must-not-launch'), false);
+});
+
+test('Kelivo root and markstream locks preserve the fixed upstream package hashes', async () => {
+  await verifyKelivoLock();
+});
+
+test('Kelivo entry rejects unknown flags before discovering SDKs or launching builds', () => {
+  const result = spawnSync(process.execPath, ['scripts/verify-kelivo.mjs', '--unknown'], {
+    cwd: projectRoot, encoding: 'utf8', env: { ...process.env, KELIVO_FLUTTER: '/must-not-launch-flutter' },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Usage: node scripts\/verify-kelivo.mjs/);
+  assert.equal(result.stderr.includes('must-not-launch-flutter'), false);
 });

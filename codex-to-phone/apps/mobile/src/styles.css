@@ -21,6 +21,9 @@
   --user-bubble: #e9eaf0;
   --process-surface: #eeeef8;
   --avatar-surface: #e6e7ef;
+  --composer-surface: var(--bg-0);
+  --composer-outline: var(--border);
+  --message-author: var(--muted);
   --ok: #2c9963;
   --danger: #c94d48;
   --warning: #b58022;
@@ -724,6 +727,7 @@ textarea {
 }
 
 .empty-chat {
+  flex: 0 0 auto;
   min-height: 100%;
   align-content: center;
   padding: 20px;
@@ -2095,7 +2099,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .process-toggle > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .process-toggle small { flex-shrink: 0; font-size: .75rem; }
 .process-toggle svg { flex-shrink: 0; }
-.process-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.process-toggle[aria-expanded="true"] .process-chevron { transform: rotate(90deg); }
 .process-content { display: flex; flex-direction: column; gap: 18px; min-width: 0; margin-top: 6px; padding: 14px; border: 0; border-radius: 16px; background: var(--process-surface); }
 .process-content[hidden] { display: none; }
 .from-user .message-actions { justify-content: flex-end; margin-top: 4px; }
@@ -2278,3 +2282,103 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .queued-message details { min-width: 0; }
 .queued-message summary { min-height: 44px; padding-block: 10px; font-size: .8125rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .queued-message p { margin: 0 0 8px; font-size: .875rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.product-remote-shell { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-0); }
+.product-remote-content { flex: 1; min-height: 0; position: relative; }
+.product-remote-content > .codex-shell, .product-remote-content > .agent-workspace { height: 100%; padding-bottom: 8px; }
+.product-navigation { flex: none; display: flex; min-height: calc(72px + env(safe-area-inset-bottom)); padding: 0 8px env(safe-area-inset-bottom); border: 0; background: var(--bg-0); }
+.product-navigation button { flex: 1; min-width: 0; border: 0; padding: 8px 0; color: var(--navigation-text, var(--text)); background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; }
+.product-navigation button > span { display: flex; align-items: center; justify-content: center; width: 64px; height: 32px; border-radius: 999px; }
+.product-navigation button[aria-current="page"] > span { background: var(--navigation-indicator, var(--accent-soft)); }
+.product-navigation label { font-size: .75rem; line-height: 20px; font-weight: 400; pointer-events: none; }
+
+/* The integrated computer page follows the adjacent Flutter AI canvas.
+   Optional palette roles come from ProductShell; old snapshots use these defaults. */
+.product-remote-shell .workspace-title h1 { font-weight: 400; }
+.product-remote-shell .workspace-title p { color: var(--subtle); }
+.product-remote-shell .top-actions svg { width: 22px; height: 22px; }
+.product-remote-shell .messages-viewport { padding: 20px 16px 24px; gap: 28px; }
+.product-remote-shell .message-identity { gap: 8px; margin-bottom: 14px; }
+.product-remote-shell .message-avatar { color: var(--text); }
+.product-remote-shell .message-author { gap: 3px; }
+.product-remote-shell .message-author strong { color: var(--message-author); font-weight: 400; }
+.product-remote-shell .message-author time { font-size: .75rem; line-height: 1.4; }
+.product-remote-shell .from-user .message-identity { display: none; }
+.product-remote-shell .user-message-text { padding: 12px 16px; line-height: 1.45; }
+.product-remote-shell .message-content { line-height: 1.6; }
+.product-remote-shell .message-content li::marker { color: var(--subtle); }
+.product-remote-shell .message-actions { margin-top: 8px; gap: 0; }
+.product-remote-shell .message-actions .copy-icon { color: var(--muted); }
+.product-remote-shell .process-toggle { min-height: 44px; padding: 8px 12px; border: 1px solid var(--hairline); border-radius: 14px; background: var(--composer-surface); color: var(--muted); }
+.product-remote-shell .process-content { gap: 24px; margin-top: 20px; padding: 0; border-radius: 0; background: transparent; }
+.product-remote-shell .composer-panel { margin: 6px 12px 4px; }
+.product-remote-shell .composer { min-height: 104px; padding: 12px 8px 6px; border-color: var(--composer-outline); border-radius: 22px; background: var(--composer-surface); }
+.product-remote-shell .composer:focus-within { border-color: var(--accent); }
+.product-remote-shell .composer textarea { height: 44px; min-height: 44px; padding: 2px 8px; font-size: .9375rem; }
+.product-remote-shell .composer textarea::placeholder { color: var(--subtle); opacity: 1; }
+.product-remote-shell .composer-tool-button { color: var(--muted); }
+.product-remote-shell .send-button:disabled { opacity: 1; background: color-mix(in srgb, var(--text) 12%, var(--composer-surface)); color: color-mix(in srgb, var(--text) 38%, var(--composer-surface)); }
+.product-remote-shell .latest-pill { box-shadow: none; }
+.product-navigation-error { margin: 0; padding: 8px 16px; font-size: 13px; background: var(--bg-1); color: var(--danger); }
+.product-updates-page { height: 100%; display: flex; flex-direction: column; min-width: 0; color: var(--text); }
+.product-updates-header { display: flex; flex: none; align-items: center; gap: 12px; padding: 12px 16px; }
+.product-updates-header h1 { margin: 0; font-size: 1.25rem; font-weight: 500; }
+.product-updates-body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px max(16px, calc((100% - 600px) / 2)) 24px; }
+.product-update-card { padding: 20px; margin-bottom: 16px; border-radius: 16px; background: var(--panel-solid); overflow-wrap: anywhere; }
+.product-update-card h2 { margin: 12px 0 8px; font-size: 1rem; font-weight: 500; }
+.product-update-card p { margin: 8px 0; color: var(--muted); font-size: .875rem; line-height: 1.6; }
+.product-update-icon { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 16px; background: var(--avatar-surface); color: var(--accent); }
+.product-update-card .product-update-summary { color: var(--accent); }
+.product-update-notes { white-space: pre-wrap; }
+.product-update-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.product-update-actions .action-button { flex: 1 1 180px; min-height: 48px; max-width: 100%; white-space: normal; }
+.product-update-help { color: var(--muted); font-size: .8125rem; line-height: 1.6; overflow-wrap: anywhere; }
+.handoff-scrim { position: fixed; inset: 0; z-index: 210; display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); background: #0006; }
+.handoff-card { width: min(100%, 560px); max-height: 100%; overflow: auto; padding: 20px; border: 1px solid var(--border); border-radius: 24px; color: var(--text); background: var(--panel-solid); }
+.handoff-card h2 { margin: 0 0 12px; }
+.handoff-card p { color: var(--muted); overflow-wrap: anywhere; }
+.handoff-card label { display: grid; gap: 8px; margin: 16px 0; }
+.handoff-card textarea, .handoff-card select { width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: 12px; padding: 12px; color: var(--text); background: var(--bg-0); font: inherit; }
+.handoff-card textarea { min-height: 140px; resize: vertical; }
+.handoff-card button, .handoff-resume { min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 14px; color: var(--text); background: var(--panel-soft); font: inherit; cursor: pointer; }
+.handoff-card button:disabled { opacity: .5; cursor: default; }
+.handoff-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.handoff-card .primary-button { color: var(--on-accent); background: var(--accent); }
+.handoff-card ul { list-style: none; padding: 0; }
+.handoff-card li { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.handoff-card li span { min-width: 0; overflow-wrap: anywhere; flex: 1; }
+.handoff-preview { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow: auto; font: inherit; }
+.handoff-resume { position: fixed; right: 12px; bottom: calc(88px + env(safe-area-inset-bottom)); z-index: 50; background: var(--panel-solid); }
+
+/* Execution stays a single live summary until explicitly expanded. */
+.process-toggle > span { display: flex; align-items: center; gap: 8px; overflow: hidden; }
+.process-toggle strong { flex-shrink: 0; font-size: .8125rem; font-weight: 500; }
+.process-toggle em { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-style: normal; font-size: .75rem; }
+.process-toggle .process-failures { color: var(--danger); }
+.process-content, .product-remote-shell .process-content { gap: 6px; margin-top: 8px; padding: 0; }
+.process-content .tool-message { margin: 0; padding: 4px 10px; background: transparent; border: 0; border-bottom: 1px solid var(--hairline); border-radius: 0; }
+.process-content .tool-message summary { gap: 8px; font-size: calc(.75rem * var(--remote-chat-scale, 1)); }
+.process-content .tool-message summary strong { font-size: inherit; font-weight: 500; }
+.process-content .tool-message summary em, .process-content .tool-message summary time { font-size: calc(.6875rem * var(--remote-chat-scale, 1)); }
+.process-content .tool-message pre { max-height: 240px; overflow: auto; padding: 8px; font-size: calc(.6875rem * var(--remote-chat-scale, 1)); line-height: 1.5; white-space: pre; }
+.product-remote-shell .message-content { font-size: calc(.9375rem * var(--remote-chat-scale, 1)); }
+.message-content .code-block pre { max-height: 320px; font-size: calc(.75rem * var(--remote-chat-scale, 1)); line-height: 1.5; }
+.product-remote-shell .code-block { margin: 10px 0; }
+[data-show-tool-cards="false"] .product-remote-shell .message-process { display: none; }
+[data-show-tool-summary="false"] .product-remote-shell .tool-summary { display: none; }
+.message-image { display: block; max-width: 100%; min-width: 0; margin: 12px 0; }
+.message-image-open { display: block; width: fit-content; max-width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--hairline); border-radius: 12px; background: var(--bg-2); cursor: zoom-in; }
+.message-image img { display: block; max-width: 100%; max-height: 360px; width: auto; height: auto; object-fit: contain; }
+.message-image-caption { display: block; margin-top: 6px; color: var(--muted); font-size: .75rem; overflow-wrap: anywhere; }
+.image-placeholder { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 16px; border: 1px solid var(--hairline); border-radius: 12px; color: var(--muted); font-size: .8125rem; }
+.image-placeholder > span { flex: 1; min-width: 120px; }
+.image-placeholder button { display: inline-flex; gap: 5px; align-items: center; min-height: 44px; border: 0; background: transparent; color: var(--accent); }
+.image-preview { position: fixed; width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; inset: 0; padding: 0; margin: 0; border: 0; background: var(--bg-0); color: var(--text); }
+.image-preview::backdrop { background: #000b; }
+.image-preview header { display: flex; align-items: center; gap: 8px; padding: max(8px, env(safe-area-inset-top)) 12px 8px; border-bottom: 1px solid var(--hairline); }
+.image-preview header > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .875rem; }
+.image-preview button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--text); }
+.image-preview-scroll { display: flex; align-items: center; justify-content: center; height: calc(100% - 76px); overflow: auto; }
+.image-preview-scroll img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.image-preview-scroll.original { display: block; }
+.image-preview-scroll.original img { max-width: none; max-height: none; }

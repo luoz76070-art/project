@@ -40,7 +40,10 @@
         return {};
       }
       if (plugin === 'SecureCredentials') {
-        if (method === 'load') return { value: sessionStorage.fixtureCredentials || '{}' };
+        if (method === 'load') {
+          const saved = JSON.parse(sessionStorage.fixtureCredentials || '{}');
+          return { value: JSON.stringify({ ...saved, A: saved.A || 'fixture-only', B: saved.B || 'fixture-only' }) };
+        }
         sessionStorage.fixtureCredentials = options.value; return {};
       }
       if (plugin === 'ApkUpdate') {
@@ -55,7 +58,8 @@
         const url = new URL(options.url);
         if (url.pathname.includes('/releases/android/')) {
           const state = await apk();
-          return { status: 200, data: { platform: 'android', versionCode: state.versionCode, versionName: state.versionName, apkUrl: 'https://example.invalid/fixture.apk', size: state.totalBytes, sha256: '0'.repeat(64), notes: '合成更新：用于核验 App 内下载、授权与安装重试界面。' } };
+          if (state.manifestMode === 'error') return {status:503,data:{error:'synthetic_update_unavailable'}};
+          return { status: 200, data: { platform: 'android', versionCode: state.manifestMode === 'current' ? state.nativeVersionCode : state.versionCode, versionName: state.versionName, apkUrl: 'https://example.invalid/fixture.apk', size: state.totalBytes, sha256: state.manifestMode === 'invalid' ? 'bad' : '0'.repeat(64), notes: '合成更新：用于核验 App 内下载、授权与安装重试界面。' } };
         }
         if (url.pathname.includes('/releases/hot/')) {
           const state = await apk();

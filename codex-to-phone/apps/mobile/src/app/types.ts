@@ -106,6 +106,7 @@ export type ThreadRuntime = {
   scrollTop?: number;
   pendingMessageId?: string;
   pendingMessageText?: string;
+  pendingMessageSource?: 'handoff';
   watchMode: "none" | "desktop-tail";
   watching: boolean;
   readonlyReason: string;

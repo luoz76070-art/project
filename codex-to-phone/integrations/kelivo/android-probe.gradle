@@ -1,0 +1,33 @@
+// Compile-only host probe. This does not implement navigation or product update ownership.
+// Flutter's Gradle plugin is an included build, not an Android host.
+if (gradle.parent != null) return
+
+def productRootPath = gradle.startParameter.projectProperties['mobileCodexProductRoot']
+if (!productRootPath) {
+    throw new GradleException('Pass -PmobileCodexProductRoot=<codex-to-phone root>')
+}
+def productRoot = new File(productRootPath).canonicalFile
+def remoteModule = new File(productRoot, 'integrations/kelivo/remote-android')
+def capacitorModule = new File(productRoot, 'apps/mobile/node_modules/@capacitor/android/capacitor')
+if (!new File(remoteModule, 'build.gradle').isFile() || !new File(capacitorModule, 'build.gradle').isFile()) {
+    throw new GradleException('Kelivo remote module or installed Capacitor Android dependency is missing')
+}
+
+gradle.settingsEvaluated { settings ->
+    settings.include ':capacitor-android', ':mobile-codex-remote'
+    settings.project(':capacitor-android').projectDir = capacitorModule
+    settings.project(':mobile-codex-remote').projectDir = remoteModule
+}
+
+gradle.beforeProject { project ->
+    if (project.path == ':app') {
+        project.plugins.withId('com.android.application') {
+            project.extensions.getByName('androidComponents').finalizeDsl { android ->
+                android.defaultConfig.applicationId = 'com.mobilecodex.kelivo.preview'
+                android.defaultConfig.versionCode = 1
+                android.defaultConfig.versionName = '0.1.0-native-probe-preview'
+            }
+            project.dependencies.add('implementation', project.dependencies.project(path: ':mobile-codex-remote'))
+        }
+    }
+}

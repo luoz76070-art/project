@@ -1,0 +1,7 @@
+{
+  "appId": "com.mobilecodex.kelivo.preview",
+  "appName": "Mobile Codex Preview",
+  "webDir": "dist",
+  "server": { "cleartext": true },
+  "plugins": { "CapacitorHttp": { "enabled": true } }
+}

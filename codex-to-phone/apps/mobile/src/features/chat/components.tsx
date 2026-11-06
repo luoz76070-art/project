@@ -5,9 +5,9 @@ import { takeSmoothChunk, roleClass, isToolMessage, roleLabel, summarizeToolMess
 import { smoothTextFrameMs } from "../../app/config";
 import { type PendingAttachment, type CodexMessage, type LiveApproval, type LiveApprovalDecision } from "../../app/types";
 import { formatFileSize, isImageAttachment, parseMessageAttachments } from "./attachments";
-import { X, ImageIcon, Paperclip, Copy, AlertCircle, Terminal, CheckCircle2, CircleStop, ChevronRight, UserRound, Bot, Info } from "lucide-react";
+import { X, ImageIcon, Paperclip, Copy, AlertCircle, Terminal, CheckCircle2, CircleStop, ChevronRight, UserRound, Bot, Info, Loader2 } from "lucide-react";
 import { MessageContent } from "./MessageContent";
-import { formatTime } from "../../shared/format";
+import { formatMessageTime, formatTime } from "../../shared/format";
 
 export function SmoothText({ text, active, pending, onDone }: { text: string; active: boolean; pending: boolean; onDone?: () => void }) {
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -121,7 +121,7 @@ export function MessageBubble({
         <span className="message-avatar" aria-hidden="true">{message.role === "user" ? <UserRound size={18} /> : message.role === "assistant" ? <Bot size={18} /> : <Info size={18} />}</span>
         <span className="message-author">
           <strong>{message.role === "assistant" ? assistantLabel : roleLabel(message.role)}</strong>
-          <time dateTime={message.timestamp ?? undefined}>{formatTime(message.timestamp)}</time>
+          <time dateTime={message.timestamp ?? undefined}>{formatMessageTime(message.timestamp)}</time>
         </span>
       </header>
       {parsed.text && (message.role === "assistant"
@@ -129,30 +129,38 @@ export function MessageBubble({
         : <p className="user-message-text">{parsed.text}</p>)}
       <MessageAttachments attachments={parsed.attachments} />
       <footer className="message-actions">
-        <button className="copy-icon" onClick={onCopy} aria-label={`复制${message.role === "assistant" ? assistantLabel : roleLabel(message.role)}消息`}><Copy size={15} /></button>
+        <button className="copy-icon" onClick={onCopy} aria-label={`复制${message.role === "assistant" ? assistantLabel : roleLabel(message.role)}消息`}><Copy size={20} /></button>
       </footer>
     </article>
   );
 }
 
-export function MessageTimeline({ messages, renderMessage }: { messages: CodexMessage[]; renderMessage: (message: CodexMessage) => ReactNode }) {
+export function MessageTimeline({ messages, renderMessage, running = false }: { messages: CodexMessage[]; renderMessage: (message: CodexMessage) => ReactNode; running?: boolean }) {
   const keyCounts = new Map<string, number>();
   for (const message of messages) {
     const key = messageDisplayKey(message);
     keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
   }
-  return groupMessageProcesses(messages).map(group => group.kind === "message"
+  const groups = groupMessageProcesses(messages);
+  return groups.map((group, index) => group.kind === "message"
     ? <Fragment key={`message:${(keyCounts.get(messageDisplayKey(group.message)) ?? 0) > 1 ? group.message.id : messageDisplayKey(group.message)}`}>{renderMessage(group.message)}</Fragment>
-    : <MessageProcess key={`process:${group.id}`} messages={group.messages} completed={group.completed} renderMessage={renderMessage} />);
+    : <MessageProcess key={`process:${group.id}`} messages={group.messages} completed={group.completed} running={running && index === groups.length - 1} renderMessage={renderMessage} />);
 }
 
-function MessageProcess({ messages, completed, renderMessage }: { messages: CodexMessage[]; completed: boolean; renderMessage: (message: CodexMessage) => ReactNode }) {
+function MessageProcess({ messages, completed, running, renderMessage }: { messages: CodexMessage[]; completed: boolean; running: boolean; renderMessage: (message: CodexMessage) => ReactNode }) {
   const contentId = useId();
   const [choice, setChoice] = useState<{ completed: boolean; expanded: boolean } | null>(null);
-  const expanded = choice?.completed === completed ? choice.expanded : !completed;
+  const expanded = choice?.completed === completed ? choice.expanded : false;
+  const tools = messages.filter(isToolMessage);
+  const failures = tools.filter(message => summarizeToolMessage(message).failed).length;
+  const latest = tools.at(-1);
+  const action = latest ? summarizeToolMessage(latest).action : "正在处理请求";
+  const active = running && !completed;
   return <section className="message-process" aria-label="执行过程">
     <button type="button" className="process-toggle" aria-expanded={expanded} aria-controls={contentId} onClick={() => setChoice({ completed, expanded: !expanded })}>
-      <span>执行过程</span><small>{messages.length} 条记录</small><ChevronRight size={16} aria-hidden="true" />
+      {active ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <Terminal size={15} aria-hidden="true" />}
+      <span><strong>{active ? "正在执行" : completed ? "执行完成" : "执行记录"}</strong><em>{action}</em></span>
+      <small className={failures ? "process-failures" : undefined}>{failures ? `${failures} 项异常 · ` : ""}{messages.length} 项</small><ChevronRight size={15} className="process-chevron" aria-hidden="true" />
     </button>
     <div id={contentId} className="process-content" hidden={!expanded}>
       {expanded && messages.map(message => <Fragment key={message.id}>{renderMessage(message)}</Fragment>)}

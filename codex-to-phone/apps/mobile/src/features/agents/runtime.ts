@@ -54,6 +54,33 @@ export function loadAgentDrafts(scope: string, storage?: Pick<Storage, "getItem"
     return value && typeof value === "object" && !Array.isArray(value) ? boundedDrafts(value as Record<string, unknown>) : {};
   } catch { return {}; }
 }
-export function saveAgentDrafts(scope: string, drafts: Record<string, string>, storage?: Pick<Storage, "setItem">) {
-  try { (storage ?? localStorage).setItem(draftKey(scope), JSON.stringify(boundedDrafts(drafts))); } catch { /* Keep the current in-memory draft if storage is unavailable. */ }
+export function saveAgentDrafts(scope: string, drafts: Record<string, string>, storage?: Pick<Storage, "setItem">): boolean {
+  try { (storage ?? localStorage).setItem(draftKey(scope), JSON.stringify(boundedDrafts(drafts))); return true; }
+  catch { return false; }
+}
+
+const pendingDraftKey = (scope: string, session: string) => `mobileCodexAgentPendingV1:${scope}:${session}`;
+export function loadPendingAgentDraft(scope: string, session: string): PendingAgentDraft | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(pendingDraftKey(scope, session)) ?? "null");
+    if (value === null) return null;
+    if (typeof value.clientMessageId === "string" && typeof value.text === "string") return value;
+  } catch { /* Fail closed when pending delivery cannot be recovered. */ }
+  return { clientMessageId: "unreadable-pending-delivery", text: "" };
+}
+export function savePendingAgentDraft(scope: string, session: string, pending: PendingAgentDraft | null): boolean {
+  try { localStorage.setItem(pendingDraftKey(scope, session), JSON.stringify(pending)); return true; }
+  catch { return false; }
+}
+
+export function loadAgentView(scope: string): { agentId: string; sessionId: string | null } | null {
+  try {
+    const raw = localStorage.getItem(`mobileCodexAgentViewV1:${scope}`) ?? "null";
+    if (raw.length > 8192) return null;
+    const value = JSON.parse(raw);
+    return value && ["opencode", "claude", "deepseek"].includes(value.agentId) && (value.sessionId === null || (typeof value.sessionId === "string" && value.sessionId.length <= 1024)) ? value : null;
+  } catch { return null; }
+}
+export function saveAgentView(scope: string, agentId: string | null, sessionId: string | null) {
+  try { localStorage.setItem(`mobileCodexAgentViewV1:${scope}`, JSON.stringify(agentId ? { agentId, sessionId } : null)); } catch { /* No task is submitted on restore. */ }
 }

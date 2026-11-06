@@ -1679,3 +1679,201 @@ APK29用户确认语音主流程通过；网关增加有限低权重短语，真
 
 - 等待用户选择docs/plans/2026-11-03-codex-connection-recovery.md第2、3项；尚未启动。
 - DeepSeek拒绝/停止及原权限恢复仍暂停；不自动继续其他任务。
+
+
+## Session 50: Kelivo统一入口与独立签名预览收尾
+<!-- trellis-session: v=2 fp=57b8290b6d3696ea -->
+
+**Date**: 2026-11-05
+**Task**: Kelivo统一入口与独立签名预览收尾
+**Package**: mobile
+**Branch**: `main`
+
+### Summary
+
+正式引入固定Kelivo并接通AI/电脑/设置入口；完成原生质量修复和本地签名预览，完整功能与真机验收继续保留。
+
+### Main Changes
+
+- 最终arm64预览60964391字节，SHA256 0283ceac8a2029087035cd14fb47a9e6814e8535d5d8d75ce44d7d47cc5b4d0c；签名/身份/插件/Web资源重新核对通过。
+- Agent退出前同步保存草稿，失败阻止跨入口；保留原业务/插件和独立更新身份。审计与宿主契约已更新，无Git写入或部署。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] Flutter全量11437通过、3跳过、0失败；原生318项两次强制复跑通过，完整lint宿主/远控0错误、56/1警告。
+- [OK] 原远控verify通过手机132/后端403；Agent最新7/7、验证入口8/8、markstream351/351及Dart分析通过，浏览器12组布局与草稿保护通过。
+- [OK] 文档31个链接和diff空白检查通过；最终包未做原生完整交互验收，旧包模拟器仅安装/首帧证据。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 按docs/plans/2026-11-05-kelivo-product-acceptance.md继续原生设备验收、可选交接、Desktop新建能力与59组逐项对照；总任务in_progress，文稿清理搁置。
+
+
+## Session 51: Kelivo交接接线与Android36局部验收
+<!-- trellis-session: v=2 fp=948996e98c4053e2 -->
+
+**Date**: 2026-11-06
+**Task**: Kelivo交接接线与Android36局部验收
+**Package**: mobile
+**Branch**: `main`
+
+### Summary
+
+完成已有Desktop会话交接、独立草稿与确认锁；修复键盘及主题桥，交付本地code3，完整目标仍进行中。
+
+### Main Changes
+
+- 单条正文交接卡、原生同步锁、同文普通草稿隔离；Android35+键盘insets及Flutter主题事件修复。
+- 59组分层账本建立，来源5052无缺失；下一轮设备/真实联动计划落盘，文稿清理搁置。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 完整verify手机152/后端403及入口8通过，原生333/333、完整lint0错误56/1警告，Flutter定向17和分析通过；本轮未重跑上轮全量。
+- [OK] 最终code3 SHA ec663ce1dc88776649535faf0e4c482fc00716e7ba7871e383e03e8ad6663e1d，包内检查及已安装SHA一致，Android36隔离原生6项通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- docs/plans/2026-11-06-kelivo-device-parity.md：真机/API24、系统回收/插件、真实联动、原Desktop新建与59组闭环，待启动。
+
+
+## Session 52: Kelivo设备主题与横屏恢复验收
+<!-- trellis-session: v=2 fp=121a757976b4f86b -->
+
+**Date**: 2026-11-06
+**Task**: Kelivo设备主题与横屏恢复验收
+**Package**: mobile
+**Branch**: `main`
+
+### Summary
+
+修复电脑系统栏、前台系统主题与150%字体横屏滚动，完成code4模拟器及隔离回归；完整功能目标继续进行。
+
+### Main Changes
+
+- Flutter实际浅深配色同步到原生窗口及Web，显式主题优先；空白页禁止flex收缩，增加横屏首末滚动可达断言。
+- code4最终签名包60,973,251字节，SHA256 e3fa92e2e0d0ef3ec29a5af1996f390ffa7683e0999734dcb211431cdbf92a06；审计、规范、索引和59组局部账本已同步。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] Android36最终SHA已安装一致，13项离线流程及同版本开发覆盖后显式进程双草稿恢复通过；旧包同断言失败及早期runner失败保留。
+- [OK] 原生338/338、完整lint0错误56/1警告，Flutter定向18/18、备份定向184/184和Dart分析通过；收尾完整verify手机152/后端403、入口8及其余步骤通过。
+- [OK] 文档链接、最终APK/包内/实际安装SHA、59行机器和文档一致性及git diff --check通过。本轮未重跑Flutter或markstream全量；文件通知首次超时根因未定。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 继续已启动docs/plans/2026-11-06-kelivo-device-parity.md：真机/API24、正式升级/系统回收/手势/系统插件、授权真实联动、原Desktop新建及59组全部适用子项；整组0/59，总任务in_progress，文稿清理搁置。
+
+
+## Session 53: Kelivo整合code4手机下载与对应源码交付
+<!-- trellis-session: v=2 fp=c71efa532eecce13 -->
+
+**Date**: 2026-11-06
+**Task**: Kelivo整合code4手机下载与对应源码交付
+**Package**: mobile
+**Branch**: `main`
+
+### Summary
+
+复用最终code4，在独立kelivo-preview目录交付APK、源码和安装页；公网完整核验通过，等待用户真机安装。
+
+### Main Changes
+
+- 复用现有原子上传流程，APK与源码独立发布，旧正式/preview/previous/hot四份清单保持；附AGPL、原MIT、归属及固定构建说明。
+- 5892个源码文件完整归档，5052上游文件保留；全部归档项逐字节核对，13处上游合成Key匹配已审核，无其他凭证模式匹配。更新工程入口、宿主规范、task与审计。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] APK60973251字节与源码21637157字节通过公网完整回下载，SHA/大小/全部字节均与本地一致；HTTPS、清单、CORS、APK Range206和旧四清单前后不变通过。
+- [OK] 安装页明确index.html返回200且3234字节一致；首次目录404失败保留。文档本地链接、task in_progress及git diff --check通过。本轮未重跑产品构建或测试，未执行真实任务/网关切换/Git写入。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户手机安装Mobile Codex Preview并核对两个入口，随后按指定模型和电脑目标继续真实联动、原Desktop新建与59组全部对照；整组0/59，文稿清理搁置。
+
+
+## Session 54: 电脑页对齐AI视觉与code5本地签名预览
+<!-- trellis-session: v=2 fp=2a32e9998aa6b05e -->
+
+**Date**: 2026-11-06
+**Task**: 电脑页对齐AI视觉与code5本地签名预览
+**Package**: mobile
+**Branch**: `main`
+
+### Summary
+
+按最新图2 AI基准修正图1电脑页：Flutter语义颜色、开放正文、轻输入框与导航；code5本地签名，手机154/Flutter18/原生338与后端403复跑通过，包内资源及插件核验通过。公开仍code4，真机视觉/其余联动、原Desktop新建及59组对照继续；文稿清理搁置。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 55: Kelivo整合App内更新与code6交付
+<!-- trellis-session: v=2 fp=5889e73f43ebd608 -->
+
+**Date**: 2026-11-06
+**Task**: Kelivo整合App内更新与code6交付
+**Package**: mobile
+**Branch**: `main`
+
+### Summary
+
+统一设置独立应用更新页与kelivo-preview APK源接通，继承AI视觉；code6同签名包及对应源码已公开，原四通道保持，真机与完整目标继续。
+
+### Main Changes
+
+- Flutter本地更新入口、原生一次性导航和独立Web更新页，复用APK下载/校验/授权/继续引擎，不依赖电脑连接；独立通道构建与打包守卫。
+- 复用原子发布，新增对应源码打包入口；code6 APK60975239字节、SHA256 26c1fd78cca21cbecdb84fcbae54c930da0f601080683475f484ff527817a0fa，5897当前源码与已发布归档逐项SHA一致。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 完整verify手机155/后端403/入口8、APK更新6项及原生下载39断言、Flutter定向19/Dart、原生340/完整lint0错误56与1警告、五场景浏览器更新交互和成品检查通过。
+- [OK] Android36真实code4到6覆盖、实际更新入口/硬件返回和进程重启原双草稿恢复通过；公网APK/源码全量字节一致、Range/CORS/previous4及原四通道不变。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 手机先手动覆盖code6一次，确认视觉和系统授权/安装；继续其余真机联动、原Desktop新建及59组完整对照，整组仍0/59，文稿清理搁置。

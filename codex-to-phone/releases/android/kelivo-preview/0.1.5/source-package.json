@@ -1,0 +1,12 @@
+{
+  "archive": "mobile-codex-kelivo-0.1.5-preview-source.tar.gz",
+  "bytes": 21687913,
+  "sha256": "d94bd7999e878cb6c2f1e00c0dbf3093263e1b74bd7c3c3b39d47175421b067c",
+  "sourceFiles": 5917,
+  "archiveEntries": 5922,
+  "upstreamFilesIncluded": 5052,
+  "allArchiveBytesVerified": true,
+  "unreviewedSecretPatternFindings": 0,
+  "reviewedUpstreamSyntheticFixtures": 13,
+  "apkSha256": "2666d55e30205e60a4b64c23ba36d2fe4b01d9ecd96971fc50267bf1dfd2a316"
+}

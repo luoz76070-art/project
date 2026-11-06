@@ -31,7 +31,13 @@
 
 成功后解析 `apps/mobile/android/app/build/reports/lint-results-debug.xml`，输出Error/Fatal/Warning计数；有Error/Fatal仍判失败。Warning保留并报告，不添加baseline或关闭规则掩盖。
 
-## lint边界
+## Kelivo整合原生检查
+
+整合宿主独立使用 `node scripts/verify-kelivo.mjs`；加 `--preview` 生成并校验签名预览，`--repeat-tests` 强制复跑原生 Test。它运行完整宿主/远控 `lintRelease` 与原生全量测试；原 `verify:android` / `verify:all` 继续检查原独立远控Android，不自动包含Flutter工程。
+
+固定Flutter、锁文件、JDK测试环境、镜像参数及产物路径见[integrations/kelivo](../integrations/kelivo/README.md)，其中包含独立模拟器instrumentation命令；adb外层退出0不能代替report通过。Flutter重大整合仍须独立执行分析/全量及markstream检查；同根多套Flutter测试顺序运行。本轮交接回归在`test:mobile`中，实际发送函数与主题effect均覆盖；原生界面、真实服务与59组完整对照分开验收，证据见[交接审计](audits/2026-11-06/kelivo-handoff.md)及[证据账本](audits/2026-11-06/kelivo-parity-evidence.md)。
+
+## JS/TS lint边界
 
 `eslint.config.mjs`启用debugger、重复else-if/duplicate case、unsafe finally、async Promise executor等明确正确性检查；React源码启用rules-of-hooks；`runtimeSync.ts`和`sync.ts`额外检查未使用变量。暂未全量启用exhaustive-deps、格式化及整个旧工程的unused规则；旧exhaustive-deps注释不代表该规则已执行。生成产物、Android资源、依赖与Trellis工具不纳入该JS/TS扫描。
 
