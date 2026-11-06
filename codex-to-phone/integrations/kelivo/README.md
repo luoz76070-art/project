@@ -10,7 +10,7 @@
 
 ## 当前 code7 交付
 
-2026-11-07：动态折叠执行摘要、紧凑代码/日志字号、Kelivo 聊天显示偏好桥，以及 Codex 项目内图片的鉴权读取/Markdown 展示与大图。签名预览为 `0.1.5-native-preview` / code7；[GitHub 版本目录](../../releases/android/kelivo-preview/0.1.5/)包含 APK、匹配源码和配套网关。图片接口需要新版网关，在线网关未在本轮升级。code7 已补发独立自托管更新源，code6 可在「设置 → 应用更新」升级，见[发布核验](../../docs/audits/2026-11-07/app-update.md)。历史 code4/5/6 状态保留如下，不代表当前 GitHub 版本。
+2026-11-07：动态折叠执行摘要、紧凑代码/日志字号、Kelivo 聊天显示偏好桥，以及 Codex 项目内图片的鉴权读取/Markdown 展示与大图。签名预览为 `0.1.5-native-preview` / code7；[GitHub 版本目录](../../releases/android/kelivo-preview/0.1.5/)包含 APK、匹配源码和配套网关。图片接口需要新版网关；当前Mac已在[后续真机验收轮](../../docs/audits/2026-11-07/device-link.md)完成网关升级和55项本地/公网检查，其他使用者仍需按版本说明升级自己的网关。code7 已补发独立自托管更新源，code6 可在「设置 → 应用更新」升级，见[发布核验](../../docs/audits/2026-11-07/app-update.md)。历史 code4/5/6 状态保留如下，不代表当前 GitHub 版本。
 
 ## 来源与目录
 

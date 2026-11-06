@@ -1,0 +1,295 @@
+{
+  "date": "2026-11-07",
+  "gatewayDeployment": "passed",
+  "before": {
+    "pid": 60246,
+    "instanceId": "058dd52e-6337-4933-98b7-54ad9604ff2a"
+  },
+  "after": {
+    "pid": 45270,
+    "instanceId": "c0ff4578-3e91-4cc0-ac25-7f4917d31a24"
+  },
+  "oldNaturalExitMs": 2282,
+  "gatewayBundleSha256": "a96929560c60980b51a2fe8253b3c4b3209b0594a6311414416de04f9eec4944",
+  "releaseDirectory": "/Users/rorance/Library/Application Support/Mobile Codex Gateway/releases/2026-11-07-kelivo-images-a96929560c60/mobile-codex",
+  "backupDirectory": "/Users/rorance/Library/Application Support/Mobile Codex Gateway/backups/2026-11-07-kelivo-images-1794007900977",
+  "originalHostsAndStatePreserved": true,
+  "isolatedTests": {
+    "command": "node --test --test-concurrency=2 --test-timeout=15000 apps/relay/tests/threadImages.test.mjs apps/relay/tests/managedGateway.test.mjs",
+    "passed": 19
+  },
+  "liveChecks": [
+    {
+      "name": "candidate-listener",
+      "ok": true
+    },
+    {
+      "name": "candidate-program",
+      "ok": true
+    },
+    {
+      "name": "candidate-bundle-sha",
+      "ok": true
+    },
+    {
+      "name": "local-/api/connection-200",
+      "ok": true
+    },
+    {
+      "name": "local-authenticated",
+      "ok": true
+    },
+    {
+      "name": "local-/api/gateway-200",
+      "ok": true
+    },
+    {
+      "name": "local-same-instance-connected",
+      "ok": true
+    },
+    {
+      "name": "local-relative-200",
+      "ok": true
+    },
+    {
+      "name": "local-relative-headers",
+      "ok": true
+    },
+    {
+      "name": "local-relative-bytes",
+      "ok": true,
+      "bytes": 24806,
+      "sha256": "0bb56c9ff4b9e8c0f1ec12d69a829521e42ee0e5105ae86c7783c06ae960a53c"
+    },
+    {
+      "name": "local-absolute-200",
+      "ok": true
+    },
+    {
+      "name": "local-absolute-headers",
+      "ok": true
+    },
+    {
+      "name": "local-absolute-bytes",
+      "ok": true,
+      "bytes": 24806,
+      "sha256": "0bb56c9ff4b9e8c0f1ec12d69a829521e42ee0e5105ae86c7783c06ae960a53c"
+    },
+    {
+      "name": "local-file-uri-200",
+      "ok": true
+    },
+    {
+      "name": "local-file-uri-headers",
+      "ok": true
+    },
+    {
+      "name": "local-file-uri-bytes",
+      "ok": true,
+      "bytes": 24806,
+      "sha256": "0bb56c9ff4b9e8c0f1ec12d69a829521e42ee0e5105ae86c7783c06ae960a53c"
+    },
+    {
+      "name": "local-encoded-200",
+      "ok": true
+    },
+    {
+      "name": "local-encoded-headers",
+      "ok": true
+    },
+    {
+      "name": "local-encoded-bytes",
+      "ok": true,
+      "bytes": 24806,
+      "sha256": "0bb56c9ff4b9e8c0f1ec12d69a829521e42ee0e5105ae86c7783c06ae960a53c"
+    },
+    {
+      "name": "local-missing-rejected",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "name": "local-outside-rejected",
+      "ok": true,
+      "status": 403
+    },
+    {
+      "name": "local-not-raster-rejected",
+      "ok": true,
+      "status": 415
+    },
+    {
+      "name": "local-invalid-rejected",
+      "ok": true,
+      "status": 400
+    },
+    {
+      "name": "local-image-noauth-401",
+      "ok": true
+    },
+    {
+      "name": "local-image-android-preflight",
+      "ok": true
+    },
+    {
+      "name": "local-deepseek-preexisting-offline",
+      "ok": true
+    },
+    {
+      "name": "public-/api/connection-200",
+      "ok": true
+    },
+    {
+      "name": "public-authenticated",
+      "ok": true
+    },
+    {
+      "name": "public-/api/gateway-200",
+      "ok": true
+    },
+    {
+      "name": "public-same-instance-connected",
+      "ok": true
+    },
+    {
+      "name": "public-relative-200",
+      "ok": true
+    },
+    {
+      "name": "public-relative-headers",
+      "ok": true
+    },
+    {
+      "name": "public-relative-bytes",
+      "ok": true,
+      "bytes": 24806,
+      "sha256": "0bb56c9ff4b9e8c0f1ec12d69a829521e42ee0e5105ae86c7783c06ae960a53c"
+    },
+    {
+      "name": "public-absolute-200",
+      "ok": true
+    },
+    {
+      "name": "public-absolute-headers",
+      "ok": true
+    },
+    {
+      "name": "public-absolute-bytes",
+      "ok": true,
+      "bytes": 24806,
+      "sha256": "0bb56c9ff4b9e8c0f1ec12d69a829521e42ee0e5105ae86c7783c06ae960a53c"
+    },
+    {
+      "name": "public-file-uri-200",
+      "ok": true
+    },
+    {
+      "name": "public-file-uri-headers",
+      "ok": true
+    },
+    {
+      "name": "public-file-uri-bytes",
+      "ok": true,
+      "bytes": 24806,
+      "sha256": "0bb56c9ff4b9e8c0f1ec12d69a829521e42ee0e5105ae86c7783c06ae960a53c"
+    },
+    {
+      "name": "public-encoded-200",
+      "ok": true
+    },
+    {
+      "name": "public-encoded-headers",
+      "ok": true
+    },
+    {
+      "name": "public-encoded-bytes",
+      "ok": true,
+      "bytes": 24806,
+      "sha256": "0bb56c9ff4b9e8c0f1ec12d69a829521e42ee0e5105ae86c7783c06ae960a53c"
+    },
+    {
+      "name": "public-missing-rejected",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "name": "public-outside-rejected",
+      "ok": true,
+      "status": 403
+    },
+    {
+      "name": "public-not-raster-rejected",
+      "ok": true,
+      "status": 415
+    },
+    {
+      "name": "public-invalid-rejected",
+      "ok": true,
+      "status": 400
+    },
+    {
+      "name": "public-image-noauth-401",
+      "ok": true
+    },
+    {
+      "name": "public-image-android-preflight",
+      "ok": true
+    },
+    {
+      "name": "public-deepseek-preexisting-offline",
+      "ok": true
+    },
+    {
+      "name": "native-ipc-initialized",
+      "ok": true
+    },
+    {
+      "name": "preserved-state-gateway.json",
+      "ok": true
+    },
+    {
+      "name": "preserved-state-devices.json",
+      "ok": true
+    },
+    {
+      "name": "preserved-state-desktop-queue.json",
+      "ok": true
+    },
+    {
+      "name": "preserved-state-voice-credentials.json",
+      "ok": true
+    },
+    {
+      "name": "original-host-pids-preserved",
+      "ok": true
+    }
+  ],
+  "image": {
+    "file": "docs/images/remote-rendering-light.jpg",
+    "bytes": 24806,
+    "sha256": "0bb56c9ff4b9e8c0f1ec12d69a829521e42ee0e5105ae86c7783c06ae960a53c"
+  },
+  "phone": {
+    "appUpdate": {
+      "result": "passed-user-confirmed",
+      "versionName": "0.1.5-native-preview",
+      "versionCode": 7,
+      "evidence": "用户确认：已在 App 内升级到 0.1.5 / code7",
+      "adbAvailable": false,
+      "installedApkHashIndependentlyVerified": false
+    },
+    "imageAndViewer": "awaiting user",
+    "executionSummary": "awaiting user",
+    "connectionDraftsThemes": "awaiting user"
+  },
+  "deepseek": {
+    "baseline": "preexisting-offline",
+    "bridgePort": 9876,
+    "listeningBeforeSwitch": false,
+    "sessionStatusBeforeSwitch": 502,
+    "sessionStatusAfterSwitch": 502,
+    "changed": false
+  },
+  "modelRequests": 0,
+  "actualApprovals": 0
+}
