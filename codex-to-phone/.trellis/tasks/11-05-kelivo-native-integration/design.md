@@ -104,3 +104,11 @@ Kelivo SettingsProvider 继续拥有聊天字号与工具卡片/结果摘要偏�
 缺口位于插件manifest/bridge与Relay协议的精确版本门，另需复核Cordis4.1.0、原SessionController及内部pending审批方法；以安装包真实源码和隔离官方算法验证，不仅放宽版本号。最小候选为DeepSeek插件0.2.7及配套网关，修改scripts/check-deepseek-*覆盖新运行时与既有工具能力；如发现真实语义变化，只在对应所有者模块修复。手机code9协议与UI无需修改或机械重打APK，旧0.1.7归档保持。新电脑包单独归档。切换保留私有配置，官方profile离线link/HMR恢复；不新建profile、不重启原Agent、不改审批策略。
 
 已实施：plan-review可选callId与普通tool/result缺省isError按新官方契约修正，未知字段/PTC严格性及两个审批方法指纹保留；新approval intent保持不可手机处理。原插件通过官方命令与桥接组件重载恢复，网关正常退出后切换固定SHA目录；实际安装文件单独归档至`0.1.7/desktop-0.2.7-preview`，11文件源码补丁以独立索引校验，code9十份既有产物不覆盖。
+
+## 2026-11-07 项目外图片授权边界
+
+最小差距：现有readThreadImage对所有项目外realpath返回403，即使原会话明确展示该图片。只在该边界加入服务端精确引用判定，保留大小、魔数、并发、鉴权及项目内读取。请求不能传allowlist/cwd。项目外引用必须规范化到同一个绝对文件，拒绝以符号链接借用授权。
+
+新增共享助手Markdown图片引用提取（与现有手机渲染匹配，跳过围栏/行内代码），Codex使用原权威快照或原rollout按完整JSONL记录分块查找，缓存有界，每次扫描有预算，超预算返回可重试image_busy，不每张图片无界物化全历史。日志变化使缓存失效。Agent使用同owner/agent/session活动SSE的有效目录及明确引用；历史页返回时仅回填仍属同代次绑定的引用，断线/目录变化/撤销清空，不改模型与控制。
+
+预计修改threadImages、threadImageRoutes、CodexStore、新共享引用模块、agentSessionRoutes与对应隔离测试，以及工程/交付记录。手机源码、APK、原宿主插件及其他电脑控制不变。自审：后端是拒绝发生的真实位置；仅精确文件例外不扩根目录；扫描与缓存上限独立验证。在线网关切换仍按version-sync单独确认。

@@ -1,5 +1,10 @@
 # 更新说明
 
+## 电脑网关图片引用修复 · 2026-11-07（预览，沿用code9）
+
+- 修复会话引用隔离副本图片时被项目目录规则误拦截的问题；Codex及全部电脑Agent允许原助手消息中明确引用的精确图片，历史页同样适用。未引用文件、代码示例和其他会话不能借用授权。
+- 后端422、手机169、类型/lint/构建及更新路径检查通过；原指定图片321,193字节与源码候选读取一致。新电脑网关[独立交付](releases/android/kelivo-preview/0.1.7/desktop-image-reference-preview/)，在线切换和手机重试结果见[审计](docs/audits/2026-11-07/image-reference-fix.md)。手机APK及更新源继续code9。
+
 ## DeepSeek桥接0.2.7 · 2026-11-07（电脑兼容补充，沿用code9）
 
 - 精确支持 Harness 0.2.2-rc.1，保留既有版本与未知拒绝；修复 plan-review 可选 callId 及普通工具结果省略 isError 时的漏显。原审批方法指纹保持，新 approval intent 仍在电脑处理。

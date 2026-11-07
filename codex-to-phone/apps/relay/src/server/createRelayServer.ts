@@ -116,7 +116,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   app.addHook("onError", async request => releaseUpload(request));
   app.addHook("onRequestAbort", async request => releaseUpload(request));
 
-  registerThreadImageRoutes(app, store, owners, readImage);
+  registerThreadImageRoutes(app, store, owners, readImage, id => desktopControl.getStreamSnapshot?.(id));
   app.post("/api/pairing", async () => devices.createPairing());
   app.post("/api/pairing/consume", { bodyLimit: 4096 }, async request => {
     const body = z.object({ code: z.string().min(1).max(128), name: z.string().trim().min(1).max(80).default("手机") }).parse(request.body);

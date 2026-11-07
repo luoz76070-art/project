@@ -4,6 +4,7 @@ import { StringDecoder } from "node:string_decoder";
 import { RolloutIndex } from "./rolloutIndex.js";
 import { readJsonlWindow } from "./jsonl.js";
 import { turnProgress, type TurnProgress } from "./turnActivity.js";
+import { RolloutImageReferences } from "./imageReferences.js";
 
 export type CodexThreadSummary = {
   id: string;
@@ -61,6 +62,7 @@ type RolloutLine = {
 };
 
 export class CodexStore {
+  private readonly imageReferences = new RolloutImageReferences((value, offset) => this.toMessage(value as RolloutLine, offset));
   private readonly rolloutPathCache = new Map<string, string>();
 
   private readonly index: RolloutIndex;
@@ -79,6 +81,11 @@ export class CodexStore {
     const file = await this.findRolloutPath(threadId);
     if (!file) return null;
     return this.readThreadSummary(threadId, file, (await fs.stat(file)).mtimeMs);
+  }
+
+  async hasThreadImageReference(threadId: string, cwd: string, target: string) {
+    const file = await this.findRolloutPath(threadId);
+    return file ? this.imageReferences.has(file, cwd, target) : false;
   }
 
   async listThreads(limit = 50, offset = 0, query = "", since = 0): Promise<CodexThreadSummary[]> {

@@ -27,6 +27,7 @@ Mobile Codex 把 Kelivo 的 AI 客户端与 Codex To Phone 的电脑控制能力
 | --- | --- |
 | [Android APK：0.1.7 预览版](https://github.com/luoz76070-art/project/raw/refs/heads/main/codex-to-phone/releases/android/kelivo-preview/0.1.7/mobile-codex-kelivo-0.1.7-preview-arm64.apk) | Android 7.0+、arm64-v8a；同包名预览覆盖安装 |
 | [对应源码归档](releases/android/kelivo-preview/0.1.7/mobile-codex-kelivo-0.1.7-preview-source.tar.gz) | 与本 APK 对应的源码、依赖锁、构建入口和逐文件 SHA256 |
+| [电脑网关图片修复预览](releases/android/kelivo-preview/0.1.7/desktop-image-reference-preview/) | 支持原会话明确引用的隔离副本图片，沿用 code9 与 DeepSeek 0.2.7；[检查与部署状态](docs/audits/2026-11-07/image-reference-fix.md) |
 | [最新电脑兼容补充：DeepSeek 0.2.7](releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/) | 配套网关、原 profile 桥接、源码补丁；新增 Harness 0.2.2-rc.1 兼容，无个人配置 |
 | [code9 原配套网关与插件](releases/android/kelivo-preview/0.1.7/README.md#电脑端配套更新) | 原归档保留，含 Claude 0.1.2；DeepSeek 新宿主请用上面的 0.2.7 补充 |
 | [校验值与版本说明](releases/android/kelivo-preview/0.1.7/) | SHA256、APK 元数据、兼容边界及网关升级步骤 |

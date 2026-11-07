@@ -222,3 +222,11 @@ App内更新本轮交付核验通过：见 `docs/audits/2026-11-06/kelivo-update
 - [x] 新电脑包、审计与Git交付：cef6890已推送；GitHub六份补充及11个源码全量下载一致，原code9十文件/标签保留。最终文档与preview标签同步单独核对。
 
 证据：`docs/audits/2026-11-07/agent-parity-runtime.md`；手机后续计划为`docs/plans/2026-11-07-agent-phone-acceptance.md`，待用户启动。总体in_progress、59组完整验收不变。
+
+## 2026-11-07 项目外图片执行清单
+
+- [x] 用户指定原会话只读取证，本地/公网/函数均复现同一403；文件存在且非软链接。
+- [x] 合成HTTP失败回归，先失败后修复。
+- [x] Codex与所有SessionAdapter精确引用授权；代码/普通链接/未引用/跨会话及失效边界检查。
+- [x] targeted、完整后端、类型/lint/构建与新独立网关归档；保持code9 APK。
+- [ ] 文档、限定项目Git交付；在线切换单独确认后原指定图片本地/公网核对，手机重试单列。

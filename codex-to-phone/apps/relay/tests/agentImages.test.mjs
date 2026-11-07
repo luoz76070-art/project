@@ -15,12 +15,19 @@ test('all registered SessionAdapters bind authenticated image reads to the curre
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-images-'));
   const project = path.join(root, 'project'); await fs.mkdir(project); await fs.writeFile(path.join(project, 'test.png'), png);
   await fs.writeFile(path.join(root, 'outside.png'), png); await fs.symlink(path.join(root, 'outside.png'), path.join(project, 'link.png'));
+  const external = path.join(root, '隔离截图 (1).png'), historic = path.join(root, '历史截图.png');
+  await fs.writeFile(external, png); await fs.writeFile(historic, png);
+  let messages = [{ id: 'visible', role: 'assistant', text: `![隔离截图](<${external}>)` }];
+  let historyWait = null;
   const listeners = new Set(); let connected = true, directory = project, snapshotId = 'original';
   const snapshot = id => ({ agentId: id, session: { id: snapshotId, directory, title: 'Synthetic', updatedAt: new Date().toISOString() },
-    connected, updatedAt: new Date().toISOString(), status: 'idle', activity: 'thinking', messages: [], questions: [], permissions: [],
+    connected, updatedAt: new Date().toISOString(), status: 'idle', activity: 'thinking', messages, questions: [], permissions: [],
     partialText: false, historyCursor: null, control: null, submission: null });
   const adapters = ['deepseek', 'claude', 'opencode', 'future-agent'].map(id => {
-    const adapter = { sessionApi: { validSessionId: value => value === 'original', async watchSession(_key, publish) {
+    const adapter = { sessionApi: { validSessionId: value => value === 'original', async readHistory() {
+      if (historyWait) await historyWait;
+      return { messages: [{ id: 'historic', role: 'assistant', text: `![历史](${historic})` }], cursor: null };
+    }, async watchSession(_key, publish) {
       const callback = () => publish(snapshot(id)); listeners.add(callback); callback(); return () => listeners.delete(callback);
     } }, snapshot: () => ({ id, label: id, transport: 'synthetic-only', capabilities: {} }), async stop() {} };
     return adapter;
@@ -53,10 +60,29 @@ test('all registered SessionAdapters bind authenticated image reads to the curre
     assert.equal((await image(id, admin)).statusCode, 409, 'another owner cannot borrow a device subscription');
     assert.equal((await image(id, auth, 'test.png', { directory: root })).statusCode, 400);
     for (const source of ['../outside.png', 'link.png']) assert.equal((await image(id, auth, source)).statusCode, 403);
+    assert.equal((await image(id, auth, external)).statusCode, 200, 'explicit outside image belongs to this owner/session');
+    assert.equal((await image(id, auth, historic)).statusCode, 403);
+    await app.inject({ url: `/api/agents/${id}/sessions/original/history?cursor=synthetic-history`, headers: auth });
+    assert.equal((await image(id, auth, historic)).statusCode, 200, 'authoritative history can render its own outside image');
+    messages = [{ id: 'visible', role: 'assistant', text: `路径 ${external}\n\`![示例](${external})\`` }];
+    for (const notify of listeners) notify();
+    assert.equal((await image(id, auth, external)).statusCode, 403, 'snapshot replacement removes a former live reference');
+    messages = [{ id: 'visible', role: 'assistant', text: `![隔离截图](<${external}>)` }]; for (const notify of listeners) notify();
     snapshotId = 'other'; for (const notify of listeners) notify(); assert.equal((await image(id)).statusCode, 409);
     snapshotId = 'original'; connected = false; for (const notify of listeners) notify(); assert.equal((await image(id)).statusCode, 409);
     connected = true; directory = 'relative'; for (const notify of listeners) notify(); assert.equal((await image(id)).statusCode, 409);
     directory = project; for (const notify of listeners) notify(); assert.equal((await image(id)).statusCode, 200);
+    assert.equal((await image(id, auth, historic)).statusCode, 403, 'disconnect invalidates old history references');
+    let finishHistory;
+    historyWait = new Promise(resolve => { finishHistory = resolve; });
+    const late = app.inject({ url: `/api/agents/${id}/sessions/original/history?cursor=synthetic-late`, headers: auth });
+    // Start the real Fastify handler before changing the binding generation.
+    const pendingHistory = late.then(response => response);
+    await sleep(10);
+    connected = false; for (const notify of listeners) notify();
+    connected = true; for (const notify of listeners) notify();
+    finishHistory(); historyWait = null; await pendingHistory;
+    assert.equal((await image(id, auth, historic)).statusCode, 403, 'late history cannot grant an image to a reconnected binding');
     controller.abort(); await until(() => listeners.size === 0); assert.equal((await image(id)).statusCode, 409);
   }
   await subscribe('future-agent');

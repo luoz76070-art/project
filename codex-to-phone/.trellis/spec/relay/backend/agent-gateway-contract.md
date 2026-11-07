@@ -76,3 +76,11 @@ AgentGateway.snapshot 对显式存在 sessionApi 的适配器下发 sessionApi:1
 POST /api/agents/:agentId/sessions/:sessionId/images 只接受 {path}。根目录取自相同设备 owner、Agent/session 的活动 SSE 权威快照：connected 且身份一致、绝对路径且无 NUL；不存在或互相冲突返回409。断线、取消订阅和关闭流立即撤销目录；不按客户端 cwd 或其他设备订阅授权。不为取图启动/激活会话。Codex/Agent 在 createRelayServer 共用 createProjectImageReader：全局4、每owner2，finally释放；沿 readThreadImage 的 realpath、symlink、8MiB和栅格格式校验。
 
 必需回归为 agentImages.test.mjs 的四通道（含合成 future-agent）、设备所有权/撤销、目录变化/断线/非法路径、关闭释放与共享限额；客户端控制和图片不能借同一UUID跨Agent访问。
+
+### 项目外明确引用的栅格图片（2026-11-07修复）
+
+项目目录内规则保留；额外允许当前原会话助手Markdown实际渲染的精确文件。共享imageReferences提取跳过代码围栏/行内代码、普通链接、非assistant角色和无效地址，路径按与请求相同规则解码/归一化。项目外文件的最终路径分量不能为软链接；父目录系统别名（macOS /var）可用。8MiB/魔数/并发/鉴权保持，手机不得提供允许目录或授权列表。
+
+Codex原IPC快照或原rollout提供引用，后者按完整JSONL页有界向前查：8MiB扫描预算允许最后一条记录扩展至8MiB（总量小于16MiB），最多16份日志、每份2048引用/128未命中/128待续查；超预算429 image_busy，点击重试继续，不物化全历史。日志dev/ino/birthtime/size/mtime/ctime变化使缓存失效。Agent引用只属于同owner/agent/session的有效活动SSE绑定；历史回填检查绑定仍存在且epoch未变，目录变化/断线/关闭/撤销失效。无需为取图激活会话或调用模型。
+
+回归：threadImages的真实HTTP隔离副本/旧历史/编码/软链接/未引用/跨会话/日志替换；imageReferences的渲染语义/长历史预算/续查/缓存容量；agentImages的四通道历史、替换、断线及迟到历史。真实用户图片仅显式集成检查，不进入单元测试。

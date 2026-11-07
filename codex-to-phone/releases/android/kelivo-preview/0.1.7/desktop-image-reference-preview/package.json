@@ -1,0 +1,109 @@
+{
+  "kind": "code9-image-reference-desktop-preview",
+  "date": "2026-11-07",
+  "androidVersionCode": 9,
+  "androidVersionName": "0.1.7-native-preview",
+  "deepseekPluginVersion": "0.2.7-unchanged",
+  "gatewayBundleSha256": "a7c895b883ed14ba851dc99ba97bf5452a41f9e8e84137a1837e1c8cb025e828",
+  "sourceBaselineCommit": "a3c2052c6d3438420f16d173224abb52f727bb76",
+  "sourceFiles": [
+    {
+      "file": ".trellis/spec/relay/backend/agent-gateway-contract.md",
+      "bytes": 9427,
+      "sha256": "0df877db70beead4227ecfb54de1f5b1d673ef1765071709a0ad77e5f3eb6adc"
+    },
+    {
+      "file": "apps/relay/src/server/agentSessionRoutes.ts",
+      "bytes": 11143,
+      "sha256": "e2ef1ef88b460c31fba87eb3ba13197df8c2f2338553f4725c242c327a46f7b3"
+    },
+    {
+      "file": "apps/relay/src/server/createRelayServer.ts",
+      "bytes": 31138,
+      "sha256": "64645fa45c30071302edb68daf8f6d7b0ff7cefb147a7a6400dab1050fe95c3b"
+    },
+    {
+      "file": "apps/relay/src/server/threadImageRoutes.ts",
+      "bytes": 2218,
+      "sha256": "60b2ad9b7e10276001e94a0dbaa25049dc46e354dcabf37a6e0a15919274bcea"
+    },
+    {
+      "file": "apps/relay/src/store/codexStore.ts",
+      "bytes": 22782,
+      "sha256": "987f10074cf78079d709313e6bdbbb8a9a916af09b85e0b848332df88d5cb6c0"
+    },
+    {
+      "file": "apps/relay/src/store/threadImages.ts",
+      "bytes": 3445,
+      "sha256": "839d1745f3f1ecaa4e866fccb49437356f888c6c7f85a61b511d16baae71145c"
+    },
+    {
+      "file": "apps/relay/src/store/imageReferences.ts",
+      "bytes": 5051,
+      "sha256": "aa2b07ab815efdd14fb434e4a25604d10d9a6ed0e0bb04e6e988b0db3b5c84df"
+    },
+    {
+      "file": "apps/relay/tests/threadImages.test.mjs",
+      "bytes": 7703,
+      "sha256": "273056e0b41de954ca2d9afd10850d3651e50737f396ea5e9e3149a4c10ec292"
+    },
+    {
+      "file": "apps/relay/tests/agentImages.test.mjs",
+      "bytes": 8782,
+      "sha256": "044d87d5d8132f0ba4be458d80de904588c290160672978cef121f1ff60eb2a3"
+    },
+    {
+      "file": "apps/relay/tests/imageReferences.test.mjs",
+      "bytes": 3363,
+      "sha256": "5312b9299a99eadf632669696c97b5f7f8136918a7005fc62a8f9edc564d3824"
+    }
+  ],
+  "gatewayFiles": [
+    {
+      "file": "lib/gateway.mjs",
+      "bytes": 1207549,
+      "sha256": "a7c895b883ed14ba851dc99ba97bf5452a41f9e8e84137a1837e1c8cb025e828"
+    },
+    {
+      "file": "LICENSE",
+      "bytes": 1084,
+      "sha256": "2772c31a36d374710eba71f94e771ab1368cc39902d0160987aece6d89741efd"
+    },
+    {
+      "file": "plugin.json",
+      "bytes": 629,
+      "sha256": "a2f001b96505136cdf27d1ce611a965037f044948fb767cb075c92fc7bdd6bb4"
+    },
+    {
+      "file": "README.md",
+      "bytes": 8653,
+      "sha256": "cc7cd7ca98061ad46d8b1a512991762702969aa7126c5a5a3e51243405e32ac6"
+    },
+    {
+      "file": "scripts/mobile-codex.mjs",
+      "bytes": 620,
+      "sha256": "07f3f1c040411b4b56b4253f54607cc207ff3f2f9b0fba6b6045febf6f1ce996"
+    },
+    {
+      "file": "skills/mobile-codex/SKILL.md",
+      "bytes": 3633,
+      "sha256": "e7c93c164b718a1030cecd7e895f480c14ce068d1d3ae978df954a8f05c6fcd6"
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "mobile-codex-gateway-image-reference-preview.tar.gz",
+      "bytes": 337434,
+      "sha256": "d956f9c3cc9b65a55c02072ac62c67b0acb461b20f51882a1b9afd524f3d6270"
+    },
+    {
+      "file": "source-overlay.tar.gz",
+      "bytes": 29731,
+      "sha256": "a5c6fcf33489fb2dd2008d80ef329987bcc2d6837c6d3fcadc3952f590f2bda2"
+    }
+  ],
+  "allArchiveBytesVerified": true,
+  "privateCredentialScanMatches": 0,
+  "onlineGatewaySwitched": false,
+  "phoneDisplayConfirmed": false
+}

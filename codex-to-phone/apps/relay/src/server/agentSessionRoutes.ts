@@ -10,11 +10,13 @@ import type { SubmissionRegistry } from "./submissions.js";
 import { createEventStream } from "./eventStream.js";
 import { snapshotSender } from "./snapshotPatch.js";
 import { createProjectImageReader, type ProjectImageReader } from "./threadImageRoutes.js";
+import { assistantImageReferences } from "../store/imageReferences.js";
 
 const agentId = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
 const paramsSchema = z.object({ agentId, sessionId: z.string().regex(/^[a-zA-Z0-9_-]{1,160}$/u) });
 const operationSchema = z.object({ controlToken: z.string().uuid(), clientMessageId: z.string().uuid() });
 type StreamToken = { owner: string; agentId: string; sessionId: string; expires: number };
+type MediaBinding = { directory: string | null; epoch: number; references: Set<string>; history: Set<string> };
 
 export function createAgentSessionRoutes(context: {
   gateway: AgentGateway; owners: WeakMap<FastifyRequest, string>; devices: DeviceRegistry;
@@ -22,7 +24,7 @@ export function createAgentSessionRoutes(context: {
   readImage?: ProjectImageReader;
 }) {
   const tokens = new Map<string, StreamToken>();
-  const media = new Map<string, Set<{ directory: string | null }>>();
+  const media = new Map<string, Set<MediaBinding>>();
   const { gateway, owners, devices, streams, deviceStreams, submissions, readImage = createProjectImageReader() } = context;
   const mediaKey = (owner: string, params: z.infer<typeof paramsSchema>) => `${owner}\0${params.agentId}\0${params.sessionId}`;
   function sessionAdapter(params: z.infer<typeof paramsSchema>) {
@@ -52,15 +54,28 @@ export function createAgentSessionRoutes(context: {
       app.get("/api/agents/:agentId/sessions/:sessionId/history", async request => {
         const { agentId: id, sessionId } = paramsSchema.parse(request.params);
         const { cursor } = z.object({ cursor: z.string().min(1).max(8192) }).parse(request.query);
-        return sessionAdapter({ agentId: id, sessionId }).readHistory(sessionId, cursor);
+        const owner = owners.get(request)!, key = mediaKey(owner, { agentId: id, sessionId });
+        const bindings = [...(media.get(key) ?? [])].map(binding => ({ binding, epoch: binding.epoch, directory: binding.directory }));
+        const page = await sessionAdapter({ agentId: id, sessionId }).readHistory(sessionId, cursor);
+        for (const { binding, epoch, directory } of bindings) {
+          if (!directory || binding.epoch !== epoch || !media.get(key)?.has(binding) || !devices.has(owner)) continue;
+          for (const reference of assistantImageReferences(directory, page.messages)) {
+            binding.history.delete(reference); binding.history.add(reference);
+            if (binding.history.size > 2048) binding.history.delete(binding.history.values().next().value!);
+          }
+        }
+        return page;
       });
       app.post("/api/agents/:agentId/sessions/:sessionId/images", { bodyLimit: 8192 }, async (request, reply) => {
         const params = paramsSchema.parse(request.params); sessionAdapter(params);
         const body = z.object({ path: z.string().min(1).max(4096) }).strict().parse(request.body);
         const owner = owners.get(request)!;
-        const directories = new Set([...(media.get(mediaKey(owner, params)) ?? [])].map(binding => binding.directory).filter((value): value is string => value !== null));
+        const bindings = [...(media.get(mediaKey(owner, params)) ?? [])];
+        const directories = new Set(bindings.map(binding => binding.directory).filter((value): value is string => value !== null));
         if (directories.size !== 1) throw agentError("AGENT_IMAGE_SUBSCRIPTION_REQUIRED", 409);
-        return reply.header("Cache-Control", "no-store").send(await readImage(owner, [...directories][0]!, body.path));
+        const directory = [...directories][0]!;
+        return reply.header("Cache-Control", "no-store").send(await readImage(owner, directory, body.path,
+          target => bindings.some(binding => binding.directory === directory && (binding.references.has(target) || binding.history.has(target)))));
       });
       app.post("/api/agents/:agentId/sessions/:sessionId/stream-token", { bodyLimit: 4096 }, async request => {
         const params = paramsSchema.parse(request.params); sessionAdapter(params);
@@ -78,8 +93,8 @@ export function createAgentSessionRoutes(context: {
         if (streams.size >= 32 || (deviceStreams.get(owner)?.size ?? 0) >= 4 || !devices.has(owner)) return reply.code(429).send({ error: "stream_limit" });
         const events = createEventStream(reply, streams), owned = deviceStreams.get(owner) ?? new Set<PassThrough>();
         deviceStreams.set(owner, owned); owned.add(events.stream);
-        const key = mediaKey(owner, params), bindings = media.get(key) ?? new Set<{ directory: string | null }>();
-        const binding = { directory: null as string | null };
+        const key = mediaKey(owner, params), bindings = media.get(key) ?? new Set<MediaBinding>();
+        const binding: MediaBinding = { directory: null, epoch: 0, references: new Set(), history: new Set() };
         media.set(key, bindings); bindings.add(binding);
         let closed = false, unsubscribe: (() => void) | undefined;
         events.onClose(() => { closed = true; binding.directory = null; bindings.delete(binding); if (!bindings.size) media.delete(key);
@@ -88,8 +103,11 @@ export function createAgentSessionRoutes(context: {
         try {
           unsubscribe = await adapter.watchSession(params.sessionId, snapshot => {
             if (closed) return;
-            binding.directory = snapshot.connected && snapshot.agentId === params.agentId && snapshot.session.id === params.sessionId
+            const directory = snapshot.connected && snapshot.agentId === params.agentId && snapshot.session.id === params.sessionId
               && path.isAbsolute(snapshot.session.directory) && !snapshot.session.directory.includes("\0") ? snapshot.session.directory : null;
+            if (directory !== binding.directory) { binding.epoch++; binding.history.clear(); }
+            binding.directory = directory;
+            binding.references = directory ? assistantImageReferences(directory, snapshot.messages) : new Set();
             publish(snapshot);
           }, () => { binding.directory = null; events.stream.destroy(); });
           if (closed) unsubscribe();

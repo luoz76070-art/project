@@ -1,0 +1,32 @@
+{
+  "at": "2026-11-07T07:06:23.316Z",
+  "originalFile": true,
+  "authoritativeOriginalConversation": true,
+  "bytes": 321193,
+  "sha256": "d6832ce9785b5bec235035869d8a535451a06e8406dccb6d00a1355dfa62e1d3",
+  "mimeType": "image/png",
+  "elapsedMs": 4,
+  "candidateDirectReadPassed": true,
+  "onlineGatewaySwitched": false,
+  "phoneDisplayConfirmed": false,
+  "modelRequests": 0,
+  "actualApprovals": 0,
+  "bundleSha256": "a7c895b883ed14ba851dc99ba97bf5452a41f9e8e84137a1837e1c8cb025e828",
+  "archiveBytes": 337434,
+  "sourceFiles": 10,
+  "gatewayFiles": 6,
+  "allArchiveBytesVerified": true,
+  "privateBackupPrepared": true,
+  "fixedCandidatePrepared": true,
+  "oldGatewayStillRunning": true,
+  "checks": {
+    "relay": 422,
+    "mobile": 169,
+    "verification": 8,
+    "hotUpdate": 1,
+    "apkUpdate": 6,
+    "releasePublication": 4,
+    "completeVerifyPassed": true,
+    "firstAttemptUnrelatedWatcherFailure": true
+  }
+}

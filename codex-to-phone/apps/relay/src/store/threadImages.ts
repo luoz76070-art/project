@@ -16,19 +16,30 @@ function imageMime(bytes: Buffer): string | null {
   return null;
 }
 
-/** Only raster images inside this thread's real project directory are exposed. */
-export async function readThreadImage(cwd: string, source: string) {
+export type ImageReferenceAuthorizer = (absolutePath: string) => boolean | Promise<boolean>;
+
+export function resolveThreadImagePath(cwd: string, source: string) {
   let input = source;
   try {
     if (source.startsWith("file:")) input = fileURLToPath(source);
     else input = decodeURIComponent(source);
   } catch { throw imageError("image_path_invalid", 400); }
   if (input.includes("\0") || /^[a-z][a-z\d+.-]*:/iu.test(input)) throw imageError("image_path_invalid", 400);
+  return path.resolve(cwd, input);
+}
+
+/** Project files, or one exact file explicitly referenced by this conversation. */
+export async function readThreadImage(cwd: string, source: string, authorizeReference?: ImageReferenceAuthorizer) {
+  const input = resolveThreadImagePath(cwd, source);
   try {
     const root = await fs.realpath(cwd);
-    const target = await fs.realpath(path.resolve(root, input));
+    const target = await fs.realpath(input);
     const relative = path.relative(root, target);
-    if (!relative || relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative)) throw imageError("image_outside_project", 403);
+    if (!relative || relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative)) {
+      // Canonical parent aliases (e.g. macOS /var) are valid; a file symlink is not.
+      const direct = path.join(await fs.realpath(path.dirname(input)), path.basename(input));
+      if (direct !== target || !await authorizeReference?.(input)) throw imageError("image_outside_project", 403);
+    }
     const file = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       const stat = await file.stat();
