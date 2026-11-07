@@ -69,7 +69,7 @@ App 的独立自托管更新源已同步 **0.1.7 / code9**。code6/7/8 使用者
 - Codex 与各 Agent 共用输入框、附件、语音、独立草稿和运行中操作；按钮以原通道能力为准，Claude 保持只支持排队。
 - DeepSeek 原生/PTC、Claude 原工具和 OpenCode 混合消息投影命令与可见输出；推理和私有内部结果不进入手机展示。
 - 后续通道实现标准 SessionAdapter 并登记能力后直接复用这一套界面，无需复制页面。
-- 本地图片经过电脑网关鉴权，仅允许当前已打开会话项目目录内的 PNG、JPEG、GIF、WebP、AVIF，单图不超过 8 MiB。HTTPS 图片也可显示。
+- 本地图片经过电脑网关鉴权，支持当前会话项目目录内的 PNG、JPEG、GIF、WebP、AVIF，以及同一会话助手 Markdown 明确引用的项目外精确图片，单图不超过 8 MiB。HTTPS 图片也可显示。
 
 本地图片需要 **本版本配套网关**；旧网关会显示升级提示。Codex、DeepSeek Harness、Claude Code、OpenCode 及注册 SessionAdapter 的后续通道均共用取图接口；后三类需要已连接的原会话订阅。只有路径、没有 Markdown 图片引用的文本不会自动变成图片。
 

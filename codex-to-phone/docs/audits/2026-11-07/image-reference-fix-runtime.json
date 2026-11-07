@@ -1,0 +1,378 @@
+{
+  "at": "2026-11-07T07:24:58.377Z",
+  "bundleSha256": "a7c895b883ed14ba851dc99ba97bf5452a41f9e8e84137a1837e1c8cb025e828",
+  "onlineGatewaySwitched": true,
+  "sameInstanceLocalAndPublic": true,
+  "tunnelConnected": true,
+  "codexNativeIpcInitialized": true,
+  "deepseekBridgeReady": true,
+  "originalHostsAndStatePreserved": true,
+  "oldNaturalExitConfirmed": true,
+  "bridgeComponentRestored": true,
+  "bridgePatchOriginalBytesPreserved": true,
+  "firstSwitchAttempt": {
+    "success": false,
+    "stopAccepted": true,
+    "oldProcessStillAlive": true,
+    "listenerReleased": true,
+    "error": "OLD_PROCESS_EXIT_UNCONFIRMED",
+    "recovery": "official-phone-bridge-component-reload-after-idle-preflight",
+    "forcedTermination": false,
+    "productShutdownCodeChanged": false
+  },
+  "firstOnlineCheck": {
+    "success": false,
+    "error": "local-image-unreferenced",
+    "actualStatus": 429,
+    "actualCode": "image_busy",
+    "correction": "bounded-retries-follow-existing-contract",
+    "productCodeChanged": false
+  },
+  "originalImage": {
+    "bytes": 321193,
+    "sha256": "d6832ce9785b5bec235035869d8a535451a06e8406dccb6d00a1355dfa62e1d3",
+    "localAndPublicVariants": [
+      "absolute",
+      "encoded",
+      "file-uri"
+    ],
+    "allBytesMatched": true,
+    "unchanged": true
+  },
+  "onlineAssertions": {
+    "total": 69,
+    "allPassed": true,
+    "includesBudgetFailClosedAssertions": 6,
+    "checks": [
+      {
+        "name": "/api/gateway-200",
+        "passed": true
+      },
+      {
+        "name": "candidate-instance",
+        "passed": true
+      },
+      {
+        "name": "candidate-bundle-sha",
+        "passed": true
+      },
+      {
+        "name": "/api/gateway-200",
+        "passed": true
+      },
+      {
+        "name": "local-same-instance-tunnel",
+        "passed": true
+      },
+      {
+        "name": "/api/connection-200",
+        "passed": true
+      },
+      {
+        "name": "local-connection-authenticated",
+        "passed": true
+      },
+      {
+        "name": "/api/desktop/control/health-200",
+        "passed": true
+      },
+      {
+        "name": "local-codex-native-ipc",
+        "passed": true
+      },
+      {
+        "name": "/api/agents/deepseek/probe-200",
+        "passed": true
+      },
+      {
+        "name": "local-deepseek-bridge-ready",
+        "passed": true
+      },
+      {
+        "name": "local-deepseek-capabilities-preserved",
+        "passed": true
+      },
+      {
+        "name": "/api/agents-200",
+        "passed": true
+      },
+      {
+        "name": "local-deepseek-session-interface",
+        "passed": true
+      },
+      {
+        "name": "local-original-image-absolute-200",
+        "passed": true
+      },
+      {
+        "name": "local-original-image-absolute-byte-match",
+        "passed": true
+      },
+      {
+        "name": "local-original-image-absolute-headers",
+        "passed": true
+      },
+      {
+        "name": "local-original-image-encoded-200",
+        "passed": true
+      },
+      {
+        "name": "local-original-image-encoded-byte-match",
+        "passed": true
+      },
+      {
+        "name": "local-original-image-encoded-headers",
+        "passed": true
+      },
+      {
+        "name": "local-original-image-file-uri-200",
+        "passed": true
+      },
+      {
+        "name": "local-original-image-file-uri-byte-match",
+        "passed": true
+      },
+      {
+        "name": "local-original-image-file-uri-headers",
+        "passed": true
+      },
+      {
+        "name": "local-image-noauth",
+        "passed": true,
+        "observedStatuses": [
+          401
+        ]
+      },
+      {
+        "name": "local-unreferenced-budget-fail-closed",
+        "passed": true,
+        "attempt": 1
+      },
+      {
+        "name": "local-unreferenced-budget-fail-closed",
+        "passed": true,
+        "attempt": 2
+      },
+      {
+        "name": "local-unreferenced-budget-fail-closed",
+        "passed": true,
+        "attempt": 3
+      },
+      {
+        "name": "local-unreferenced-budget-fail-closed",
+        "passed": true,
+        "attempt": 4
+      },
+      {
+        "name": "local-unreferenced-budget-fail-closed",
+        "passed": true,
+        "attempt": 5
+      },
+      {
+        "name": "local-unreferenced-budget-fail-closed",
+        "passed": true,
+        "attempt": 6
+      },
+      {
+        "name": "local-image-unreferenced",
+        "passed": true,
+        "observedStatuses": [
+          429,
+          429,
+          429,
+          429,
+          429,
+          429,
+          403
+        ]
+      },
+      {
+        "name": "local-image-missing",
+        "passed": true,
+        "observedStatuses": [
+          404
+        ]
+      },
+      {
+        "name": "local-image-invalid",
+        "passed": true,
+        "observedStatuses": [
+          400
+        ]
+      },
+      {
+        "name": "local-image-client-allowlist",
+        "passed": true,
+        "observedStatuses": [
+          400
+        ]
+      },
+      {
+        "name": "local-android-cors-preflight",
+        "passed": true
+      },
+      {
+        "name": "/api/gateway-200",
+        "passed": true
+      },
+      {
+        "name": "public-same-instance-tunnel",
+        "passed": true
+      },
+      {
+        "name": "/api/connection-200",
+        "passed": true
+      },
+      {
+        "name": "public-connection-authenticated",
+        "passed": true
+      },
+      {
+        "name": "/api/desktop/control/health-200",
+        "passed": true
+      },
+      {
+        "name": "public-codex-native-ipc",
+        "passed": true
+      },
+      {
+        "name": "/api/agents/deepseek/probe-200",
+        "passed": true
+      },
+      {
+        "name": "public-deepseek-bridge-ready",
+        "passed": true
+      },
+      {
+        "name": "public-deepseek-capabilities-preserved",
+        "passed": true
+      },
+      {
+        "name": "/api/agents-200",
+        "passed": true
+      },
+      {
+        "name": "public-deepseek-session-interface",
+        "passed": true
+      },
+      {
+        "name": "public-original-image-absolute-200",
+        "passed": true
+      },
+      {
+        "name": "public-original-image-absolute-byte-match",
+        "passed": true
+      },
+      {
+        "name": "public-original-image-absolute-headers",
+        "passed": true
+      },
+      {
+        "name": "public-original-image-encoded-200",
+        "passed": true
+      },
+      {
+        "name": "public-original-image-encoded-byte-match",
+        "passed": true
+      },
+      {
+        "name": "public-original-image-encoded-headers",
+        "passed": true
+      },
+      {
+        "name": "public-original-image-file-uri-200",
+        "passed": true
+      },
+      {
+        "name": "public-original-image-file-uri-byte-match",
+        "passed": true
+      },
+      {
+        "name": "public-original-image-file-uri-headers",
+        "passed": true
+      },
+      {
+        "name": "public-image-noauth",
+        "passed": true,
+        "observedStatuses": [
+          401
+        ]
+      },
+      {
+        "name": "public-image-unreferenced",
+        "passed": true,
+        "observedStatuses": [
+          403
+        ]
+      },
+      {
+        "name": "public-image-missing",
+        "passed": true,
+        "observedStatuses": [
+          404
+        ]
+      },
+      {
+        "name": "public-image-invalid",
+        "passed": true,
+        "observedStatuses": [
+          400
+        ]
+      },
+      {
+        "name": "public-image-client-allowlist",
+        "passed": true,
+        "observedStatuses": [
+          400
+        ]
+      },
+      {
+        "name": "public-android-cors-preflight",
+        "passed": true
+      },
+      {
+        "name": "preserved-gateway.json",
+        "passed": true
+      },
+      {
+        "name": "preserved-bridge.json",
+        "passed": true
+      },
+      {
+        "name": "preserved-devices.json",
+        "passed": true
+      },
+      {
+        "name": "preserved-desktop-queue.json",
+        "passed": true
+      },
+      {
+        "name": "preserved-voice-credentials.json",
+        "passed": true
+      },
+      {
+        "name": "original-host-processes-preserved",
+        "passed": true
+      },
+      {
+        "name": "single-candidate-listener",
+        "passed": true
+      },
+      {
+        "name": "original-image-unchanged",
+        "passed": true
+      }
+    ]
+  },
+  "phone": {
+    "versionName": "0.1.7-native-preview",
+    "versionCode": 9,
+    "reinstallRequired": false,
+    "displayConfirmed": false,
+    "largeImageConfirmed": false,
+    "returnConfirmed": false,
+    "status": "pending-user-confirmation"
+  },
+  "modelRequests": 0,
+  "actualApprovals": 0
+}
