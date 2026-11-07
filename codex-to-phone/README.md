@@ -19,6 +19,8 @@ Mobile Codex 把 Kelivo 的 AI 客户端与 Codex To Phone 的电脑控制能力
 
 当前交付为 **0.1.6-native-preview / versionCode 8**，面向 Android arm64 手机。源码保留不等于所有功能都完成验收；完整 Kelivo 功能对照、最低系统、系统插件与部分真实联动仍在逐项检查，详见[验收账本](docs/audits/2026-11-06/kelivo-parity-evidence.md)。
 
+2026-11-07，用户已真机确认 App 内升级至 code8，执行说明直接显示、仅详细命令与输出折叠，显示符合预期。code7 的图片/大图、字号、原连接/草稿/主题此前也已确认通过；本轮修正验收闭环，证据与边界见[验收记录](docs/audits/2026-11-07/execution-notes.md)。
+
 ## 下载
 
 | 文件 | 用途 |

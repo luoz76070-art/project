@@ -152,8 +152,8 @@
     "modelTasksSent": 0
   },
   "delivery": "passed",
-  "code8PhoneInstallation": "awaiting user",
-  "code8PhoneFolding": "awaiting user",
+  "code8PhoneInstallation": "passed-user-confirmed",
+  "code8PhoneFolding": "passed-user-confirmed",
   "gatewayChanged": false,
   "modelTasksSent": 0,
   "fullParityCompleted": false,
@@ -230,12 +230,27 @@
     ],
     "allBytesIdentical": true,
     "sourceFilesMatchCommit": 5917,
-    "newPhoneInstallation": "awaiting user"
+    "newPhoneInstallation": "passed-user-confirmed"
   },
   "sourceCommit": {
     "status": "passed",
     "commit": "b9301639d3dddc81c412e259202092ff59e3b06e",
     "sourceFiles": 5917,
     "allArchiveSourcesMatchGitCommit": true
+  },
+  "code8PhoneFeedback": {
+    "date": "2026-11-07",
+    "versionName": "0.1.6-native-preview",
+    "versionCode": 8,
+    "evidenceSource": "current conversation structured user reply: call_oje2CjueHdlULvMq29gv95sV",
+    "question": "App 更新源已提供 0.1.6 / code8。请通过「设置 → 应用更新」升级，检查电脑页：执行说明是否直接显示，只有命令与输出需要点击展开？",
+    "reply": "已升级，显示符合预期",
+    "installation": "passed-user-confirmed",
+    "folding": "passed-user-confirmed",
+    "scope": "App内升级code8、执行说明和记录常显、仅详细命令与输出折叠；不代表完整59组验收通过",
+    "installedApkSha256IndependentlyVerified": false,
+    "earlierPackageAndBrowserInstallationFlags": "Preserved as results at the time of those isolated checks; later installation is user-confirmed here",
+    "currentRound": "completed",
+    "fullParityCompleted": false
   }
 }
