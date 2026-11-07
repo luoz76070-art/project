@@ -1,10 +1,17 @@
 # 更新说明
 
+## 0.1.7-native-preview · 2026-11-07（Kelivo 整合 code9）
+
+- Codex、DeepSeek Harness、Claude Code、OpenCode 共用输入、工具动态摘要、说明/终稿、图片、大图、附件及语音；未来 SessionAdapter 通道复用相同界面。
+- DeepSeek 原生/PTC、Claude 原工具与 OpenCode 混合 content 按原身份和顺序投影可见调用/输出，保留各自完成与控制边界。
+- Agent 图片限当前设备已订阅会话的权威项目目录；草稿/附件按连接与通道隔离，未知不重发、上传与存储失败阻止离开。
+- code9需新配套网关、DeepSeek 0.2.6 / Claude 0.1.2原宿主加载。隔离与构建通过，双源交付和真实手机/宿主结果见[本轮记录](docs/audits/2026-11-07/agent-parity.md)。
+
 ## 0.1.6-native-preview · 2026-11-07（Kelivo 整合 code8）
 
 - 执行说明与记录常显，仅连续工具的详细命令与输出默认收起；点击一次直接展开，保持消息顺序和既有字号。
 - 关闭工具卡片偏好不会隐藏执行说明；运行增量保持选择，终稿到达仅收起工具详情。
-- code7图片/大图、字号、原连接/草稿/主题已获用户真机确认；code8新折叠效果待复测。检查与双通道交付见[本轮记录](docs/audits/2026-11-07/execution-notes.md)。
+- code7图片/大图、字号、原连接/草稿/主题已获用户真机确认；code8升级与新折叠效果已获用户真机确认。检查与双通道交付见[本轮记录](docs/audits/2026-11-07/execution-notes.md)。
 
 ## 0.1.5-native-preview · 2026-11-07（Kelivo 整合 code7）
 

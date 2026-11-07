@@ -1,0 +1,118 @@
+{
+  "version": "0.1.7-preview",
+  "sourceArchive": "mobile-codex-kelivo-0.1.7-preview-source.tar.gz",
+  "sourceSha256": "86b75bd3a10e738fcd65f06650d0d02ae340b047b369096421b9c2ccf879de72",
+  "packages": [
+    {
+      "package": "mobile-codex",
+      "archive": "mobile-codex-gateway-0.1.7-preview.tar.gz",
+      "bytes": 335202,
+      "sha256": "a1e17bee0f6a90e5a72f25378d6ec10db5b6126697c46f9a0740d83c3c86babe",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sha256": "2772c31a36d374710eba71f94e771ab1368cc39902d0160987aece6d89741efd"
+        },
+        {
+          "file": "README.md",
+          "sha256": "cc7cd7ca98061ad46d8b1a512991762702969aa7126c5a5a3e51243405e32ac6"
+        },
+        {
+          "file": "lib/gateway.mjs",
+          "sha256": "61052038efcb1edad8a98e08de68a73cfc11c779b1f42bb5298bf2ea8523ae89"
+        },
+        {
+          "file": "plugin.json",
+          "sha256": "a2f001b96505136cdf27d1ce611a965037f044948fb767cb075c92fc7bdd6bb4"
+        },
+        {
+          "file": "scripts/mobile-codex.mjs",
+          "sha256": "07f3f1c040411b4b56b4253f54607cc207ff3f2f9b0fba6b6045febf6f1ce996"
+        },
+        {
+          "file": "skills/mobile-codex/SKILL.md",
+          "sha256": "e7c93c164b718a1030cecd7e895f480c14ce068d1d3ae978df954a8f05c6fcd6"
+        }
+      ],
+      "gatewayBundleSha256": "61052038efcb1edad8a98e08de68a73cfc11c779b1f42bb5298bf2ea8523ae89",
+      "helpVerified": true
+    },
+    {
+      "package": "mobile-deepseek",
+      "archive": "mobile-deepseek-0.2.6.tar.gz",
+      "bytes": 21446,
+      "sha256": "31b941e95743dcc4e012e31cbffc6739a8a067f90cb989d5584860713156e7eb",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sha256": "2772c31a36d374710eba71f94e771ab1368cc39902d0160987aece6d89741efd"
+        },
+        {
+          "file": "README.md",
+          "sha256": "10e510e32cce9f894a2db492d44bbee23514f91744ac097fe0664fd121c14f38"
+        },
+        {
+          "file": "bridge.mjs",
+          "sha256": "c520eb570e17fa2e01f5d61cbb5b65d855695e33b6952dd029ba86482d150e70"
+        },
+        {
+          "file": "catalog.mjs",
+          "sha256": "f33ed1987f8efa938762685df7ab7f249b2b6d6eb373c47433554fc803d0e73f"
+        },
+        {
+          "file": "cordis.patch.yml",
+          "sha256": "005d065d3a3ed6d82ab057a7026ad2bddadbf5dd0db776ad69a9a7c282ed7092"
+        },
+        {
+          "file": "index.mjs",
+          "sha256": "5d94dc8487325f0398221c29483f1f2b6285b244f058c2ec1296768959b53e45"
+        },
+        {
+          "file": "interactions.mjs",
+          "sha256": "c99bfa5255e8e79bffbe38897930dce892a1264022adb8abe0b9d42d1f68c8f6"
+        },
+        {
+          "file": "messages.mjs",
+          "sha256": "600d00d4b9135e60b8c1fa2fb822d72ee0511ad313ad97e8e562d8f57ed07e2f"
+        },
+        {
+          "file": "package.json",
+          "sha256": "7a99522d80999805272d3ef386d51e26f12a29d1c6a635afc51b5d9c2cbb88c7"
+        },
+        {
+          "file": "queue.mjs",
+          "sha256": "614f384fa41cad67f5fe9c0849cb65cdecb943fef4d465588da2489ad5112787"
+        }
+      ]
+    },
+    {
+      "package": "mobile-claude",
+      "archive": "mobile-claude-0.1.2.tar.gz",
+      "bytes": 11259,
+      "sha256": "5d6953a3fe2004646c02dd691fbf78586d5a676566d617d3de9a1ce91d94a877",
+      "files": [
+        {
+          "file": ".claude-plugin/plugin.json",
+          "sha256": "ea824c77795970b2507a211647295d7fed3750b320a2fdc58a43390107056003"
+        },
+        {
+          "file": "LICENSE",
+          "sha256": "2772c31a36d374710eba71f94e771ab1368cc39902d0160987aece6d89741efd"
+        },
+        {
+          "file": "README.md",
+          "sha256": "1909a99272c1188edac2f2914ef55c3356407c6d9ea28e07a92997dd3dd050b6"
+        },
+        {
+          "file": "hooks/hooks.json",
+          "sha256": "59872a55e2d3cca058a066f45d90625cb505c3ee8d449d07019d9579133fb2eb"
+        },
+        {
+          "file": "hooks/register.mjs",
+          "sha256": "4e3fd6ff348bce8661e2932645af4ce8b9f88aadaf16726772a09dc9c61573e5"
+        }
+      ]
+    }
+  ],
+  "deployment": "candidate only; running gateway and host plugins unchanged"
+}

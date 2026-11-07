@@ -237,6 +237,28 @@ test('large UTF-8 transcripts are bounded before POST and visibly marked partial
   assert.ok(host.calls.requests.every(r => Buffer.byteLength(JSON.stringify(r.body)) < 262144));
 });
 
+test('original tool hook forwards once and projects the same call/output identities in live and canonical snapshots', async t => {
+  const messages = [...history], f = await serverFixture(t), host = mockHost(t, f, { messages });
+  await host.fire('session.start', {}); await until(async () => (await f.adapter.listSessions()).sessions.length === 1);
+  const views = [], close = await f.adapter.watchSession(host.id, view => views.push(view), () => {}); t.after(close);
+  await until(() => views.at(-1)?.control.canSend); await host.fire('turn.start', { turnId: 'tool-turn' });
+  const original = { result: { private: 'PRIVATE_METADATA' }, text: 'visible output' }; let calls = 0;
+  const result = await host.fire('tool.call', { tool: 'Bash', tool_use_id: 'call-a', command: 'printf safe' }, async () => { calls++; return original; });
+  assert.equal(result, original); assert.equal(calls, 1);
+  await until(() => views.at(-1)?.messages.some(message => message.kind === 'function_call_output'));
+  const live = views.at(-1).messages.filter(message => message.role === 'tool');
+  assert.equal(live.length, 2); assert.match(live[0].text, /printf safe/); assert.equal(live[1].text, 'visible output');
+  assert.ok(!JSON.stringify(host.calls.requests).includes('PRIVATE_METADATA'));
+  messages.push({ role: 'assistant', text: 'execution note', toolUses: [{ tool_use_id: 'call-a', tool: 'Bash', input: { command: 'printf safe' }, text: 'visible output', result: original.result }] },
+    { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'call-a', text: 'visible output', isError: false }] },
+    { role: 'assistant', text: 'final answer', toolUses: [] });
+  await host.fire('turn.complete', { turnId: 'tool-turn', reason: 'answer', isAborted: false, answer: 'final answer' });
+  await until(() => views.at(-1)?.messages.at(-1)?.phase === 'final_answer');
+  const final = views.at(-1).messages;
+  assert.deepEqual(final.filter(message => message.role === 'tool').map(message => message.id), live.map(message => message.id));
+  assert.equal(final.filter(message => message.text === 'visible output').length, 1); assert.equal(final.at(-1).turnId, 'tool-turn');
+});
+
 test('shutdown wakes a twenty-second host poll without waiting for its timeout', async t => {
   const f = await serverFixture(t, new ClaudeAdapter()), input = registration();
   const registrationResponse = await f.app.inject({ method: 'POST', url: '/api/claude-bridge/register', headers: f.hostHeaders, payload: input });

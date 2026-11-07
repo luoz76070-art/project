@@ -28,7 +28,7 @@ import { NativeHotUpdate } from "../features/updates/native";
 import { useApkUpdate } from "../features/updates/useApkUpdate";
 import { apkBusy, apkCanContinue, apkStatusText, readAndroidUpdateManifest } from "../features/updates/apk";
 import { ApkUpdateProgress } from "../features/updates/ApkUpdateProgress";
-import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mimeTypeFromName, isImageFile, revokeAttachmentPreviews } from "../features/chat/attachments";
+import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mimeTypeFromName, revokeAttachmentPreviews } from "../features/chat/attachments";
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
 import { clamp, applyTheme } from "../shared/preferences";
 import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, Plus, ArrowUp, ChevronDown, Download } from "lucide-react";
@@ -36,6 +36,8 @@ import { formatDate } from "../shared/format";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { MessageBubble, MessageTimeline, GenerationStatus, ApprovalCard, AttachmentTray } from "../features/chat/components";
 import { MessageMediaProvider } from "../features/chat/MessageImage";
+import { ComputerComposer } from "../features/chat/ComputerComposer";
+import { uploadAttachments } from "../features/chat/uploadAttachments";
 import { writeClipboard } from "../shared/clipboard";
 import { VoiceInput } from "../features/voice/VoiceInput";
 import { VoiceSettings } from "../features/voice/VoiceSettings";
@@ -1114,28 +1116,9 @@ function Workspace({ connection, scope, onApply, onOpenAgents, handoff, onHandof
     }
     setUploading(true);
     setStatus("上传文件中");
-    const uploadedAttachments: PendingAttachment[] = [];
+    let uploadedAttachments: PendingAttachment[] = [];
     try {
-      for (const file of Array.from(files)) {
-        if (file.size > 25 * 1024 * 1024) {
-          throw new Error(`${file.name} 超过 25MB`);
-        }
-        const dataBase64 = await fileToBase64(file);
-        const response = await apiPost<UploadResponse>(buildUrl(endpoint, "/api/uploads"), token, {
-          fileName: file.name,
-          dataBase64,
-        });
-        uploadedAttachments.push({
-          id: `upload-${Date.now()}-${uploadedAttachments.length}`,
-          fileName: response.upload.originalName || response.upload.fileName || file.name,
-          path: response.upload.path,
-          relativePath: response.upload.relativePath,
-          size: response.upload.size,
-          createdAt: response.upload.createdAt,
-          mimeType: file.type || mimeTypeFromName(file.name),
-          previewUrl: isImageFile(file) ? URL.createObjectURL(file) : null,
-        });
-      }
+      uploadedAttachments = await uploadAttachments(endpoint, token, Array.from(files));
       const targetKey = activeThreadKey || newThreadId;
       if (!activeThreadKey) {
         setSelected(null);
@@ -1929,48 +1912,16 @@ function Workspace({ connection, scope, onApply, onOpenAgents, handoff, onHandof
               </div>
             </details>}
             {isLiveTurnActive && nativeDesktop && !canQueue && <p className="connection-notice">排队需要更新网关；可使用引导发送。</p>}
-            <div className="composer">
-              <input
-                ref={uploadInputRef}
-                type="file"
-                multiple
-                className="hidden-file-input"
-                onChange={(event) => void uploadFiles(event.target.files)}
-              />
-              <textarea
-                aria-label="消息"
-                rows={2}
-                onInput={event => { const element = event.currentTarget; element.style.height = "auto"; element.style.height = `${Math.min(152, element.scrollHeight)}px`; }}
-                value={draft}
-                onChange={(event) => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: event.target.value, desktopSendFeedback: undefined }); }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-                    event.preventDefault();
-                    void sendMessage();
-                  }
-                }}
-                placeholder="向 Codex 发送消息"
-                disabled={!canControlSelected}
-              />
-              <div className="composer-toolbar">
-                <button className="composer-tool-button" onClick={() => uploadInputRef.current?.click()} disabled={uploading || !token.trim()} aria-label="上传文件">
-                  {uploading ? <Loader2 size={18} className="spin" /> : <Plus size={21} />}
-                </button>
-                <span className="composer-mode" role="status" aria-live="polite" title={activeRuntime.desktopSendFeedback || (isLiveTurnActive ? turnActivity.label : controlText)}>
-                  {isLiveTurnActive && <span className="composer-activity-dot" aria-hidden="true" />}
-                  <span>{!activeRuntime.desktopSubmission && activeRuntime.desktopSendFeedback ? activeRuntime.desktopSendFeedback : isLiveTurnActive ? turnActivity.label : `${isDesktopWatch ? "电脑" : "Relay"} · ${isDesktopHistoryOnly ? "历史会话" : "当前会话"}`}</span>
-                </span>
-                {isLiveTurnActive && hasMessageContent && <button className="composer-tool-button" onClick={() => void interruptActiveTurn()} disabled={!canInterrupt || submittingMessage} aria-label="停止生成"><CircleStop size={20} /></button>}
-                <VoiceInput key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
-                  onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }} />
-                {isLiveTurnActive && nativeDesktop && hasMessageContent ? <div className="composer-delivery" role="group" aria-label="提交运行中消息">
-                  <button type="button" onClick={() => void sendMessage("steer")} disabled={!canSubmitMessage} aria-label="引导发送" title="发送引导，加入当前任务">引导</button>
-                  <button type="button" className="composer-queue-send" onClick={() => void sendMessage("queue")} disabled={!canSend} aria-label="排队发送" title="排队发送，当前任务结束后执行">排队<ArrowUp size={16} aria-hidden="true" /></button>
-                </div> : isLiveTurnActive && !hasMessageContent ? <button className="send-button" onClick={() => void interruptActiveTurn()} disabled={!canInterrupt || submittingMessage} aria-label="停止生成"><CircleStop size={22} /></button> : <button className="send-button" onClick={() => void sendMessage()} disabled={!canSend} aria-label={isLiveTurnActive ? "发送引导" : "发送"}>
-                {submittingMessage || (sending && !isLiveTurnActive) ? <Loader2 size={18} className="spin" /> : <ArrowUp size={21} />}
-              </button>}
-              </div>
-            </div>
+            <input ref={uploadInputRef} type="file" multiple className="hidden-file-input" onChange={event => void uploadFiles(event.target.files)} />
+            <ComputerComposer draft={draft} onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }}
+              onSend={delivery => void sendMessage(delivery)} onStop={() => void interruptActiveTurn()} onUpload={() => uploadInputRef.current?.click()}
+              disabled={!canControlSelected} uploadDisabled={!token.trim()} uploading={uploading} running={isLiveTurnActive} hasContent={hasMessageContent}
+              busy={submittingMessage || (sending && !isLiveTurnActive)} canSend={canSend} canStop={canInterrupt}
+              deliveries={nativeDesktop ? { steer: canSubmitMessage, queue: canSend } : undefined}
+              status={!activeRuntime.desktopSubmission && activeRuntime.desktopSendFeedback ? activeRuntime.desktopSendFeedback : isLiveTurnActive ? turnActivity.label : `${isDesktopWatch ? "电脑" : "Relay"} · ${isDesktopHistoryOnly ? "历史会话" : "当前会话"}`}
+              statusTitle={activeRuntime.desktopSendFeedback || (isLiveTurnActive ? turnActivity.label : controlText)} placeholder="向 Codex 发送消息"
+              voice={<VoiceInput key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
+                onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }} />} />
           </footer>
         </section>
       </section>

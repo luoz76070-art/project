@@ -15,10 +15,10 @@ export const deepSeekConfigSchema = z.object({
 export type DeepSeekConfig = z.infer<typeof deepSeekConfigSchema>;
 export const deepSeekSessionId = z.string().uuid();
 const session = z.object({ id: deepSeekSessionId, title: z.string().max(256), directory: z.string().max(4096), updatedAt: z.string().datetime() });
-export const deepSeekInfo = z.object({ protocol: z.literal(1), harnessVersion: z.enum(["0.2.1-rc.2", "0.2.1-rc.3", "0.2.1-rc.5"]), messagePhases: z.boolean().optional(), interactions: z.boolean().optional(), scope: z.literal("all").optional(), history: z.boolean().optional() });
+export const deepSeekInfo = z.object({ protocol: z.literal(1), harnessVersion: z.enum(["0.2.1-rc.2", "0.2.1-rc.3", "0.2.1-rc.5"]), messagePhases: z.boolean().optional(), toolMessages: z.literal(1).optional(), interactions: z.boolean().optional(), scope: z.literal("all").optional(), history: z.boolean().optional() });
 export const deepSeekSessions = z.object({ sessions: z.array(session).max(128), cursor: z.string().uuid().nullable() });
 export const deepSeekDelivery = z.object({ ok: z.literal(true), delivery: z.enum(["submitted", "confirmed", "uncertain"]) });
-const messages = z.array(z.object({ id: z.string().max(512), timestamp: z.string().datetime(), role: z.enum(["user", "assistant"]), text: z.string().max(32768), kind: z.enum(["user_message", "agent_message"]), turnId: z.string().max(512).optional(), phase: z.enum(["commentary", "final_answer"]).optional() })).max(120);
+const messages = z.array(z.object({ id: z.string().max(512), timestamp: z.string().datetime(), role: z.enum(["user", "assistant", "tool"]), text: z.string().max(32768), kind: z.enum(["user_message", "agent_message", "function_call", "function_call_output"]), turnId: z.string().max(512).optional(), phase: z.enum(["commentary", "final_answer"]).optional() })).max(120);
 export const deepSeekHistory = z.object({ messages, cursor: z.string().uuid().nullable() });
 export const deepSeekSnapshot = z.object({
   agentId: z.literal("deepseek"), session, connected: z.literal(true), updatedAt: z.string().datetime(),

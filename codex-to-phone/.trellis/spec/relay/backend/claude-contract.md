@@ -55,3 +55,9 @@
 `test:claude`为临时目录/合成HTTP与注入宿主，无真实模型、安装、生产配置或会话访问。31项包含完整题目/输入保留、多选/自由、原请求取消、重复/迟到、墓碑/记录回收、租期/订阅/关闭释放、配对设备应答与撤销。合并既有回归；手动以固定官方声明检查模块类型。真实CLI版本、官方plugin validate、原进程输入/中断/问答/审批及Android远程另记，不能因源码/模拟通过标记整体完成。
 
 `node scripts/check-claude-runtime.mjs <隔离官方2.1.287二进制绝对路径>`补官方版本门/严格静态校验与7项无模型测试，脚本不安装；fixture位于scripts/fixtures/claude-official-runtime，复制到自建临时插件，避免将测试打进发布包。所有HTTP通过官方on hook应答，底层模型响应只由本地流hook提供。须验证无配置/旧版本不登记、不订阅读正文0次、原会话ID登记、按需快照/重复命令、原流及终值完整透传、推理不外传、旧turn中断拒绝和403后不再poll；用户原会话、Classic实际交互与长期网络挂起保持单独待验收。
+
+## 可见工具投影（模块0.1.2）
+
+tool.call 只执行一次 next(e)，保留原参数/原结果，不改变原流。手机订阅且原 generation/turn 仍一致时传稳定 tool_use_id 的调用与 result.text，失败固定说明；不投影 result 私有对象/context。messages 快照使用官方 SessionMessage.toolUses/toolResults 恢复同一工具身份并去重，最多80投影项及原UTF8预算。只有非aborted的原 turn.complete(reason=answer)，且 transcript 最后一条无工具的assistant正文精确匹配answer，才标 final_answer。旧历史缺原完成证据维持未知阶段，不能根据text猜终稿。
+
+官方2.1.287严格validate与8项无模型plugin test覆盖新增工具原调用一次、原结果完整透传及私有字段不外传。测试二进制可从npm镜像获取但必须核对固定版本dist SHA512；不改用户CLI/profile。生产宿主仍需原进程实际加载与联动验收。

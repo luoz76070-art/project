@@ -1,5 +1,9 @@
 # 设计与边界自审
 
+## 2026-11-07 共享 Agent 体验边界
+
+当前Codex/Agent已复用MessageTimeline，但DeepSeek仅输出文本、Agent没有本地图片上下文且输入布局不同。本轮在原数据所有者修正这些差异：chat提供共用输入/媒体与上传，AgentWorkspace保留各通道原控制和scope隔离；设备当前订阅绑定的权威session.directory提供图片根；DeepSeek显示投影由messages统一供bridge/catalog使用，其他通道按实际原协议适配。未来SessionAdapter显式能力随网关清单下发，前端复用统一工作区。操作不自动重发，历史读取不激活原任务；审批参数索引不与可截断显示投影混用。实施/文件边界和验收见`docs/plans/2026-11-07-agent-experience-parity.md`。自审：不改无关控制、凭证或生命周期所有权，兼容现有插件与code8，新增能力用合成/官方隔离回归验证。
+
 ## 2026-11-07 执行说明常显
 
 缺口归属 MessageProcess：现有逻辑分组正确保存同 turn 的说明和工具，却将两者全部延迟挂载。保留分组/完成判定，在展示层按原顺序将说明直接交给原 MessageBubble，将连续工具拆成独立的 ToolProcess 折叠区。工具区稳定绑定首工具 ID，后续增量保持手动选择、终稿到达默认收起。仅工具区使用 message-process 类，显示偏好不再连带隐藏说明。

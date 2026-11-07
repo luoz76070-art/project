@@ -28,9 +28,21 @@ export function register(on) {
     }
     return await stream.result;
   });
-  on('tool.call', ($, e, next) => {
-    if (!e.agentId && state.turnId) enqueue($, state, { type: 'state', turnId: state.turnId, activity: 'working' });
-    return next(e);
+  on('tool.call', async ($, e, next) => {
+    const turnId = state.turnId, generation = state.generation;
+    if (!e.agentId && turnId) {
+      enqueue($, state, { type: 'state', turnId, activity: 'working' });
+      if (state.watching && typeof e.tool_use_id === 'string') {
+        const { tool, tool_use_id, agentId, consent, ...input } = e;
+        enqueue($, state, { type: 'tool', turnId, ...toolCallMessage(tool_use_id, tool, input) });
+      }
+    }
+    const result = await next(e);
+    if (!e.agentId && turnId && state.turnId === turnId && state.generation === generation && state.watching && typeof e.tool_use_id === 'string') {
+      const output = toolResultMessage(e.tool_use_id, result);
+      if (output) enqueue($, state, { type: 'tool', turnId, ...output });
+    }
+    return result;
   });
   on('classic.PreToolUse', async ($, e, next) => {
     const result = await next(e);
@@ -60,7 +72,7 @@ export function register(on) {
     if (!e.agentId && state.turnId === e.turnId) {
       state.turnId = null;
       enqueue($, state, { type: 'state', turnId: null, activity: 'thinking', aborted: e.isAborted });
-      if (state.enabled && state.watching) void collectMessages($, state).catch(() => {});
+      if (state.enabled && state.watching) void collectMessages($, state, e).catch(() => {});
     }
     return result;
   });
@@ -224,17 +236,37 @@ async function interact($, state, signal, descriptor) {
 }
 
 /** @param {import('claude-code').EngineInterface} $ */
-async function collectMessages($, state) {
+async function collectMessages($, state, completed) {
   if (state.closed || !state.watching) return;
+  const turnId = state.turnId, generation = state.generation;
   const messages = await $.session.messages();
-  if (state.closed || !state.watching) return;
+  if (state.closed || !state.watching || state.turnId !== turnId || state.generation !== generation) return;
   let budget = 100000, partial = messages.length > 80;
+  const projected = [], results = new Set();
+  const append = message => { if (projected.length === 80) { projected.shift(); partial = true; } projected.push(message); };
+  for (const [index, message] of messages.slice(-80).entries()) {
+    if (!['user', 'assistant'].includes(message.role)) continue;
+    if (message.text) append({ role: message.role, text: message.text,
+      ...(message.role === 'assistant' && message.toolUses?.length ? { phase: 'commentary' } : {}),
+      ...(index === Math.min(80, messages.length) - 1 && message.role === 'assistant' && !message.toolUses?.length
+        && completed?.reason === 'answer' && !completed.isAborted && message.text === completed.answer ? { phase: 'final_answer', turnId: completed.turnId } : {}) });
+    for (const tool of message.toolUses ?? []) {
+      if (typeof tool.tool_use_id !== 'string' || typeof tool.tool !== 'string') continue;
+      append({ role: 'tool', ...toolCallMessage(tool.tool_use_id, tool.tool, tool.input) });
+      const result = toolResultMessage(tool.tool_use_id, tool);
+      if (result) { append({ role: 'tool', ...result }); results.add(tool.tool_use_id); }
+    }
+    for (const tool of message.toolResults ?? []) {
+      if (results.has(tool.tool_use_id)) continue;
+      const result = toolResultMessage(tool.tool_use_id, tool);
+      if (result) { append({ role: 'tool', ...result }); results.add(tool.tool_use_id); }
+    }
+  }
   const recent = [];
-  for (const message of messages.slice(-80).reverse()) {
-    if (!message.text || !['user', 'assistant'].includes(message.role)) continue;
-    const text = message.text.slice(-Math.min(64000, budget));
+  for (const message of projected.slice(-80).reverse()) {
+    const text = message.role === 'tool' ? message.text.slice(0, Math.min(64000, budget)) : message.text.slice(-Math.min(64000, budget));
     if (text.length !== message.text.length) partial = true;
-    if (text) recent.push({ role: message.role, text });
+    if (text) recent.push({ ...message, text });
     budget -= text.length;
     if (!budget) { partial = true; break; }
   }
@@ -247,6 +279,21 @@ async function collectMessages($, state) {
   state.partial = false;
   enqueue($, state, { type: 'messages', messages: recent, partial });
 }
+
+function toolCallMessage(id, tool, input) {
+  let args;
+  try { args = JSON.stringify(input ?? {}); } catch { args = '[工具参数不可展示]'; }
+  return { id: `tool:${id}:call`.slice(0, 512), kind: 'function_call', text: boundedToolText(`Tool: ${String(tool).slice(0, 256)}\n${args}`) };
+}
+
+function toolResultMessage(id, result) {
+  if (typeof result.text !== 'string' && typeof result.deny !== 'string') return null;
+  const failed = result.isError === true || typeof result.deny === 'string';
+  return { id: `tool:${id}:output`.slice(0, 512), kind: 'function_call_output',
+    text: boundedToolText(`${failed ? 'Status: failed\n' : ''}${typeof result.deny === 'string' ? '工具请求被拒绝。' : result.text || '工具执行完成，无文本输出。'}`) };
+}
+
+function boundedToolText(text) { return text.length > 32768 ? `${text.slice(0, 32740)}\n[内容已截断]` : text; }
 
 /** @param {import('claude-code').EngineInterface} $ */
 async function poll($, state) {

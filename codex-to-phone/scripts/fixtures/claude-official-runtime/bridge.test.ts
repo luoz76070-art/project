@@ -123,6 +123,24 @@ test('official stream chain passes every original chunk once and only bridges vi
   expect(JSON.stringify(f.events()).includes('synthetic private reasoning')).toBe(false);
 });
 
+test('official tool chain projects visible output once without changing the original result', async ($, on) => {
+  const f = fixture(on);
+  let calls = 0;
+  on('tool.call', () => { calls++; return { result: { syntheticPrivate: 'DO_NOT_PROJECT' }, text: 'original visible output' }; });
+  await $.session.start(started);
+  await f.clock.settle();
+  await $.turn.start({ turnId: 'original-turn', text: 'fixture input' });
+  const result = await $.tool.call({ tool: 'Bash', tool_use_id: 'synthetic-tool', command: 'printf fixture-only' });
+  expect(result).toEqual({ result: { syntheticPrivate: 'DO_NOT_PROJECT' }, text: 'original visible output' });
+  expect(calls).toBe(1);
+  await f.clock.advance(40);
+  const tools = f.events().filter(event => event.type === 'tool');
+  expect(tools).toHaveLength(2);
+  expect(tools[0].text?.includes('printf fixture-only')).toBe(true);
+  expect(tools[1].text).toBe('original visible output');
+  expect(JSON.stringify(f.events()).includes('DO_NOT_PROJECT')).toBe(false);
+});
+
 test('interrupt uses the current turn and rejects a stale queued target', async ($, on) => {
   const f = fixture(on, { polls: [[], [
     { id: messageId, type: 'interrupt', turnId: 'old-turn' },

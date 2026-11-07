@@ -38,7 +38,7 @@ const json = (res, value, code = 200) => { res.writeHead(code, { 'content-type':
 function agentSnapshot(name, agentId = 'opencode') {
   const state = states.get(name);
   const claude = agentId === 'claude';
-  const deepseek = agentId === 'deepseek', label = deepseek ? 'DeepSeek Harness' : claude ? 'Claude Code' : 'OpenCode';
+  const deepseek = agentId === 'deepseek', label = deepseek ? 'DeepSeek Harness' : claude ? 'Claude Code' : agentId === 'future-agent' ? 'Future Agent' : 'OpenCode';
   return state[`${agentId}Agent`] ??= {
     agentId, session: { id: claude || deepseek ? '11111111-1111-4111-8111-111111111111' : 'ses_fixture', title: `${label} · 远程工作与实时消息`, directory: '/synthetic/project', updatedAt: '2026-10-21T09:00:00Z' },
     connected: true, status: 'running', activity: 'outputting', updatedAt: '2026-10-21T09:01:00Z', partialText: deepseek,
@@ -187,7 +187,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/fixture/agent') {
       const name = url.searchParams.get('name') ?? 'A';
-      const agentId = ['claude', 'deepseek'].includes(url.searchParams.get('agent')) ? url.searchParams.get('agent') : 'opencode';
+      const agentId = ['claude', 'deepseek', 'future-agent'].includes(url.searchParams.get('agent')) ? url.searchParams.get('agent') : 'opencode';
       const snapshot = agentSnapshot(name, agentId), phase = url.searchParams.get('phase');
       states.get(name).agentResponseDelay = Math.min(3000, Math.max(0, Number(url.searchParams.get('responseDelay')) || 0));
       snapshot.questions = []; snapshot.permissions = []; snapshot.submission = null; snapshot.operationError = null;
@@ -197,6 +197,17 @@ const server = http.createServer(async (req, res) => {
       if (url.searchParams.get('canSteer') === '0') snapshot.control.canSteer = false;
       snapshot.status = phase === 'completed' ? 'idle' : 'running'; snapshot.activity = phase === 'working' ? 'working' : 'outputting';
       snapshot.partialText = phase === 'partial';
+      if (phase === 'parity') {
+        const complete = url.searchParams.get('completed') === '1';
+        const count = Math.min(40, Math.max(2, Number(url.searchParams.get('count')) || 4));
+        const message = (id, role, text, kind, phase) => ({ id, role, text, kind, phase, turnId: 'parity-turn', timestamp: '2026-11-07T00:00:00Z' });
+        snapshot.status = complete ? 'idle' : 'running'; snapshot.control.canInterrupt = !complete; snapshot.historyCursor = null;
+        snapshot.messages = [message('parity-user', 'user', '检查电脑 Agent 的统一体验', 'user_message'),
+          message('parity-note', 'assistant', '正在检查项目，命令与输出可点击展开。', 'agent_message', 'commentary'),
+          ...Array.from({ length: count }, (_, i) => message(`parity-tool-${i}`, 'tool', i % 2 ? `合成输出 ${i}` : `Tool: bash\n{"command":"printf parity-${i}"}`, i % 2 ? 'function_call_output' : 'function_call')),
+          message('parity-next-note', 'assistant', '执行说明保持直接显示。', 'agent_message', 'commentary')];
+        if (complete) snapshot.messages.push(message('parity-final', 'assistant', '检查完成。\n\n![合成验收图片](/synthetic/project/rendering-chart.png)\n\n```ts\nconst parity = true;\n```', 'agent_message', 'final_answer'));
+      }
       if (agentId === 'deepseek' && phase === 'history') {
         states.get(name).deepseekHistory = true; snapshot.status = 'idle'; snapshot.control.canSteer = false; snapshot.control.canInterrupt = false;
         snapshot.messages = Array.from({ length: 40 }, (_, i) => ({ id: `history-${960 + i}`, role: i % 2 ? 'assistant' : 'user', text: `合成历史消息 ${960 + i}`, kind: i % 2 ? 'agent_message' : 'user_message', timestamp: new Date(1760000000000 + (960 + i) * 1000).toISOString() }));
@@ -394,7 +405,7 @@ const server = http.createServer(async (req, res) => {
       counters[`${name}:${route}`] = (counters[`${name}:${route}`] ?? 0) + 1;
       if (offline) return json(res, { error: 'fixture_offline' }, 503);
       if (!route.endsWith('/events') && req.headers.authorization !== 'Bearer fixture-only') return json(res, { error: 'unauthorized' }, 401);
-      if (/^\/api\/threads\/[^/]+\/images$/u.test(route) && req.method === 'POST') {
+      if ((/^\/api\/threads\/[^/]+\/images$/u.test(route) || /^\/api\/agents\/[^/]+\/sessions\/[^/]+\/images$/u.test(route)) && req.method === 'POST') {
         let body = ''; for await (const chunk of req) body += chunk;
         const input = JSON.parse(body);
         if (imageFixture.delay) await new Promise(resolve => setTimeout(resolve, imageFixture.delay));
@@ -429,7 +440,8 @@ const server = http.createServer(async (req, res) => {
         return json(res, { upload: { ok: true, originalName: input.fileName, fileName: input.fileName, path: `/synthetic/uploads/${input.fileName}`, relativePath: `uploads/${input.fileName}`, size: Buffer.from(input.dataBase64, 'base64').length, createdAt: new Date().toISOString() } });
       }
       if (route === '/api/gateway') return state.legacyGateway ? json(res, { error: 'not_found' }, 404) : json(res, { gateway: { kind: 'mobile-codex-gateway', desktopTransport: 'native', tunnel: { enabled: true, state: 'connected' } } });
-      if (route === '/api/agents') return state.legacyGateway ? json(res, { error: 'not_found' }, 404) : json(res, { agents: [{ id: 'codex', label: 'Codex', state: 'unprobed' }, { id: 'opencode', label: 'OpenCode', state: 'connected', transport: 'opencode-v2-http-sse' }, { id: 'claude', label: 'Claude Code', state: 'connected', transport: 'claude-mods-http' }, { id: 'deepseek', label: 'DeepSeek Harness', state: 'connected', transport: 'deepseek-cordis-http-sse' }] });
+      if (route === '/api/agents') return state.legacyGateway ? json(res, { error: 'not_found' }, 404) : json(res, { agents: [{ id: 'codex', label: 'Codex', state: 'unprobed' }, { id: 'opencode', label: 'OpenCode', state: 'connected', transport: 'opencode-v2-http-sse', sessionApi: 1 }, { id: 'claude', label: 'Claude Code', state: 'connected', transport: 'claude-mods-http', sessionApi: 1 }, { id: 'deepseek', label: 'DeepSeek Harness', state: 'connected', transport: 'deepseek-cordis-http-sse', sessionApi: 1 }, { id: 'future-agent', label: 'Future Agent', state: 'connected', transport: 'future-transport', sessionApi: 1 }] });
+      if (route === '/api/agents/future-agent/sessions') return json(res, { sessions: [agentSnapshot(name, 'future-agent').session], cursor: null });
       if (route === '/api/agents/opencode/sessions') return json(res, { sessions: [agentSnapshot(name).session], cursor: null });
       if (route === '/api/agents/claude/sessions') return json(res, { sessions: [agentSnapshot(name, 'claude').session], cursor: null });
       if (route === '/api/agents/deepseek/sessions') {
@@ -445,7 +457,7 @@ const server = http.createServer(async (req, res) => {
         return json(res, { messages: Array.from({ length: end - start }, (_, i) => ({ id: `history-${start + i}`, role: i % 2 ? 'assistant' : 'user', text: `合成历史消息 ${start + i}`, kind: i % 2 ? 'agent_message' : 'user_message', timestamp: new Date(1760000000000 + (start + i) * 1000).toISOString() })), cursor: start ? String(start) : null });
       }
       if (route === '/api/agents/opencode/sessions/ses_fixture/history') return json(res, { messages: [{ id: 'msg_fixture-old', role: 'assistant', text: '更早的合成 OpenCode 消息。', kind: 'agent_message', timestamp: '2026-10-20T09:00:00Z' }], cursor: null });
-      if (/^\/api\/agents\/(opencode|claude|deepseek)\/sessions\/[^/]+\//.test(route) && req.method === 'POST' && !route.endsWith('/stream-token')) {
+      if (/^\/api\/agents\/(opencode|claude|deepseek|future-agent)\/sessions\/[^/]+\//.test(route) && req.method === 'POST' && !route.endsWith('/stream-token')) {
         const snapshot = agentSnapshot(name, route.split('/')[3]);
         let body = ''; for await (const chunk of req) body += chunk;
         const input = JSON.parse(body);

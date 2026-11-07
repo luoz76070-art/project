@@ -39,7 +39,7 @@ export * from './apps/mobile/src/shared/format';
 export * from './apps/mobile/src/features/chat/readingPositions';
 export * from './apps/mobile/src/features/chat/runtime';
 export * from './apps/mobile/src/features/agents/runtime';
-export function bindAgentDraftLifecycle(scope, draftsRef) { return (${agentDraftLifecycle})(); }
+export function bindAgentDraftLifecycle(scope, draftsRef, setError = () => {}) { return (${agentDraftLifecycle})(); }
 export function bindProductLifecycle(onComputerSettings, onHandoff, setReady, setError, setUpdates = () => {}) { return (${productLifecycle})(); }
 `, resolveDir: root, loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: path.join(temp, 'product.mjs'),
   alias: { '@capacitor/core': shim }, define: { 'import.meta.env': '{"VITE_KELIVO_HOST":"android"}' } });
@@ -160,13 +160,14 @@ test('Agent draft persistence reports storage failure before leaving the activit
 test('actual Agent lifecycle flushes the current draft and blocks navigation on failure', async t => {
   fixture(t); const navigations = [];
   globalThis.__productHost = { navigate: async value => navigations.push(value.tab) };
-  const draftsRef = { current: {} }, release = m.bindAgentDraftLifecycle('profile', draftsRef);
+  const errors = [], draftsRef = { current: {} }, release = m.bindAgentDraftLifecycle('profile', draftsRef, value => errors.push(value));
   try {
     draftsRef.current = { 'deepseek:12345678-1234-1234-1234-123456789abc': '刚输入的草稿' };
     await m.navigateProduct('ai');
     assert.deepEqual(m.loadAgentDrafts('profile'), draftsRef.current);
     localStorage.setItem = () => { throw new Error('synthetic quota'); };
     await assert.rejects(m.navigateProduct('settings'), /输入保存/);
+    assert.match(errors.at(-1), /草稿保存失败/);
     assert.deepEqual(navigations, ['ai']);
   } finally { release(); }
 });

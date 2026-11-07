@@ -39,10 +39,16 @@ export function verifyAgentSnapshot(snapshot: AgentSessionSnapshot, agentId: str
 }
 
 const draftKey = (scope: string) => `mobile-codex:agent-drafts:${scope}`;
+function validDraftKey(key: string) {
+  const match = /^([a-z][a-z0-9-]{0,63}):([a-zA-Z0-9_-]{1,160})$/u.exec(key);
+  if (!match || match[1] === "codex") return false;
+  if (match[1] === "opencode") return /^ses[a-zA-Z0-9_-]{1,128}$/u.test(match[2]);
+  return !["claude", "deepseek"].includes(match[1]) || /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u.test(match[2]);
+}
 function boundedDrafts(value: Record<string, unknown>) {
   let budget = 256_000;
   return Object.fromEntries(Object.entries(value).reverse().flatMap(([key, text]) => {
-    if (!/^(?:opencode:ses[a-zA-Z0-9_-]{1,128}|(?:claude|deepseek):[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/u.test(key) || typeof text !== "string" || !text || text.length > 20_000 || text.length > budget) return [];
+    if (!validDraftKey(key) || typeof text !== "string" || !text || text.length > 20_000 || text.length > budget) return [];
     budget -= text.length; return [[key, text]];
   }).slice(0, 64).reverse()) as Record<string, string>;
 }
@@ -78,7 +84,7 @@ export function loadAgentView(scope: string): { agentId: string; sessionId: stri
     const raw = localStorage.getItem(`mobileCodexAgentViewV1:${scope}`) ?? "null";
     if (raw.length > 8192) return null;
     const value = JSON.parse(raw);
-    return value && ["opencode", "claude", "deepseek"].includes(value.agentId) && (value.sessionId === null || (typeof value.sessionId === "string" && value.sessionId.length <= 1024)) ? value : null;
+    return value && typeof value.agentId === "string" && /^[a-z][a-z0-9-]{0,63}$/u.test(value.agentId) && (value.sessionId === null || (typeof value.sessionId === "string" && value.sessionId.length <= 1024)) ? value : null;
   } catch { return null; }
 }
 export function saveAgentView(scope: string, agentId: string | null, sessionId: string | null) {

@@ -44,21 +44,23 @@ export class OpenCodeStreamText {
 
   project(messages: Messages) {
     const copy = structuredClone(messages);
-    // The publisher counts text ordinals separately from reasoning/tool parts.
-    // This projection exposes text only, so its indices can follow those ordinals.
-    for (const message of copy) if (message.content) message.content = message.content.filter(item => item.type === "text");
     for (const [key, part] of this.parts) {
       let message = copy.find(item => item.id === part.messageId);
       if (!message) { message = { id: part.messageId, type: "assistant", time: { created: part.timestamp }, content: [] }; copy.push(message); }
       if (message.type !== "assistant") throw agentError("OPENCODE_PROTOCOL_ERROR");
       message.content ??= [];
-      let content = message.content[part.ordinal];
-      if (content && content.type !== "text") throw agentError("OPENCODE_PROTOCOL_ERROR");
+      // Text ordinals do not index the mixed content array. Preserve tools in place.
+      const texts = message.content.filter(item => item.type === "text");
+      let content = texts[part.ordinal];
       if (part.complete && content?.text === part.text) {
         this.parts.delete(key); this.bytes -= Buffer.byteLength(part.text); continue;
       }
       // A mid-run subscriber may not yet have earlier text ordinals. Keep their positions.
-      if (!content) { content = { type: "text", text: "" }; message.content[part.ordinal] = content; }
+      while (!content) {
+        const placeholder = { type: "text", text: "" };
+        message.content.push(placeholder); texts.push(placeholder);
+        content = texts[part.ordinal];
+      }
       content.text = part.text;
     }
     return { messages: messagesView(copy), partialText: [...this.parts.values()].some(part => !part.fromStart && !part.complete) };

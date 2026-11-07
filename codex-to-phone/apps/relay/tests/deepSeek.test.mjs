@@ -22,6 +22,36 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(predicate) { const end = Date.now() + 3000; while (!predicate()) { if (Date.now() > end) assert.fail('synthetic dsh timeout'); await sleep(10); } }
 const user = value => Object.freeze({ ...value, id: randomUUID(), role: 'user' });
 
+test('durable native and PTC tool projection uses bounded display text without private metadata', () => {
+  const event = (type, data, seq = 7) => ({ type, data, seq, time: 1000 });
+  const call = messageOf(event('tool/call', { turn: 3, step: 2, callId: 'a', name: 'bash', arguments: '{"command":"printf safe"}' }));
+  assert.equal(call.kind, 'function_call'); assert.equal(call.role, 'tool'); assert.equal(call.turnId, '3');
+  assert.match(call.text, /Tool: bash\n\{"command"/);
+  const result = messageOf(event('tool/result', { turn: 3, message: { callId: 'a', isError: true, content: [{ type: 'text', text: 'visible output' }, { type: 'reasoning', text: 'PRIVATE' }] }, error: { reason: 'PRIVATE' }, meta: { secret: 'PRIVATE' } }, 8));
+  assert.equal(result.kind, 'function_call_output'); assert.match(result.text, /Status: failed/); assert.match(result.text, /visible output/);
+  assert.ok(!JSON.stringify(result).includes('PRIVATE'));
+  const nested = messageOf(event('tool/ptc-dispatch-start', { subCallId: 'a:ptc:1', name: 'read', arguments: { path: 'test.txt' } }));
+  assert.equal(nested.turnId, undefined); assert.match(nested.text, /test.txt/);
+  assert.match(messageOf(event('tool/ptc-dispatch', { isError: false, content: [] })).text, /无文本输出/);
+  const long = messageOf(event('tool/call', { name: 'bash', arguments: 'x'.repeat(100000) }));
+  assert.ok(long.text.length <= 32768); assert.match(long.text, /内容已截断/);
+});
+
+test('live DeepSeek tool records retain identity through reconnect alongside execution notes and final answer', async t => {
+  const f = await fixture(t, { running: true }); let close = await f.watch();
+  const note = text => ({ turn: 1, step: 1, message: { id: text, role: 'assistant', content: [{ type: 'text', text }] } });
+  f.event('assistant/message', note('execution note'));
+  f.event('tool/call', { turn: 1, step: 1, callId: 'tool-a', name: 'bash', arguments: '{"command":"printf safe"}' });
+  f.event('tool/result', { turn: 1, step: 1, message: { callId: 'tool-a', isError: false, content: [{ type: 'text', text: 'safe output' }] } });
+  f.event('step/start', { turn: 1, step: 2 });
+  f.event('assistant/message', { ...note('final answer'), step: 2 }); f.event('turn/end', { turn: 1, reason: { kind: 'completed' } });
+  await until(() => f.values.at(-1)?.messages.at(-1)?.phase === 'final_answer');
+  const before = f.values.at(-1).messages;
+  assert.deepEqual(before.map(message => message.role), ['assistant', 'tool', 'tool', 'assistant']);
+  assert.equal(before[0].phase, 'commentary'); close(); close = await f.watch();
+  assert.deepEqual(f.values.at(-1).messages, before); close(); assert.equal(f.calls.length, 0);
+});
+
 async function fixture(t, options = {}) {
   const listeners = new Map(), calls = [], log = [], agents = new Map(), pendingRemoteEvents = new Map(), continued = [];
   let reads = 0, observations = 0, disposed = 0, release;

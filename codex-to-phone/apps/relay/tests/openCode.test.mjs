@@ -9,7 +9,8 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { OpenCodeClient } from '../dist/agents/openCodeClient.js';
 import { OpenCodeAdapter } from '../dist/agents/openCodeAdapter.js';
-import { messagesSchema, sessionsSchema } from '../dist/agents/openCodeProtocol.js';
+import { messagesSchema, messagesView, sessionsSchema } from '../dist/agents/openCodeProtocol.js';
+import { OpenCodeStreamText } from '../dist/agents/openCodeStream.js';
 import { AgentGateway } from '../dist/agents/agentGateway.js';
 import { createRelayServer } from '../dist/server/createRelayServer.js';
 import { parseManagedConfig } from '../dist/gateway/config.js';
@@ -22,6 +23,26 @@ const assistant = text => ({ id: 'msg_assistant', type: 'assistant', time: { cre
   { type: 'reasoning', text: 'synthetic hidden reasoning' },
   { type: 'text', text }, { type: 'tool', state: { status: 'running' } },
 ] });
+
+test('official mixed content retains notes, tool order and output; only a successful idle marker promotes a tool-free final step', () => {
+  const tool = { type: 'tool', id: 'call-a', name: 'bash', state: { status: 'completed', input: { command: 'printf safe' }, content: [{ type: 'text', text: 'safe output' }] } };
+  const base = [{ ...assistant('note before'), content: [{ type: 'text', text: 'note before' }, tool, { type: 'reasoning', text: 'PRIVATE' }, { type: 'text', text: 'note after' }] },
+    { id: 'msg_final', type: 'assistant', time: { created: 3000 }, content: [{ type: 'text', text: 'final answer' }] }];
+  for (const outcome of ['succeeded', 'failed', 'interrupted']) {
+    const data = messagesSchema.parse({ data: [...base, { id: 'msg_idle', type: 'idle', time: { created: 4000 }, outcome }], cursor: {} }).data;
+    const view = messagesView(data);
+    assert.deepEqual(view.map(message => message.role), ['assistant', 'tool', 'tool', 'assistant', 'assistant']);
+    assert.match(view[1].text, /printf safe/); assert.equal(view[2].text, 'safe output'); assert.equal(view[3].text, 'note after');
+    assert.equal(view.at(-1).phase, outcome === 'succeeded' ? 'final_answer' : 'commentary'); assert.ok(!JSON.stringify(view).includes('PRIVATE'));
+  }
+  const malformed = messagesSchema.parse({ data: [{ ...base[0], content: [{ ...tool, id: undefined }] }], cursor: {} }).data;
+  assert.deepEqual(messagesView(malformed), [], 'missing upstream tool id must not create colliding fabricated ids');
+  const stream = new OpenCodeStreamText();
+  stream.apply({ type: 'session.text.delta', created: 2500, data: { sessionID, assistantMessageID: 'msg_assistant', ordinal: 1, delta: 'live corrected note' } }, sessionID);
+  const projected = stream.project(messagesSchema.parse({ data: base.slice(0, 1), cursor: {} }).data);
+  assert.deepEqual(projected.messages.map(message => message.role), ['assistant', 'tool', 'tool', 'assistant']);
+  assert.equal(projected.messages.at(-1).text, 'live corrected note'); assert.match(projected.messages[1].text, /printf safe/);
+});
 
 async function fixture(t, options = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'open-code-test-'));
@@ -193,13 +214,13 @@ test('text deltas render before REST catches up; duplicate event IDs do not dupl
   f.emit('session.text.delta', { ...text, delta: 'received suffix' }, 'evt_same-delta');
   await until(() => f.latest().messages.some(message => message.text.includes('received suffix')));
   assert.equal(f.latest().partialText, true);
-  assert.equal(f.latest().messages.find(message => message.id === 'msg_assistant').text.match(/received suffix/g).length, 1);
+  assert.equal(f.latest().messages.filter(message => message.role === 'assistant').map(message => message.text).join('\n\n').match(/received suffix/g).length, 1);
   assert.equal(f.requests.filter(request => request.path.endsWith('/message')).length, reads);
   f.emit('session.text.ended', { ...text, text: 'full prefix and received suffix' });
   await until(() => f.latest().partialText === false && f.latest().messages.some(message => message.text.includes('full prefix')));
   f.state.messages[1].content.push({ type: 'text', text: 'full prefix and received suffix' }); f.emit();
   await sleep(160);
-  assert.equal(f.latest().messages.find(message => message.id === 'msg_assistant').text.match(/full prefix/g).length, 1);
+  assert.equal(f.latest().messages.filter(message => message.role === 'assistant').map(message => message.text).join('\n\n').match(/full prefix/g).length, 1);
 });
 
 test('content ordinals preserve interleaved parts and late earlier text without exposing private parts', async t => {
@@ -208,8 +229,9 @@ test('content ordinals preserve interleaved parts and late earlier text without 
   f.emit('session.text.delta', { ...text, ordinal: 3, delta: 'later visible text' });
   f.emit('session.text.delta', { ...text, ordinal: 1, delta: 'earlier visible text' });
   await until(() => f.latest().messages.some(message => message.text.includes('earlier visible text')));
-  const result = f.latest().messages.find(message => message.id === 'msg_assistant');
-  assert.equal(result.text, 'synthetic output\n\nearlier visible text\n\nlater visible text');
+  const result = f.latest().messages.filter(message => message.role === 'assistant');
+  assert.deepEqual(result.map(message => message.text), ['synthetic output', 'earlier visible text', 'later visible text']);
+  assert.equal(new Set(result.map(message => message.id)).size, 3);
   assert.equal(f.latest().partialText, true);
   assert.ok(!JSON.stringify(f.latest()).includes('hidden reasoning'));
   f.emit('session.text.delta', { ...text, ordinal: -1, delta: 'invalid' });

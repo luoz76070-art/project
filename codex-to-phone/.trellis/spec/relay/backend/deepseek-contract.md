@@ -134,3 +134,7 @@ displayReason是必含en的locale→string对象，不是字符串；保留全�
 POST /api/agents/:agentId/sessions/:sessionId/queue/:clientMessageId/cancel采用既有设备鉴权、原订阅controlToken及操作UUID幂等。bridge无await核验当前live handle、同一submission和nextTurn归属，精确remove(messageId)；禁止cancel/clear。已消费、外国项、旧token拒绝。取消未知由bridge和Relay双层锁定，跨重订阅不可重试；权威移除清锁，迟到未知结果不污染新待发项。插件重载不恢复映射，部署前必须清空未决手机提交；不宣称跨进程exactly-once。
 
 隔离覆盖取消不影响任务/桌面项、过期拒绝、重连旧token、未知与迟到HTTP、路由鉴权/幂等。官方rc.2/rc.3/rc.5运行时脚本新增生产AgentLoop中定向remove验证，外部模型请求0；手机真实排队顺序/取消仍独立验收。
+
+## 原生与PTC工具显示（插件0.2.6）
+
+messages.mjs/messageOf 同时拥有实时 bridge 与只读历史投影。仅官方 tool/call、tool/result、tool/ptc-dispatch-start、tool/ptc-dispatch 产生 role=tool 的 function_call/function_call_output；身份用原 seq 的 tool-call-N / tool-result-N，原调用/结果各一条，已知原 turnId/step 保留。PTC缺原turn字段时不伪造。只序列化官方调用参数及结果文本block，不传 reasoning/meta 或内部 error.reason；32768字符上限明确标注截断。工具发生时清 final candidate，只有原成功 turn/end 提升终稿。显示截断不得缩短独立审批参数索引或放宽决定。/info 的 toolMessages:1 可核验实际加载插件；旧插件缺字段不假称已升级。隔离回归需覆盖实时/历史同ID、冷历史不激活、PTC与脱敏/上限。

@@ -6,7 +6,7 @@
 
 Flutter 的 KelivoApplication 拥有唯一主引擎、AI业务和全局设置。`integrations/kelivo/remote-android` 直接引用原远控 Java/资源，保留六个插件；ProductHost 负责本地导航、外观及有界交接存储锁。远控是内部 Activity，不声明 Application/launcher，不调用手机模型。原 `apps/mobile` 和 `apps/relay` 启动/打包边界保留。
 
-当前本地独立包：`com.mobilecodex.kelivo.preview`，`0.1.6-native-preview` / code8，minSdk24，arm64 AOT；独立通道交付见execution-notes审计。Namespace 继续为上游值，不等于实际包名。Android OAuth scheme 为 `mobilecodex.kelivo.preview`，Manifest/Kotlin/Dart/测试须同时核对；其他平台不全局替换。备份 URI 仅增加精确包白名单。
+当前本地独立包：`com.mobilecodex.kelivo.preview`，`0.1.7-native-preview` / code9，minSdk24，arm64 AOT；独立通道交付见agent-parity审计。Namespace 继续为上游值，不等于实际包名。Android OAuth scheme 为 `mobilecodex.kelivo.preview`，Manifest/Kotlin/Dart/测试须同时核对；其他平台不全局替换。备份 URI 仅增加精确包白名单。
 
 ## 导航与状态
 

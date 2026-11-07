@@ -10,10 +10,14 @@ export const claudeRegisterSchema = z.object({
   turnId: z.string().min(1).max(256).nullable(),
   interactions: z.literal(1).optional(),
 }).strict();
-const messageSchema = z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(64_000) }).strict();
+const toolKind = z.enum(["function_call", "function_call_output"]);
+const messageSchema = z.object({ role: z.enum(["user", "assistant", "tool"]), text: z.string().max(64_000),
+  id: z.string().min(1).max(512).optional(), kind: toolKind.optional(), turnId: z.string().min(1).max(256).optional(), phase: z.enum(["commentary", "final_answer"]).optional(),
+}).strict();
 export const claudeEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("state"), turnId: z.string().min(1).max(256).nullable(), activity: z.enum(["thinking", "working", "outputting"]), aborted: z.boolean().optional() }).strict(),
   z.object({ type: z.literal("text"), turnId: z.string().min(1).max(256), id: z.string().min(1).max(512), text: z.string().max(32_000) }).strict(),
+  z.object({ type: z.literal("tool"), turnId: z.string().min(1).max(256), id: z.string().min(1).max(512), kind: toolKind, text: z.string().max(32768) }).strict(),
   z.object({ type: z.literal("messages"), messages: z.array(messageSchema).max(80), partial: z.boolean() }).strict(),
   z.object({ type: z.literal("partial") }).strict(),
   z.object({ type: z.literal("receipt"), id: z.string().uuid(), delivery: z.enum(["confirmed", "uncertain", "rejected"]) }).strict(),

@@ -14,6 +14,7 @@ export type AgentStatus = {
   label: string;
   state: "unprobed" | "probing" | "connected" | "failed";
   transport: string;
+  sessionApi?: 1;
   usesAccessibility: boolean;
   sameDesktopThreadVerified: boolean;
   capabilities: { inspectLoadedSessions: boolean; sendMessage: boolean; steer: boolean; interrupt: boolean; approve: boolean };
@@ -95,7 +96,7 @@ export class AgentGateway {
     if (this.adapters.size !== adapters.length) throw new Error("Agent IDs must be unique");
   }
 
-  snapshot(): AgentStatus[] { return [...this.adapters.values()].map(adapter => adapter.snapshot()); }
+  snapshot(): AgentStatus[] { return [...this.adapters.values()].map(adapter => ({ ...adapter.snapshot(), ...(adapter.sessionApi ? { sessionApi: 1 as const } : {}) })); }
 
   probe(id: string): Promise<AgentStatus> {
     if (this.stopped) throw Object.assign(localAppServerError("AGENT_GATEWAY_STOPPED"), { statusCode: 503 });

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { PassThrough } from "node:stream";
 import { z } from "zod";
@@ -8,6 +9,7 @@ import type { DeviceRegistry } from "./devices.js";
 import type { SubmissionRegistry } from "./submissions.js";
 import { createEventStream } from "./eventStream.js";
 import { snapshotSender } from "./snapshotPatch.js";
+import { createProjectImageReader, type ProjectImageReader } from "./threadImageRoutes.js";
 
 const agentId = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
 const paramsSchema = z.object({ agentId, sessionId: z.string().regex(/^[a-zA-Z0-9_-]{1,160}$/u) });
@@ -17,9 +19,12 @@ type StreamToken = { owner: string; agentId: string; sessionId: string; expires:
 export function createAgentSessionRoutes(context: {
   gateway: AgentGateway; owners: WeakMap<FastifyRequest, string>; devices: DeviceRegistry;
   streams: Set<PassThrough>; deviceStreams: Map<string, Set<PassThrough>>; submissions: SubmissionRegistry;
+  readImage?: ProjectImageReader;
 }) {
   const tokens = new Map<string, StreamToken>();
-  const { gateway, owners, devices, streams, deviceStreams, submissions } = context;
+  const media = new Map<string, Set<{ directory: string | null }>>();
+  const { gateway, owners, devices, streams, deviceStreams, submissions, readImage = createProjectImageReader() } = context;
+  const mediaKey = (owner: string, params: z.infer<typeof paramsSchema>) => `${owner}\0${params.agentId}\0${params.sessionId}`;
   function sessionAdapter(params: z.infer<typeof paramsSchema>) {
     const adapter = gateway.sessions(params.agentId);
     if (!adapter.validSessionId(params.sessionId)) throw agentError("AGENT_SESSION_ID_INVALID", 400);
@@ -49,6 +54,14 @@ export function createAgentSessionRoutes(context: {
         const { cursor } = z.object({ cursor: z.string().min(1).max(8192) }).parse(request.query);
         return sessionAdapter({ agentId: id, sessionId }).readHistory(sessionId, cursor);
       });
+      app.post("/api/agents/:agentId/sessions/:sessionId/images", { bodyLimit: 8192 }, async (request, reply) => {
+        const params = paramsSchema.parse(request.params); sessionAdapter(params);
+        const body = z.object({ path: z.string().min(1).max(4096) }).strict().parse(request.body);
+        const owner = owners.get(request)!;
+        const directories = new Set([...(media.get(mediaKey(owner, params)) ?? [])].map(binding => binding.directory).filter((value): value is string => value !== null));
+        if (directories.size !== 1) throw agentError("AGENT_IMAGE_SUBSCRIPTION_REQUIRED", 409);
+        return reply.header("Cache-Control", "no-store").send(await readImage(owner, [...directories][0]!, body.path));
+      });
       app.post("/api/agents/:agentId/sessions/:sessionId/stream-token", { bodyLimit: 4096 }, async request => {
         const params = paramsSchema.parse(request.params); sessionAdapter(params);
         prune();
@@ -65,11 +78,20 @@ export function createAgentSessionRoutes(context: {
         if (streams.size >= 32 || (deviceStreams.get(owner)?.size ?? 0) >= 4 || !devices.has(owner)) return reply.code(429).send({ error: "stream_limit" });
         const events = createEventStream(reply, streams), owned = deviceStreams.get(owner) ?? new Set<PassThrough>();
         deviceStreams.set(owner, owned); owned.add(events.stream);
+        const key = mediaKey(owner, params), bindings = media.get(key) ?? new Set<{ directory: string | null }>();
+        const binding = { directory: null as string | null };
+        media.set(key, bindings); bindings.add(binding);
         let closed = false, unsubscribe: (() => void) | undefined;
-        events.onClose(() => { closed = true; unsubscribe?.(); owned.delete(events.stream); if (!owned.size) deviceStreams.delete(owner); });
+        events.onClose(() => { closed = true; binding.directory = null; bindings.delete(binding); if (!bindings.size) media.delete(key);
+          unsubscribe?.(); owned.delete(events.stream); if (!owned.size) deviceStreams.delete(owner); });
         const publish = snapshotSender(events.send, "agent-session", v === 1);
         try {
-          unsubscribe = await adapter.watchSession(params.sessionId, snapshot => publish(snapshot), () => events.stream.destroy());
+          unsubscribe = await adapter.watchSession(params.sessionId, snapshot => {
+            if (closed) return;
+            binding.directory = snapshot.connected && snapshot.agentId === params.agentId && snapshot.session.id === params.sessionId
+              && path.isAbsolute(snapshot.session.directory) && !snapshot.session.directory.includes("\0") ? snapshot.session.directory : null;
+            publish(snapshot);
+          }, () => { binding.directory = null; events.stream.destroy(); });
           if (closed) unsubscribe();
           return events.ready();
         } catch (error) { events.stream.destroy(); throw error; }

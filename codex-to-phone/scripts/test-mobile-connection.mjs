@@ -19,6 +19,7 @@ const { subscribeEvents } = await moduleFrom('features/connection/subscription.t
 const { saveThreadRuntimeCache, loadThreadRuntimeCache, readThreadMessageCacheForDiagnostics, defaultRuntime, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, desktopApprovalsPatch, approvalResponsePatch } = await moduleFrom('features/chat/runtime.ts');
 const { makeMessageDiagnostics } = await moduleFrom('features/chat/messageDiagnostics.ts');
 const { offlineAgent, agentDelivery, agentHistoryWindow, reconcileAgentDraft, verifyAgentSnapshot, loadAgentDrafts, saveAgentDrafts } = await moduleFrom('features/agents/runtime.ts');
+const { agentDraftParts, composeAgentDraft } = await moduleFrom('features/agents/drafts.ts');
 const { groupByProject, projectGroupKey, sessionInRange, retainCodexThread } = await moduleFrom('features/threads/model.ts');
 const { loadProjectGroups, saveProjectGroups } = await moduleFrom('features/threads/projectPreferences.ts');
 const { groupMessageProcesses } = await moduleFrom('features/chat/processGroups.ts');
@@ -30,6 +31,26 @@ try { ({ messagesForRender } = await moduleFrom('features/chat/messages.ts')); }
 const tick = () => new Promise(resolve => setTimeout(resolve, 10));
 
 const processMessage = (id, phase, extra = {}) => ({ id, role: 'assistant', text: id, phase, kind: 'agent_message', timestamp: '2026-10-23T06:00:00Z', ...extra });
+
+test('agent attachment drafts retain whitespace, restore file references and preserve a newer draft on receipt', () => {
+  const file = { id: 'a', fileName: 'test (1).png', path: '/synthetic/test (1).png' };
+  const text = '  notes\n\n', draft = composeAgentDraft(text, [file]), restored = agentDraftParts(draft);
+  assert.equal(restored.text, text); assert.equal(restored.attachments[0].path, file.path);
+  assert.equal(composeAgentDraft(restored.text, restored.attachments), draft);
+  const pending = { clientMessageId: 'a', text: draft }, receipt = { clientMessageId: 'a', action: 'message', delivery: 'confirmed' };
+  assert.equal(reconcileAgentDraft(draft, pending, receipt).draft, '');
+  const edited = composeAgentDraft('new notes', restored.attachments);
+  assert.equal(reconcileAgentDraft(edited, pending, receipt).draft, edited);
+  assert.equal(reconcileAgentDraft(draft, pending, { ...receipt, delivery: 'uncertain' }).draft, draft);
+  const prose = '示例\n\n已上传附件：\n- 普通说明'; assert.equal(agentDraftParts(prose).text, prose);
+});
+
+test('explicit future computer channels persist their own bounded drafts without sharing Codex or known invalid IDs', () => {
+  let raw; const storage = { setItem(_key, value) { raw = value; }, getItem() { return raw; } };
+  const draft = composeAgentDraft('future', [{ fileName: 'a.png', path: '/synthetic/a.png' }]);
+  assert.equal(saveAgentDrafts('scope', { 'future-agent:original_1': draft, 'codex:original': 'wrong', 'claude:original': 'wrong', 'bad/agent:original': 'wrong' }, storage), true);
+  assert.deepEqual(loadAgentDrafts('scope', storage), { 'future-agent:original_1': draft });
+});
 test('DeepSeek terminal failure stays visible outside process groups without repeating the input', () => {
   const input = processMessage('user-input', undefined, { role: 'user', turnId: '8' });
   const progress = processMessage('work-in-progress', 'commentary', { turnId: '8' });

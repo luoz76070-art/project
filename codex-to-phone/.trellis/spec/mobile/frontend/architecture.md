@@ -66,3 +66,13 @@ APK35的原始输入按明确`replacesMessageId=turnId-input`继承显示身份�
 ## 普通提示词显示边界（2026-10-29）
 
 普通user正文不能因为`You are `、`Knowledge cutoff:`等自然语言开头被隐藏。role/item type已有系统/工具来源则按原语义处理；旧user缺来源时只沿用专用上下文包络前缀兼容规则（含问答reply），不凭语言猜来源，不虚构metadata。引用/代码块中的标记仍可见；直接以保留包络开头的正文仍受兼容过滤。保持消息身份、合并器、cache schema与问答答案不落缓存。Relay历史/native/app-server和手机使用相同合成矩阵验证。
+
+## 所有电脑 Agent 共享体验（code9）
+
+Codex 与 AgentWorkspace 共用 ComputerComposer、uploadAttachments、MessageTimeline/ToolMessageBubble 和 MessageMediaProvider；新通道只接线原生控制与标准 AgentMessage，不能复制第二套聊天、附件或图片组件。工具 kind 为 function_call/function_call_output、role=tool；说明用 commentary、明确成功终稿用 final_answer。相同 timestamp 保留原消息顺序。工具输出允许 Codex Output: 包络或其他 Agent 的纯文本；已知 Tool/Command/Workdir/Status 元数据自身不算正文，不能把非空纯文本误判为空。
+
+网关声明 sessionApi:1 表示已显式注册 SessionAdapter；手机兼容原三种传输旧网关，新通道必须声明该能力。通用 Agent/session 草稿键仍限制字符和长度，已知通道继续用原 ID 格式；禁止将 Codex 放入 Agent 路由。所有列表复用 ProjectGroups。
+
+Agent 附件沿原 /api/uploads，元数据序列化到原有有界草稿字符串的完整「已上传附件」尾段（文件名 | 绝对路径）；解析只接受完整绝对路径列表，不剥离普通示例。连接/Agent/session 隔离，确认只清匹配草稿，发送期间新编辑保留，未知结果不重发。上传中、关键存储失败阻止产品导航/返回；卸载取消请求并回收预览 URL，不把 blob URL 写进持久化。SSE 不应覆盖本地上传或存储错误。
+
+MessageMediaProvider 目标为 threadId 或 agentId+sessionId 的互斥联合，所有通道共用鉴权取图、错误映射、重试、大图及原尺寸；目标/凭证改变中止旧请求并清旧图。未来适配器仍须保证已订阅原会话的权威绝对 directory，手机不能上传根目录。

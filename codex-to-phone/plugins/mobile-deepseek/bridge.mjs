@@ -121,9 +121,10 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
         }
         const visible = messageOf(event); if (visible) add(entry, visible);
       }
-    } else if (event.type === 'turn/end' && entry.clients.size) {
+    } else if (entry.clients.size) {
       const notice = messageOf(event); if (notice) add(entry, notice);
     }
+    if (event.type === 'tool/call' || event.type === 'tool/ptc-dispatch-start') entry.activity = 'working';
   }
   async function baseline(entry, agent, signal) {
     if (catalog) {
@@ -318,7 +319,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
       const url = new URL(req.url, 'http://127.0.0.1');
       const queryRoute = catalog && (url.pathname === '/sessions' || /\/history$/u.test(url.pathname));
       if (url.hash || (url.search && !queryRoute) || [...url.searchParams.keys()].some(key => !['search', 'cursor', 'range'].includes(key))) throw fail('INPUT_INVALID', 400);
-      if (req.method === 'GET' && url.pathname === '/info') return json({ protocol: 1, harnessVersion, messagePhases: true, interactions: interactions.available(), ...(catalog ? { scope: 'all', history: true } : {}) });
+      if (req.method === 'GET' && url.pathname === '/info') return json({ protocol: 1, harnessVersion, messagePhases: true, toolMessages: 1, interactions: interactions.available(), ...(catalog ? { scope: 'all', history: true } : {}) });
       if (req.method === 'GET' && url.pathname === '/sessions') {
         if (catalog) return json(await catalog.list(url.searchParams.get('search'), url.searchParams.get('cursor'), controller.signal, url.searchParams.get('range') ?? 'recent'));
         const sessions = ctx.agents.list().filter(allowed).slice(0, 128).map(session); return json({ sessions, cursor: null });

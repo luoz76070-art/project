@@ -84,6 +84,18 @@ test('all-scope lists every ordinary live/persisted session across workspaces wi
   assert.equal((await f.adapter.probe()).loadedSessions.hasMore, true);
 });
 
+test('cold tool-only history remains visible across page boundaries with no Agent activation', async t => {
+  const f = await fixture(t, { messages: 0 });
+  for (let i = 0; i < 45; i++) f.append('cold/original', i % 2 ? 'tool/result' : 'tool/call', i % 2
+    ? { turn: 1, step: 1, message: { callId: `c${i - 1}`, isError: false, content: [{ type: 'text', text: `result ${i}` }] } }
+    : { turn: 1, step: 1, callId: `c${i}`, name: 'bash', arguments: JSON.stringify({ command: `printf ${i}` }) });
+  const row = (await f.adapter.listSessions()).sessions[0], close = await f.watch(row.id);
+  const all = [...f.values.at(-1).messages]; let cursor = f.values.at(-1).historyCursor;
+  while (cursor) { const page = await f.adapter.readHistory(row.id, cursor); all.unshift(...page.messages); cursor = page.cursor; }
+  assert.equal(all.length, 45); assert.equal(new Set(all.map(message => message.id)).size, 45);
+  assert.ok(all.every(message => message.role === 'tool')); assert.deepEqual(f.calls, []); assert.equal(f.agents.size, 0); close();
+});
+
 test('opening and paging cold history reads original messages without activation and isolates cursors', async t => {
   const f = await fixture(t), row = (await f.adapter.listSessions()).sessions[0];
   const close = await f.watch(row.id), current = f.values.at(-1);

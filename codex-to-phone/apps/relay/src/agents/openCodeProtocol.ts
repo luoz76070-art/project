@@ -35,11 +35,15 @@ export const permissionsSchema = z.object({ data: z.array(z.object({
 }).passthrough()).max(100) });
 const content = z.object({
   type: z.string().max(256), text: z.string().max(1_000_000).optional(),
-  state: z.object({ status: z.string() }).passthrough().optional(),
+  id: z.string().max(512).optional(), name: z.string().max(256).optional(),
+  state: z.object({ status: z.string(), input: z.union([z.string().max(1_000_000), z.record(z.string(), z.unknown())]).optional(),
+    content: z.array(z.object({ type: z.string(), text: z.string().max(1_000_000).optional() })).max(1000).optional(),
+  }).optional(),
 });
 export const messagesSchema = z.object({ data: z.array(z.object({
   id: messageId, type: z.string().max(256), time: z.object({ created: time, completed: time.optional() }),
   text: z.string().max(1_000_000).optional(), content: z.array(content).max(1000).optional(), error: z.unknown().optional(),
+  outcome: z.enum(["succeeded", "failed", "interrupted"]).optional(),
 })).max(100), cursor: cursorSchema });
 export const admittedSchema = z.object({ data: z.object({
   id: messageId, sessionID: sessionIdSchema, type: z.literal("user"), payload: z.object({ text: z.string().max(20_000) }), delivery: z.enum(["steer", "queue"]),
@@ -53,9 +57,36 @@ export function sessionView(session: z.infer<typeof sessionSchema>, directory: s
 }
 
 export function messagesView(data: z.infer<typeof messagesSchema>["data"]): AgentMessage[] {
-  return data.filter(message => message.type === "user" || message.type === "assistant").map(message => ({
-    id: message.id, timestamp: new Date(message.time.created).toISOString(), role: message.type,
-    text: message.type === "user" ? message.text ?? "" : (message.content ?? []).filter(part => part.type === "text").map(part => part.text ?? "").join("\n\n"),
-    kind: message.type === "user" ? "user_message" : "agent_message",
-  })).filter(message => message.text.length > 0).sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id));
+  const messages: AgentMessage[] = [];
+  let finalCandidate: AgentMessage | undefined;
+  const bounded = (text: string) => text.length > 32768 ? `${text.slice(0, 32740)}\n[内容已截断]` : text;
+  for (const message of [...data].sort((a, b) => a.time.created - b.time.created)) {
+    if (message.type === "idle") {
+      // The official idle marker owns the turn outcome; step completion alone does not.
+      if (message.outcome === "succeeded" && finalCandidate) finalCandidate.phase = "final_answer";
+      finalCandidate = undefined; continue;
+    }
+    const timestamp = new Date(message.time.created).toISOString();
+    if (message.type === "user" && message.text) messages.push({ id: message.id, timestamp, role: "user", kind: "user_message", text: message.text });
+    if (message.type !== "assistant") continue;
+    finalCandidate = undefined;
+    const parts = message.content ?? [];
+    let ordinal = 0;
+    for (const part of parts) {
+      const id = part.type === "text" ? (ordinal++ === 0 ? message.id : `${message.id}:text-${ordinal - 1}`) : `${message.id}:tool-${part.id}`;
+      if (part.type === "text" && part.text) {
+        const visible: AgentMessage = { id, timestamp, role: "assistant", kind: "agent_message", text: part.text, phase: "commentary" };
+        messages.push(visible); finalCandidate = visible;
+      } else if (part.type === "tool" && part.id && part.name && part.state) {
+        const args = part.state.status === "streaming" ? "[正在接收工具参数]" : JSON.stringify(part.state.input ?? {});
+        messages.push({ id: `${id}:call`, timestamp, role: "tool", kind: "function_call", text: bounded(`Tool: ${part.name}\n${args}`) });
+        if (["completed", "error"].includes(part.state.status)) {
+          const output = (part.state.content ?? []).filter(block => block.type === "text").map(block => block.text ?? "").join("\n");
+          messages.push({ id: `${id}:output`, timestamp, role: "tool", kind: "function_call_output", text: bounded(`${part.state.status === "error" ? "Status: failed\n" : ""}${output || (part.state.status === "error" ? "工具执行失败，请在电脑查看详情。" : "工具执行完成，无文本输出。")}`) });
+        }
+      }
+    }
+    if (parts.some(part => part.type === "tool")) finalCandidate = undefined;
+  }
+  return messages;
 }

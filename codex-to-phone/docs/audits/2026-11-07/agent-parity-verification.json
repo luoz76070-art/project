@@ -1,0 +1,110 @@
+{
+  "date": "2026-11-07",
+  "versionName": "0.1.7-native-preview",
+  "versionCode": 9,
+  "scope": [
+    "codex",
+    "deepseek",
+    "claude",
+    "opencode",
+    "future SessionAdapter channels"
+  ],
+  "rootVerify": {
+    "mobile": 169,
+    "relay": 414,
+    "verification": 8,
+    "status": "passed-final",
+    "earlierFailure": "first full run 413/414: existing threadList watcher deadline; isolated retry, second full run and final full run passed"
+  },
+  "native": {
+    "suites": 39,
+    "tests": 340,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint": {
+    "errors": 0,
+    "fatal": 0,
+    "hostWarnings": 56,
+    "remoteWarnings": 1
+  },
+  "browser": {
+    "status": "passed",
+    "fixtureOnly": true,
+    "realModels": 0,
+    "widths": [
+      360,
+      390,
+      430
+    ],
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "textScale150": true,
+    "checks": [
+      "Codex原入口及共享composer",
+      "DeepSeek说明常显/连续工具摘要",
+      "4至40条工具增量保持展开",
+      "终稿收起工具且说明/终稿独立",
+      "纯文本命令/输出详情均可见",
+      "DeepSeek图片720px/大图/原尺寸/返回",
+      "Claude图片404提示及重试成功",
+      "附件上传、离开重开后正文/引用恢复",
+      "附件发送确认后清相应草稿",
+      "合成语音转文字/预览回填",
+      "运行中排队/引导/停止实际点击",
+      "Claude引导禁用、queue可用",
+      "OpenCode混合工具展开及图片",
+      "future-agent登记后列表/消息/图片/输入共用",
+      "上传中阻止返回、失败后报错可恢复",
+      "360/390/430无页面横向溢出",
+      "360深色/150%字号及composer44px按钮",
+      "最终页面无console error"
+    ],
+    "notes": "语音使用fixture，无真实录音或模型；浏览器不等于APK真机安装。"
+  },
+  "officialRuntimes": {
+    "deepseek": "rc.2 isolated runtime/history/interactions passed; external model requests 0",
+    "claude": "2.1.287 strict validate + 8 sandbox tests passed; npm mirror download checked against dist SHA512; user CLI unchanged",
+    "opencode": "fixed2.0.16 official schema + isolated HTTP/SSE regression; original host not tested"
+  },
+  "apk": {
+    "applicationId": "com.mobilecodex.kelivo.preview",
+    "versionCode": 9,
+    "versionName": "0.1.7-native-preview",
+    "abi": "arm64-v8a",
+    "bytes": 60978859,
+    "sha256": "2906505998d00021252aac5ec1dcb44c62ae09fe939ab7c38bb2f8912bd3c4ed",
+    "signing": "Local preview signing; not a production release",
+    "signature": "Signer #1 certificate DN: C=US, O=Android, CN=Android Debug\nSigner #1 certificate SHA-256 digest: 3ffb81f3524a590f469b80476951a22fbc6e441a470b9270079a8c1d452c4a38\nSigner #1 certificate SHA-1 digest: c5ffdb72d35158a73124c9f4852b2839841d6e42\nSigner #1 certificate MD5 digest: e9efb1dc30c97e16b05708079dcc44ce",
+    "upstreamCommit": "4a7da9b6f5d77caccb9f8aaf656232a93ab14708"
+  },
+  "source": {
+    "archive": "mobile-codex-kelivo-0.1.7-preview-source.tar.gz",
+    "bytes": 21701513,
+    "sha256": "86b75bd3a10e738fcd65f06650d0d02ae340b047b369096421b9c2ccf879de72",
+    "sourceFiles": 5921,
+    "archiveEntries": 5926,
+    "upstreamFilesIncluded": 5052,
+    "allArchiveBytesVerified": true,
+    "unreviewedSecretPatternFindings": 0,
+    "reviewedUpstreamSyntheticFixtures": 13,
+    "apkSha256": "2906505998d00021252aac5ec1dcb44c62ae09fe939ab7c38bb2f8912bd3c4ed"
+  },
+  "packageVerification": "5 Web resources match exact final build; 7 manually registered native plugins and arm64 AOT present; fixture excluded",
+  "runtimeBefore": {
+    "gateway": "previous build; tunnel connected; no sessionApi advertisement",
+    "deepseek": "bridge offline before any change",
+    "claude": "not configured; local CLI2.1.220 below Mods minimum",
+    "opencode": "not configured"
+  },
+  "delivery": {
+    "github": "pending",
+    "appSource": "pending"
+  },
+  "phoneCode9": "awaiting user",
+  "realAgentLink": "awaiting runtime switch and user confirmation",
+  "fullKelivo59": "not completed"
+}

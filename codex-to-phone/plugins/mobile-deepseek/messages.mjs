@@ -1,5 +1,6 @@
 const turnId = value => Number.isSafeInteger(value) && value >= 0 ? String(value) : undefined;
-const text = content => (Array.isArray(content) ? content : []).filter(block => block?.type === 'text' && typeof block.text === 'string').map(block => block.text).join('\n').slice(0, 32768);
+const text = content => bounded((Array.isArray(content) ? content : []).filter(block => block?.type === 'text' && typeof block.text === 'string').map(block => block.text).join('\n'));
+const bounded = value => value.length > 32768 ? `${value.slice(0, 32740)}\n[内容已截断]` : value;
 
 // Provider errors may contain credentials or request details. Publish only fixed summaries.
 function failureSummary(error) {
@@ -21,6 +22,25 @@ function failureSummary(error) {
 export function messageOf(event) {
   const data = event.data;
   const time = Number.isSafeInteger(event.time) && event.time >= 0 && event.time <= 8.64e15 ? event.time : Date.now();
+  // Only durable tool vocabulary is displayed; approval keeps its own lossless index.
+  const call = event.type === 'tool/call' || event.type === 'tool/ptc-dispatch-start';
+  const result = event.type === 'tool/result' || event.type === 'tool/ptc-dispatch';
+  if ((call || result) && Number.isSafeInteger(event.seq) && event.seq >= 0) {
+    const turn = turnId(data?.turn);
+    let visible;
+    if (call) {
+      if (typeof data?.name !== 'string') return null;
+      const args = event.type === 'tool/call' ? data.arguments : JSON.stringify(data.arguments);
+      if (typeof args !== 'string') return null;
+      visible = `Tool: ${data.name.slice(0, 256)}\n${args}`;
+    } else {
+      const output = event.type === 'tool/result' ? data?.message : data;
+      if (!output || typeof output.isError !== 'boolean') return null;
+      visible = `${output.isError ? 'Status: failed\n' : ''}${text(output.content) || (output.isError ? '工具执行失败，请在电脑查看详情。' : '工具执行完成，无文本输出。')}`;
+    }
+    return { id: `tool-${call ? 'call' : 'result'}-${event.seq}`, timestamp: new Date(time).toISOString(), role: 'tool',
+      kind: call ? 'function_call' : 'function_call_output', text: bounded(visible), ...(turn !== undefined ? { turnId: turn } : {}) };
+  }
   if (event.type === 'turn/end' && data?.reason?.kind === 'error' && turnId(data.turn) !== undefined && Number.isSafeInteger(event.seq) && event.seq >= 0) {
     return { id: `turn-error-${event.seq}`, timestamp: new Date(time).toISOString(), role: 'assistant', kind: 'agent_message', turnId: turnId(data.turn),
       text: `DeepSeek Harness 运行提示：本轮执行失败，未正常完成。\n\n${failureSummary(data.reason.error)}` };
@@ -37,7 +57,7 @@ export function messageOf(event) {
 // Idle, stream/end, cancellation, max-tokens and failed attempts are not completion evidence.
 export function finalMessageId(state, event) {
   const data = event.data;
-  if (event.type === 'turn/start' || event.type === 'step/start') state.finalCandidate = null;
+  if (event.type === 'turn/start' || event.type === 'step/start' || event.type === 'tool/call' || event.type === 'tool/ptc-dispatch-start') state.finalCandidate = null;
   if (event.type === 'assistant/message') {
     const visible = messageOf(event);
     state.finalCandidate = visible?.turnId !== undefined && !data.interrupted && Number.isSafeInteger(data.step)

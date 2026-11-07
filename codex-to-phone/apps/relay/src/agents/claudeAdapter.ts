@@ -204,12 +204,20 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
         const existing = entry.live.get(event.id);
         const bytes = [...entry.live.values()].reduce((n, m) => n + m.text.length, 0);
         if ((!existing && entry.live.size >= 128) || bytes + event.text.length > 256_000) { entry.partial = true; break; }
-        entry.live.set(event.id, { id: event.id, timestamp: existing?.timestamp ?? new Date().toISOString(), role: "assistant", kind: "agent_message", text: (existing?.text ?? "") + event.text });
+        entry.live.set(event.id, { id: event.id, timestamp: existing?.timestamp ?? new Date().toISOString(), role: "assistant", kind: "agent_message", text: (existing?.text ?? "") + event.text, turnId: event.turnId, phase: "commentary" });
         entry.activity = "outputting"; break;
+      }
+      case "tool": {
+        if (!entry.listeners.size || event.turnId !== entry.turnId) break;
+        const existing = entry.live.get(event.id);
+        const bytes = [...entry.live.values()].reduce((n, m) => n + m.text.length, 0) - (existing?.text.length ?? 0);
+        if ((!existing && entry.live.size >= 128) || bytes + event.text.length > 256_000) { entry.partial = true; break; }
+        entry.live.set(event.id, { id: event.id, timestamp: existing?.timestamp ?? new Date().toISOString(), role: "tool", kind: event.kind, text: event.text, turnId: event.turnId });
+        entry.activity = "working"; break;
       }
       case "messages": {
         if (!entry.listeners.size) break;
-        entry.messages = event.messages.map((m, i) => ({ ...m, id: `claude:${entry.generation}:${i}`, kind: m.role === "user" ? "user_message" : "agent_message", timestamp: new Date().toISOString() }));
+        entry.messages = event.messages.map((m, i) => ({ ...m, id: m.id ?? `claude:${entry.generation}:${i}`, kind: m.kind ?? (m.role === "user" ? "user_message" : "agent_message"), timestamp: new Date().toISOString() }));
         if (!entry.turnId) entry.live.clear();
         entry.ready = true; entry.partial = event.partial || Boolean(entry.turnId); break;
       }

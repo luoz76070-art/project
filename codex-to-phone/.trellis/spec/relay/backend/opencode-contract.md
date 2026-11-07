@@ -28,3 +28,9 @@ HTTP默认8秒、4MiB、最多16在途；只在显式列表/probe或手机订阅
 `test:opencode`使用随机端口合成v2HTTP/SSE，覆盖delta在REST未变化时出现、去重/补齐、无每token查询、精确发送与空正文中断、完整请求签名、目录变化、未知结果跨重连、鉴权/撤销/幂等、超时/坏帧/上限和资源释放。最终合并回归加入`openCode.test.mjs`；真实OpenCode/模型/Android单独验收，不进入隔离测试。
 
 `node scripts/check-opencode-runtime.mjs <官方2.0.16二进制绝对路径>`要求先构建Relay，使用自建HOME/XDG/配置/临时数据库，白名单环境及官方simulation，启动自有前台serve随机端口。12项覆盖版本/鉴权、空列表/nullable cursor、测试owner fixture与目录范围、生产适配器快照、空闲中断、question原字段应答/复杂表单拒绝、owner先答结果不被覆盖、15秒SSE注释心跳及重连令牌。仅脚本owner建立自有空白会话/表单，产品不得增加create/fork/resume；不提交prompt、不访问用户profile。退出关闭自有进程并删除临时目录，不安装或升级CLI；通过不计用户原会话、provider、Android或长期验收。
+
+## 工具与终稿投影（code9）
+
+按固定官方 packages/schema/src/session-message.ts 的混合content原序拆分text与tool，工具必须有原id/name/state；缺id不可生成tool-undefined身份。text第一段沿原message.id，后续按同类ordinal派生；stream overlay按text ordinal替换，保留夹在中间的工具，缺早段时用空text占位。工具仅投影原 input 与文本content，错误无文本时固定提示，不透传error对象，单条最多32768字符。
+
+仅官方idle outcome=succeeded可将前一个无工具assistant步骤提升final_answer，普通步骤completed、failed/interrupted均不可。原消息时间相同保留原序。回归覆盖说明/工具交替、text ordinal、缺工具id、成功/失败/中断边界。

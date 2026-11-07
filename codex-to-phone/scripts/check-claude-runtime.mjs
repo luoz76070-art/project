@@ -38,9 +38,9 @@ try {
   for (const hook of ['session.start', 'turn.start', 'turn.step', 'tool.call', 'classic.PreToolUse', 'classic.PermissionRequest', 'turn.complete', 'session.end']) assert.ok(validation.includes(hook), `Missing host hook: ${hook}`);
   for (const api of ['$.clock.after', '$.env.get', '$.http.fetch', '$.prompt.submit', '$.session.cwd', '$.session.id', '$.session.messages', '$.session.version', '$.turn.abort']) assert.ok(validation.includes(api), `Missing host API: ${api}`);
   const tests = run(['plugin', 'test', plugin]);
-  assert.match(tests, /\b7 pass\b/u);
+  assert.match(tests, /\b8 pass\b/u);
   assert.match(tests, /\b0 fail\b/u);
-  console.log(JSON.stringify({ version, checks: { officialVersionGate: true, officialStrictValidation: true, officialHostTests: true }, officialTestCount: 7, fixtureHttpCallsMocked: true, externalModelRequests: 0, userProfilesChanged: false, originalSessionControlVerified: false, results }, null, 2));
+  console.log(JSON.stringify({ version, checks: { officialVersionGate: true, officialStrictValidation: true, officialHostTests: true }, officialTestCount: 8, fixtureHttpCallsMocked: true, externalModelRequests: 0, userProfilesChanged: false, originalSessionControlVerified: false, results }, null, 2));
 } finally {
   await fs.rm(sandbox, { recursive: true, force: true });
 }

@@ -68,3 +68,11 @@ Claude适配见 [Claude 契约](claude-contract.md)。`AgentAdapter.sessionApi` 
 - 对外 userInputs.id 是代次内随机令牌，内部才保留 requestId/owner。POST 校验准确题目集合及自由回答权限；提交加锁在第一个 await 前。不缓存/记录答案，不自动重放。ACK 不等于处理完成；submitted/uncertain 均锁定。
 - 异步题以活动 turn 的 agentMessage.questions 为依据；只接受 accepted 的 steeringUserMessage 回答证据。回复必须携带原题目 ID，通过定向 steer 提交，禁止新建 turn 回退。宿主没有 expectedTurnId 条件，原子性边界须记录而不能假称已验证。
 - 所有新增单元/集成测试使用临时 socket 和合成服务。真实只读订阅与真实发送验收分开记录。
+
+## 统一会话展示与项目图片（code9）
+
+AgentGateway.snapshot 对显式存在 sessionApi 的适配器下发 sessionApi:1，新增通道通过现有 SessionAdapter 进入同一手机工作区。登记能力不是原生操作权限；canSend/canSteer/canInterrupt 及随机控制令牌仍决定每次提交。Adapter 只投影官方可见文本/工具，推理、私有错误/context 不进入消息；工具/终稿不能从自然语言或空闲状态推断。
+
+POST /api/agents/:agentId/sessions/:sessionId/images 只接受 {path}。根目录取自相同设备 owner、Agent/session 的活动 SSE 权威快照：connected 且身份一致、绝对路径且无 NUL；不存在或互相冲突返回409。断线、取消订阅和关闭流立即撤销目录；不按客户端 cwd 或其他设备订阅授权。不为取图启动/激活会话。Codex/Agent 在 createRelayServer 共用 createProjectImageReader：全局4、每owner2，finally释放；沿 readThreadImage 的 realpath、symlink、8MiB和栅格格式校验。
+
+必需回归为 agentImages.test.mjs 的四通道（含合成 future-agent）、设备所有权/撤销、目录变化/断线/非法路径、关闭释放与共享限额；客户端控制和图片不能借同一UUID跨Agent访问。

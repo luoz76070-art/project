@@ -216,7 +216,9 @@ export function firstMeaningfulToolOutputLine(value: string) {
 
 export function toolOutputBody(value: string) {
   const match = String(value || "").match(/(?:^|\n)Output:\n?([\s\S]*)$/);
-  return match ? match[1].trim() : "";
+  // Codex wraps outputs in an envelope; other Agent adapters may emit plain
+  // visible text. Only known envelope metadata can count as an empty result.
+  return match ? match[1].trim() : String(value || "").replace(/^(?:Tool|Command|Workdir|Status):[^\n]*(?:\n|$)/gm, "").trim();
 }
 
 export function isToolOutputKind(kind: string) {

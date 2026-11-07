@@ -2222,20 +2222,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .agent-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .agent-connection { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; color: var(--muted); font-size: .8rem; }
 .agent-chat .messages-viewport { flex: 1; min-height: 0; padding-inline: max(16px, calc((100% - 760px) / 2)); }
-.agent-composer { flex-shrink: 0; margin: 0 auto; padding: 8px 16px max(12px, env(safe-area-inset-bottom)); width: min(100%, 792px); max-height: calc(100dvh - 120px); overflow-y: auto; }
-.agent-running { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .875rem; }
-.agent-delivery { display: flex; flex-wrap: wrap; gap: 8px; }
-.agent-delivery button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 22px; background: var(--bg-1); color: var(--muted); }
-.agent-delivery button.active { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
-.agent-delivery button:disabled { opacity: .4; cursor: default; }
-.agent-running > .icon-button { flex-shrink: 0; }
-.agent-input { display: flex; align-items: flex-end; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 26px; background: var(--panel-soft); }
-.agent-input:focus-within { border-color: var(--accent); }
-.agent-input textarea { min-width: 0; flex: 1; resize: none; min-height: 48px; max-height: 150px; border: 0; padding: 6px; font: inherit; font-size: 16px; line-height: 1.5; color: var(--text); background: transparent; }
-.agent-input textarea:focus-visible { outline: none; }
-.agent-input button { flex-shrink: 0; }
-.agent-input > button[type="submit"] { background: var(--accent-strong); color: var(--on-accent); }
-.agent-input button:disabled { opacity: .4; }
+.agent-composer { flex-shrink: 0; align-self: center; width: min(calc(100% - 24px), 768px); max-height: calc(100dvh - 120px); overflow-y: auto; margin: 6px 12px 10px; }
+.agent-capabilities { color: var(--muted); font-size: .75rem; }
+.agent-capabilities > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.agent-capabilities p { line-height: 1.6; }
 .agent-queue { border: 1px solid var(--border); border-radius: 12px; padding: 0 10px; font-size: .85rem; }
 .agent-queue summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
 .agent-queue-item { display: grid; gap: 8px; padding-bottom: 10px; }

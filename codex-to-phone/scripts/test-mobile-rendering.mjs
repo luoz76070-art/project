@@ -9,10 +9,10 @@ import { build } from 'esbuild';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-rendering-'));
 const output = path.join(temp, 'render.cjs');
-await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { imageSource } from './apps/mobile/src/features/chat/imageSources';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
+await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { imageSource } from './apps/mobile/src/features/chat/imageSources';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
 const originalStorage = globalThis.localStorage;
 globalThis.localStorage = { getItem: () => null };
-const { default: { h, render, MessageContent, MessageTimeline, ToolMessageBubble, imageSource } } = await import(pathToFileURL(output).href);
+const { default: { h, render, MessageContent, MessageTimeline, ToolMessageBubble, ComputerComposer, imageSource } } = await import(pathToFileURL(output).href);
 globalThis.localStorage = originalStorage;
 test.after(() => fs.rm(temp, { recursive: true, force: true }));
 const tool = index => ({ id: `t${index}`, role: 'tool', kind: 'commandExecution', text: `Command: rg query-${index}`, turnId: 'turn-a', timestamp: '2026-11-07T00:00:00Z' });
@@ -52,6 +52,19 @@ test('expanded tool details show original command and output with one timeline e
   assert.match(opened, /<details[^>]*\sopen/);
   assert.match(opened, /<pre>Command: rg query-1\nOutput:\noriginal output<\/pre>/);
 });
+test('Agent plain output is visible after expansion while Codex empty envelopes stay empty', () => {
+  for (const text of ['DeepSeek output', 'Claude output', 'OpenCode output', 'Status: failed\nvisible failure']) {
+    const message = { ...tool(1), kind: 'function_call_output', text };
+    const html = render(h(ToolMessageBubble, { message, onCopy: () => {}, expanded: true }));
+    assert.ok(html.includes(`<pre>${text}</pre>`));
+    assert.doesNotMatch(html, /工具执行完成，无文本输出/);
+  }
+  for (const text of ['Tool: exec_command\nStatus: completed', 'Output:\n']) {
+    const html = render(h(ToolMessageBubble, { message: { ...tool(1), kind: 'function_call_output', text }, onCopy: () => {}, expanded: true }));
+    assert.doesNotMatch(html, /<pre>/);
+    assert.match(html, /工具执行完成，无文本输出/);
+  }
+});
 test('many running tools mount one collapsed live summary and no raw tool rows', () => {
   let calls = 0;
   const html = render(h(MessageTimeline, { messages: Array.from({ length: 40 }, (_, i) => tool(i)), running: true, renderMessage: () => { calls++; return h('pre', {}, 'RAW TOOL'); } }));
@@ -79,4 +92,14 @@ test('source policy rejects executable, cleartext and credentialed image URLs', 
   for (const source of ['javascript:alert(1)', 'data:text/html;base64,YQ==', 'https://user:secret@example.com/a.png', 'http://example.com/a.png', '\0.png']) assert.equal(imageSource(source).kind, 'invalid', source);
   for (const source of ['/project/a.png', 'output/a.png', 'file:///project/a.png']) assert.equal(imageSource(source).kind, 'local');
   assert.equal(imageSource('https://example.com/a.png').kind, 'remote');
+});
+
+test('all computer channels share composer controls without granting unsupported steer or stop', () => {
+  const props = { draft: 'draft', onDraft() {}, onSend() {}, onStop() {}, onUpload() {}, voice: null, status: 'connected', placeholder: 'message', hasContent: true, canSend: true };
+  const idle = render(h(ComputerComposer, props));
+  assert.match(idle, /aria-label="上传文件"/); assert.match(idle, /aria-label="发送"/); assert.doesNotMatch(idle, /停止生成|引导发送/);
+  const running = render(h(ComputerComposer, { ...props, running: true, canStop: true, deliveries: { steer: false, queue: true } }));
+  assert.match(running, /disabled="" aria-label="引导发送"/); assert.match(running, /aria-label="排队发送"/); assert.match(running, /aria-label="停止生成"/);
+  const empty = render(h(ComputerComposer, { ...props, draft: '', hasContent: false, running: true, canStop: false }));
+  assert.match(empty, /disabled="" aria-label="停止生成"/); assert.doesNotMatch(empty, /aria-label="发送"/);
 });

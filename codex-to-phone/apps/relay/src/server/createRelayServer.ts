@@ -17,7 +17,7 @@ import { createDesktopThreadLoader } from "../desktop/desktopThreadLoader.js";
 import { LiveCodex } from "../codex/liveCodex.js";
 import { LiveTurnController, type LiveTurnSnapshot } from "../codex/liveTurnController.js";
 import { UploadStore } from "../store/uploadStore.js";
-import { registerThreadImageRoutes } from "./threadImageRoutes.js";
+import { createProjectImageReader, registerThreadImageRoutes } from "./threadImageRoutes.js";
 import { createAgentGateway, type AgentGateway } from "../agents/agentGateway.js";
 import type { GatewayRuntimeStatus } from "../gateway/managedGateway.js";
 import { createAgentSessionRoutes } from "./agentSessionRoutes.js";
@@ -67,7 +67,8 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const app = Fastify({ logger: options.logger === false ? false : { serializers: { req: req => ({ method: req.method, url: req.url?.split("?")[0] }) }, redact: ["req.headers.authorization"] }, bodyLimit: 36 * 1024 * 1024 });
 
   const streams = new Set<PassThrough>();
-  const agentSessionRoutes = createAgentSessionRoutes({ gateway: agentGateway, owners, devices, streams, deviceStreams, submissions });
+  const readImage = createProjectImageReader();
+  const agentSessionRoutes = createAgentSessionRoutes({ gateway: agentGateway, owners, devices, streams, deviceStreams, submissions, readImage });
   // A route may still await its upstream's first frame before reply.send(stream).
   // Cancel adapters before HTTP drain, otherwise onClose cannot release that wait.
   app.addHook("preClose", async () => { voice.stop(); for (const stream of streams) stream.destroy(); await Promise.all([agentGateway.stop(), desktopControl.messageQueue?.stop()]); });
@@ -115,7 +116,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   app.addHook("onError", async request => releaseUpload(request));
   app.addHook("onRequestAbort", async request => releaseUpload(request));
 
-  registerThreadImageRoutes(app, store, owners);
+  registerThreadImageRoutes(app, store, owners, readImage);
   app.post("/api/pairing", async () => devices.createPairing());
   app.post("/api/pairing/consume", { bodyLimit: 4096 }, async request => {
     const body = z.object({ code: z.string().min(1).max(128), name: z.string().trim().min(1).max(80).default("手机") }).parse(request.body);

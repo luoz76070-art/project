@@ -2,10 +2,15 @@ import { loadReadingPositions, saveReadingPositions } from "../chat/readingPosit
 import { productBeforeNavigate, isKelivoHost } from "../product/host";
 import { useEffect, useRef, useState } from "react";
 import { VoiceInput } from "../voice/VoiceInput";
-import { ArrowUp, ChevronLeft, CircleStop, Loader2, RefreshCcw } from "lucide-react";
-import type { CodexMessage } from "../../app/types";
+import { ChevronLeft, Loader2, RefreshCcw } from "lucide-react";
+import type { CodexMessage, PendingAttachment } from "../../app/types";
 import { maxMessagesPerThread } from "../../app/config";
-import { MessageBubble, MessageTimeline, GenerationStatus } from "../chat/components";
+import { MessageBubble, MessageTimeline, GenerationStatus, AttachmentTray } from "../chat/components";
+import { ComputerComposer } from "../chat/ComputerComposer";
+import { MessageMediaProvider } from "../chat/MessageImage";
+import { composeMessageWithAttachments, mergeAttachments, revokeAttachmentPreviews } from "../chat/attachments";
+import { uploadAttachments } from "../chat/uploadAttachments";
+import { agentDraftParts, composeAgentDraft } from "./drafts";
 import { apiGet, apiPost, buildUrl } from "../connection/http";
 import { subscribeEvents, type SubscriptionState } from "../connection/subscription";
 import { createSnapshotReducer } from "../connection/snapshotPatch";
@@ -18,7 +23,7 @@ import { groupByProject, sessionInRange, sessionListRefreshMs } from "../threads
 import { ProjectGroups } from "../threads/ProjectGroups";
 import { SessionRangeControl } from "../threads/SessionRangeControl";
 
-type Agent = { id: string; label: string; transport: string };
+type Agent = { id: string; label: string; transport: string; sessionApi?: 1 };
 const friendlyError = (error: unknown) => {
   const status = (error as { status?: number })?.status;
   return status === 401 ? "设备凭证已失效，请返回设置重新配对。" : status === 410 ? "电脑会话暂时离线，请返回会话列表并等待重新连接。" : status === 404 ? "电脑端尚未提供此 Agent，请更新或检查插件配置。"
@@ -37,7 +42,7 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
   const controller = useRef<AbortController | null>(null), requestId = useRef(0);
   useEffect(() => {
     const flush = () => saveAgentDrafts(scope, draftsRef.current);
-    const beforeNavigate = (event: Event) => { if (!flush()) event.preventDefault(); };
+    const beforeNavigate = (event: Event) => { if (!flush()) { event.preventDefault(); setError("草稿保存失败，请保留当前页面并重试。"); } };
     window.addEventListener("pagehide", flush);
     window.addEventListener(productBeforeNavigate, beforeNavigate);
     return () => { window.removeEventListener("pagehide", flush); window.removeEventListener(productBeforeNavigate, beforeNavigate); flush(); };
@@ -54,9 +59,11 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
       const data = await apiGet<{ agents: Agent[] }>(buildUrl(endpoint, "/api/agents"), token, request.signal);
       if (request.id !== requestId.current) return;
       if (!Array.isArray(data.agents)) throw new Error("invalid agents");
-      setAgents(data.agents.filter(item => (item.id === "opencode" && item.transport === "opencode-v2-http-sse") || (item.id === "claude" && item.transport === "claude-mods-http") || (item.id === "deepseek" && item.transport === "deepseek-cordis-http-sse")));
+      const available = data.agents.filter(item => /^[a-z][a-z0-9-]{0,63}$/u.test(item.id) && (item.sessionApi === 1
+        || (item.id === "opencode" && item.transport === "opencode-v2-http-sse") || (item.id === "claude" && item.transport === "claude-mods-http") || (item.id === "deepseek" && item.transport === "deepseek-cordis-http-sse")));
+      setAgents(available);
       const restore = restoreView.current;
-      const target = data.agents.find(item => item.id === restore?.agentId);
+      const target = available.find(item => item.id === restore?.agentId);
       if (target) void loadSessions(target);
       else restoreView.current = null;
     } catch (caught) { if (!request.signal.aborted) setError(friendlyError(caught)); }
@@ -89,6 +96,7 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
   }, [agent?.id, selected?.id, loading, range, query, cursor, sessions.length, endpoint, token]);
   function back() {
+    if (!window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) return;
     if (isKelivoHost) saveAgentView(scope, selected ? agent?.id ?? null : null, null);
     if (selected) { setSelected(null); if (agent) void loadSessions(agent); }
     else if (agent) { ++requestId.current; controller.current?.abort(); setAgent(null); setSessions([]); setCursor(null); setError(""); setLoading(false); }
@@ -100,6 +108,7 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
       <div className="workspace-title"><div><h1>{selected?.title || agent?.label || "选择 Agent"}</h1><p>{selected ? `${agent?.label} · 原服务会话` : "同一连接，分别管理会话"}</p></div></div>
       {!selected && <button className="icon-button" aria-label="刷新 Agent 列表" disabled={loading} onClick={() => void (agent ? loadSessions(agent) : loadAgents())}><RefreshCcw size={18} className={loading ? "spin" : ""} /></button>}
     </header>
+    {error && <p className="connection-notice" role="status">{error}</p>}
     {selected && agent ? <AgentChat key={`${agent.id}:${selected.id}`} endpoint={endpoint} token={token} agent={agent} session={selected}
       scopeKey={scope} draft={drafts[`${agent.id}:${selected.id}`] ?? ""} onDraft={value => setDrafts(current => {
         const key = `${agent.id}:${selected.id}`, next = { ...current };
@@ -107,18 +116,17 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
         return { ...next, [key]: value };
       })} />
       : <section className="agent-session-list">
-        {error && <p className="connection-notice" role="status">{error}</p>}
         {!agent && <>
           <button className="agent-session-row" onClick={onBack}><strong>Codex</strong><small>电脑桌面会话与手机工作台</small></button>
           {agents.map(item => <button className="agent-session-row" key={item.id} onClick={() => void loadSessions(item)}><strong>{item.label}</strong><small>{item.id === "deepseek" ? "查看电脑会话与历史，继续原线程和处理提问" : item.id === "claude" ? "打开已加载插件的会话，查看输出、排队输入与中断" : "打开现有会话，查看输出与处理提问"}</small></button>)}
-          {!loading && !agents.length && !error && <p className="setting-description">电脑端尚未接入其他 Agent。可配置 OpenCode 服务或 Claude Code 插件，然后刷新此页。</p>}
+          {!loading && !agents.length && !error && <p className="setting-description">电脑端尚未接入其他 Agent。配置 DeepSeek Harness、Claude Code 插件或 OpenCode 服务后，可刷新此页。</p>}
         </>}
         {agent && <>
           {agent.id === "deepseek" && <SessionRangeControl range={range} disabled={loading} onChange={next => { setRange(next); void loadSessions(agent, false, next); }} />}
           <form className="search-field" onSubmit={event => { event.preventDefault(); void loadSessions(agent); }}><input aria-label="搜索 Agent 会话" placeholder="搜索会话" value={query} maxLength={200} onChange={event => setQuery(event.target.value)} /><button type="submit" disabled={loading}>搜索</button></form>
-          {agent.id === "deepseek" ? <ProjectGroups key={agent.id} scope={scope} agentId={agent.id} groups={groupByProject(sessions, session => session.directory)} search={query}>
+          {<ProjectGroups key={agent.id} scope={scope} agentId={agent.id} groups={groupByProject(sessions, session => session.directory)} search={query}>
             {session => <button className="agent-session-row" key={session.id} onClick={() => { if (isKelivoHost) saveAgentView(scope, agent.id, session.id); setSelected(session); }}><strong>{session.title || "未命名会话"}</strong><time>{new Date(session.updatedAt).toLocaleString()}</time></button>}
-          </ProjectGroups> : sessions.map(session => <button className="agent-session-row" key={session.id} onClick={() => { if (isKelivoHost) saveAgentView(scope, agent.id, session.id); setSelected(session); }}><strong>{session.title || "未命名会话"}</strong><small>{session.directory}</small><time>{new Date(session.updatedAt).toLocaleString()}</time></button>)}
+          </ProjectGroups>}
           {!loading && !sessions.length && !error && <p>{agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</p>}
           {cursor && <button className="action-button" disabled={loading} onClick={() => void loadSessions(agent, true)}>加载更多会话</button>}
         </>}
@@ -135,7 +143,42 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey }
   const draftSession = `${agent.id}:${session.id}`;
   const pendingDraft = useRef<PendingAgentDraft | null>(loadPendingAgentDraft(scopeKey, draftSession));
   const [stream, setStream] = useState<SubscriptionState>("connecting"), [error, setError] = useState("");
-  const [busy, setBusy] = useState(false), busyRef = useRef(false), [delivery, setDelivery] = useState<"steer" | "queue">(agent.id === "opencode" ? "steer" : "queue");
+  const [busy, setBusy] = useState(false), busyRef = useRef(false);
+  const [uploading, setUploading] = useState(false), uploadScope = useRef<AbortController | null>(null);
+  const uploadInput = useRef<HTMLInputElement>(null), previews = useRef(new Map<string, PendingAttachment>());
+  const input = agentDraftParts(draft);
+  const attachments = input.attachments.map(item => previews.current.get(item.path) ?? item);
+  useEffect(() => {
+    const before = (event: Event) => { if (uploadScope.current) { event.preventDefault(); setError("文件正在上传，请等待完成后离开。"); } };
+    window.addEventListener(productBeforeNavigate, before);
+    return () => { window.removeEventListener(productBeforeNavigate, before); uploadScope.current?.abort(); revokeAttachmentPreviews([...previews.current.values()]); };
+  }, []);
+  useEffect(() => {
+    const paths = new Set(agentDraftParts(draft).attachments.map(item => item.path));
+    for (const [path, item] of previews.current) if (!paths.has(path)) { revokeAttachmentPreviews([item]); previews.current.delete(path); }
+  }, [draft]);
+  function editText(text: string) {
+    const next = composeAgentDraft(text, agentDraftParts(draftRef.current).attachments);
+    if (next.length > 20_000) { setError("消息和附件路径合计不能超过 20,000 字，请缩短后重试。"); return; }
+    onDraft(next);
+  }
+  async function uploadFiles(files: FileList | null) {
+    if (!files?.length || uploadScope.current) return;
+    const controller = new AbortController(); uploadScope.current = controller; setUploading(true); setError("");
+    let uploaded: PendingAttachment[] = [];
+    try {
+      uploaded = await uploadAttachments(endpoint, token, Array.from(files), controller.signal);
+      const current = agentDraftParts(draftRef.current), next = composeAgentDraft(current.text, mergeAttachments(current.attachments, uploaded));
+      if (next.length > 20_000) throw new Error("附件路径与消息过长，请缩短草稿后重新添加附件。");
+      for (const item of uploaded) previews.current.set(item.path, item);
+      onDraft(next);
+    } catch (caught) {
+      revokeAttachmentPreviews(uploaded);
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "文件上传失败，请重试。");
+    } finally {
+      if (!controller.signal.aborted) { uploadScope.current = null; setUploading(false); if (uploadInput.current) uploadInput.current.value = ""; }
+    }
+  }
   const [history, setHistory] = useState<CodexMessage[]>([]), [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const historyRef = useRef(history); historyRef.current = history;
   const historyInitialized = useRef(false), [historyBusy, setHistoryBusy] = useState(false);
@@ -160,7 +203,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey }
       events: { "agent-session": input => {
         const next = verifyAgentSnapshot(reduce(input), agent.id, session.id);
         acceptMessageReceipt(next.submission, next.connected ? next.queue : undefined);
-        setSnapshot(next); setError("");
+        setSnapshot(next);
         if (!historyInitialized.current) { historyInitialized.current = true; setHistoryCursor(next.historyCursor); }
         if (!historyRef.current.length && nearBottom.current && !next.questions.length && !next.permissions.length) requestAnimationFrame(() => viewport.current?.scrollTo({ top: viewport.current.scrollHeight }));
         if (!initialized.current || next.questions.length || next.permissions.length) requestAnimationFrame(() => {
@@ -234,41 +277,48 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey }
     } catch (caught) { if (!controller.signal.aborted) setError(friendlyError(caught)); }
     finally { if (!controller.signal.aborted) { historyLock.current = false; setHistoryBusy(false); } }
   }
-  const messages = [...new Map([...history, ...(agent.id === "deepseek" && history.length ? [] : snapshot?.messages ?? [])].map(message => [message.id, message])).values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id));
+  const messages = [...new Map([...history, ...(agent.id === "deepseek" && history.length ? [] : snapshot?.messages ?? [])].map(message => [message.id, message])).values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   const unresolved = snapshot?.submission && snapshot.submission.delivery !== "confirmed";
   const queuedSubmission = snapshot?.queue?.items.some(item => item.clientMessageId === snapshot.submission?.clientMessageId);
-  const sendEnabled = Boolean(control?.canSend && !busy && !unresolved && !pendingDraft.current && draft.trim());
+  const sendEnabled = Boolean(control?.canSend && !busy && !uploading && !unresolved && !pendingDraft.current && (input.text.trim() || attachments.length));
+  function send(delivery: "steer" | "queue" = "queue") {
+    if (!sendEnabled || (delivery === "steer" && !control?.canSteer)) return;
+    void operate("message", "/messages", { text: composeMessageWithAttachments(input.text, attachments), delivery });
+  }
   const waiting = Boolean(snapshot?.questions.length || snapshot?.permissions.length);
   const progress = !online ? "正在核验任务状态" : waiting ? "等待你的处理" : snapshot?.activity === "working" ? `${agent.label} 正在执行` : snapshot?.activity === "outputting" ? `${agent.label} 正在输出` : `${agent.label} 正在思考`;
   return <section className="agent-chat">
     <div className="agent-connection" role="status"><span className={`status-dot ${online ? "ok" : "error"}`} />{online ? `${agent.label} 已连接` : stream === "unauthorized" ? "凭证已失效，请重新配对" : stream === "paused" ? "连接已暂停，返回前台后恢复" : "正在恢复连接…"}</div>
     <div className="messages-viewport" ref={viewport} onScroll={() => { const element = viewport.current; if (element) { nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100; reading.current[draftSession] = element.scrollTop; } }}>
-      {snapshot?.partialText && <p className="connection-notice" role="status">{agent.id === "opencode" ? "已从连接时刻继续同步，当前文本段结束后会补齐前文。" : agent.id === "deepseek" ? "当前同步用户与助手文本，可加载更早消息；单条长文本可能截断，附件及工具过程请在电脑查看。" : "当前显示最近会话文本；更早历史或连接前的部分输出尚未同步。"}</p>}
-      {agent.id === "claude" && <p className="setting-description">消息会在当前任务结束后处理。同步到手机的提问可在下方回答；审批仅作用于本次请求。其余提示请在电脑处理。</p>}
-      {agent.id === "deepseek" && <p className="setting-description">查看历史不会启动任务；发送后继续原会话，运行中可追加。可在下方回答提问，查看完整工具参数后允许一次或拒绝。</p>}
+      {(snapshot?.partialText || agent.id === "claude" || agent.id === "deepseek") && <details className="agent-capabilities"><summary>会话能力与同步范围</summary>
+        {snapshot?.partialText && <p>当前显示已同步的消息与工具记录，长内容可能截断；更早历史以本通道提供的加载入口为准。</p>}
+        {agent.id === "claude" && <p>消息在当前任务结束后处理；提问和单次审批可在手机处理。</p>}
+        {agent.id === "deepseek" && <p>查看历史不会启动任务；发送后继续原会话，运行中可引导或排队。权限请求须核对完整参数后允许一次或拒绝。</p>}
+      </details>}
       {snapshot?.operationError && <p className="connection-notice" role="status">{snapshot.operationError.code === "rejected" ? "电脑会话拒绝了本次操作，输入内容已保留。" : "操作尚未送达电脑便已过期，输入内容已保留。"}</p>}
       {historyCursor && (agent.id === "deepseek" || history.length < 190) && <button className="history-button" disabled={historyBusy} onClick={() => void older()}>{historyBusy ? "读取历史中…" : "加载更早的消息"}</button>}
       {agent.id === "deepseek" && history.length > 0 && <button className="history-button" disabled={historyBusy} onClick={() => { setHistory([]); setHistoryCursor(snapshot?.historyCursor ?? null); nearBottom.current = true; requestAnimationFrame(() => viewport.current?.scrollTo({ top: viewport.current.scrollHeight })); }}>正在浏览历史 · 返回最新</button>}
       {agent.id !== "deepseek" && history.length >= 190 && <p className="setting-description">已达到手机历史显示上限，更早记录可在电脑查看。</p>}
-      <MessageTimeline messages={messages} running={snapshot?.status === "running"} renderMessage={(message, expandToolDetails) => <MessageBubble message={message} expandToolDetails={expandToolDetails} assistantLabel={agent.label} smooth={false} smoothPending={false} onSmoothDone={() => {}} onCopy={() => void writeClipboard(message.text)} />} />
+      <MessageMediaProvider endpoint={endpoint} token={token} agentId={agent.id} sessionId={session.id}>
+        <MessageTimeline messages={messages} running={snapshot?.status === "running"} renderMessage={(message, expandToolDetails) => <MessageBubble message={message} expandToolDetails={expandToolDetails} assistantLabel={agent.label} smooth={false} smoothPending={false} onSmoothDone={() => {}} onCopy={() => void writeClipboard(message.text)} />} />
+      </MessageMediaProvider>
       {snapshot?.questions.map(question => <AgentQuestions key={question.id} request={question} agentLabel={agent.label} disabled={!online || busy} onRespond={answers => operate("question", `/questions/${question.id}/respond`, { answers }, question.id)} />)}
       {snapshot?.permissions.map(permission => <PermissionCard key={permission.id} permission={permission} agentLabel={agent.label} disabled={!online || busy} onRespond={decision => operate("permission", `/permissions/${permission.id}/respond`, { decision }, permission.id)} />)}
-      {snapshot?.queue && <AgentQueue queue={snapshot.queue} disabled={!online || busy} onCancel={id => operate("queue-cancel", `/queue/${encodeURIComponent(id)}/cancel`, {}, id)} />}
       {snapshot?.status === "running" && <GenerationStatus label={progress} detail={online ? "与原服务会话同步" : "连接恢复后核验运行状态"} tone={waiting ? "approval" : snapshot.activity === "outputting" ? "outputting" : "thinking"} anchorRole="assistant" />}
       {!snapshot && <p className="inline-loading" role="status"><Loader2 size={18} className="spin" />正在读取原会话…</p>}
     </div>
     <footer className="composer-panel agent-composer">
       {error && <p className="connection-notice" role="status">{error}</p>}
       {unresolved && !queuedSubmission && <p className="connection-notice" role="status">{snapshot?.submission?.delivery === "uncertain" ? "提交结果未知，正在核对；请勿重复发送。" : "已提交，等待服务确认。"}</p>}
-      {snapshot?.status === "running" && <div className="agent-running">
-        {(agent.id === "deepseek" || control?.canSteer) ? <div className="agent-delivery" aria-label="消息送达方式">{(["steer", "queue"] as const).map(value => <button type="button" key={value} disabled={!control?.canSend || (value === "steer" && !control.canSteer) || busy || Boolean(unresolved)} aria-pressed={delivery === value} className={delivery === value ? "active" : ""} onClick={() => setDelivery(value)}>{value === "steer" ? "引导当前任务" : "排队处理"}</button>)}</div> : <span>{progress}</span>}
-        <button className="icon-button" aria-label="打断 Agent 当前任务" disabled={!control?.canInterrupt || busy} onClick={() => void operate("interrupt", "/interrupt", {})}><CircleStop size={18} /></button>
-      </div>}
-      <form className="agent-input" onSubmit={event => { event.preventDefault(); if (sendEnabled) void operate("message", "/messages", { text: draft, delivery: agent.id === "deepseek" && !control?.canSteer ? "queue" : delivery }); }}>
-        <textarea aria-label="发送给当前 Agent 会话" placeholder={online ? `发送给 ${agent.label}…` : "草稿已保留，等待恢复连接…"} rows={2} value={draft} maxLength={20_000} onChange={event => onDraft(event.target.value)} />
-      <VoiceInput endpoint={endpoint} token={token} draft={draft} onDraft={onDraft} />
-        <button className="icon-button" aria-label="发送 Agent 消息" disabled={!sendEnabled} type="submit"><ArrowUp size={20} /></button>
-      </form>
+      {snapshot?.queue && <AgentQueue queue={snapshot.queue} disabled={!online || busy} onCancel={id => operate("queue-cancel", `/queue/${encodeURIComponent(id)}/cancel`, {}, id)} />}
+      {attachments.length > 0 && <AttachmentTray attachments={attachments} onRemove={id => onDraft(composeAgentDraft(input.text, attachments.filter(item => item.id !== id)))} />}
+      <input ref={uploadInput} type="file" multiple className="hidden-file-input" onChange={event => void uploadFiles(event.target.files)} />
+      <ComputerComposer draft={input.text} onDraft={editText} onSend={send} onStop={() => void operate("interrupt", "/interrupt", {})} onUpload={() => uploadInput.current?.click()}
+        voice={<VoiceInput endpoint={endpoint} token={token} draft={input.text} onDraft={editText} />} label="发送给当前 Agent 会话"
+        placeholder={online ? `向 ${agent.label} 发送消息` : "草稿已保留，等待恢复连接…"} status={snapshot?.status === "running" ? progress : `${agent.label} · 当前会话`}
+        uploading={uploading} uploadDisabled={!token} busy={busy} running={snapshot?.status === "running"} hasContent={Boolean(input.text.trim() || attachments.length)}
+        canSend={sendEnabled} canStop={Boolean(control?.canInterrupt)} deliveries={{ steer: sendEnabled && Boolean(control?.canSteer), queue: sendEnabled }}
+        maxLength={Math.max(0, 20_000 - (draft.length - input.text.length))} />
     </footer>
   </section>;
 }

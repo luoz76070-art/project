@@ -6,22 +6,26 @@ import { imageSource } from "./imageSources";
 
 type ImageLoader = (path: string, signal: AbortSignal) => Promise<string>;
 const ImageContext = createContext<ImageLoader | null>(null);
-export function MessageMediaProvider({ endpoint, token, threadId, children }: { endpoint: string; token: string; threadId: string; children: ReactNode }) {
+type MediaTarget = { threadId: string; agentId?: never; sessionId?: never } | { threadId?: never; agentId: string; sessionId: string };
+export function MessageMediaProvider({ endpoint, token, threadId, agentId, sessionId, children }: { endpoint: string; token: string; children: ReactNode } & MediaTarget) {
+  const route = agentId ? `/api/agents/${encodeURIComponent(agentId)}/sessions/${encodeURIComponent(sessionId!)}/images`
+    : threadId ? `/api/threads/${encodeURIComponent(threadId)}/images` : "";
   const loader = useMemo<ImageLoader>(() => async (path, signal) => {
-    if (!threadId || !token) throw new Error("请先连接电脑并打开图片所在会话。");
+    if (!route || !token) throw new Error("请先连接电脑并打开图片所在会话。");
     try {
-      const result = await apiPost<{ dataUrl: string }>(buildUrl(endpoint, `/api/threads/${encodeURIComponent(threadId)}/images`), token, { path }, signal);
+      const result = await apiPost<{ dataUrl: string }>(buildUrl(endpoint, route), token, { path }, signal);
       if (typeof result.dataUrl !== "string" || imageSource(result.dataUrl).kind !== "remote" || !result.dataUrl.startsWith("data:image/")) throw new Error("图片响应无效。");
       return result.dataUrl;
     } catch (error) {
       const status = error && typeof error === "object" && "status" in error ? error.status : 0;
       if (status === 403) throw new Error("图片位于此会话项目之外，请将图片放到项目目录再引用。");
       if (status === 404) throw new Error("未找到图片，或电脑网关尚未升级到支持图片的版本。");
+      if (status === 409) throw new Error("图片会话尚未连接，请等待连接恢复后重试。");
       if (status === 413) throw new Error("图片超过 8 MB，请压缩后重试。");
       if (status === 415) throw new Error("暂不支持此图片格式，请使用 PNG、JPEG、GIF、WebP 或 AVIF。");
       throw error;
     }
-  }, [endpoint, token, threadId]);
+  }, [endpoint, token, route]);
   return <ImageContext.Provider value={loader}>{children}</ImageContext.Provider>;
 }
 
