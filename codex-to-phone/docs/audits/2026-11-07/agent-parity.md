@@ -33,7 +33,7 @@ DeepSeek0.2.6对原生tool/call、tool/result及PTC事件按原seq投影，实�
 
 `0.1.7-native-preview` / code9，APK 60,978,859字节，SHA256 `2906505998d00021252aac5ec1dcb44c62ae09fe939ab7c38bb2f8912bd3c4ed`；同code8预览证书支持覆盖。对应源码 21,701,513字节，SHA256 `86b75bd3a10e738fcd65f06650d0d02ae340b047b369096421b9c2ccf879de72`。配套独立网关及DeepSeek0.2.6/Claude0.1.2归档、逐文件SHA与说明位于[0.1.7版本目录](../../../releases/android/kelivo-preview/0.1.7/)。源码与APK不含本机配置、凭证、用户数据或签名私钥。整合AGPL及原MIT/第三方归属保留。
 
-GitHub及独立App更新源交付核验尚在进行；App清单按latest9/previous8、源码先于APK发布，原四通道保持。最终公开回执见[agent-parity-verification.json](agent-parity-verification.json)。手机应从「设置 → 应用更新」升级，Android安装器需用户确认。
+GitHub产品提交`415f41961edaaa9bfd4cea0e08ab5b830017a017`及annotated标签`codex-to-phone-v0.1.7-native-preview`已正常原子推送，远端main和标签展开值匹配；版本目录10份文件完整回下载与本地逐字节一致，5921源码文件的Git blob及模式与归档匹配。独立App更新源latest9/previous8已发布，源码先于APK；APK和源码完整公网回下载一致，Range206、CORS及原四通道保持通过。实际App清单解析函数确认code8识别code9。公开回执见[agent-parity-verification.json](agent-parity-verification.json)。手机从「设置 → 应用更新」升级，Android安装器需用户确认。首次发布核验脚本沿用旧元数据目录导致本地路径错误，修正后完成；APK已全量核验的结果仅在ETag、长度和SHA保持后复用，原失败日志保留。
 
 ## 运行与真实验收
 

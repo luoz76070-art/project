@@ -207,7 +207,7 @@ App内更新本轮交付核验通过：见 `docs/audits/2026-11-06/kelivo-update
 - [x] 固定原接口证据与共享组件边界；DeepSeek/Claude/OpenCode工具投影和未来SessionAdapter入口。
 - [x] 共用composer/附件/语音/图片及独立草稿、未知保护；图片SSE权威目录/所有权/撤销/配额回归。
 - [x] 完整verify、官方隔离、实际浏览器窄屏/深色/150%及输入操作；code9签名/原生lint/340测试/成品核验。
-- [ ] GitHub与App更新源双交付最终核验。
+- [x] GitHub与App更新源双交付最终核验：code9/previous8；10份GitHub文件及公网APK/源码完整回下载一致，5921源码与提交匹配。
 - [ ] 在线网关/原宿主插件独立切换，以及code9手机真实联动；旧桥接离线不冒充通过。
 
 证据：docs/audits/2026-11-07/agent-parity.md；总任务继续in_progress。

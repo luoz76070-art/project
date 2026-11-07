@@ -26,7 +26,7 @@ Kelivo 整合候选（2026-11-04，现有远控视觉试迁移已实施）：用
 
 ## Trellis 与当前优化
 
-本轮[所有电脑Agent统一体验](audits/2026-11-07/agent-parity.md)：code9 `0.1.7-native-preview` 将Codex的输入/工具/图片/附件/语音及偏好共享至DeepSeek、Claude、OpenCode和未来SessionAdapter。DeepSeek0.2.6/Claude0.1.2可见工具投影、Agent项目图片鉴权及草稿保护接线。根verify手机169/后端414/入口8、原生340、完整lint0错误（56/1既有警告）、四通道/未来夹具和官方隔离验证通过；[版本目录](../releases/android/kelivo-preview/0.1.7/)交付新APK/源码/网关/两插件。双源发布回执正在核验；运行网关仍旧版、DeepSeek桥接离线，在线切换和手机code9真实联动待验；整体任务in_progress。
+本轮[所有电脑Agent统一体验](audits/2026-11-07/agent-parity.md)：code9 `0.1.7-native-preview` 将Codex的输入/工具/图片/附件/语音及偏好共享至DeepSeek、Claude、OpenCode和未来SessionAdapter。DeepSeek0.2.6/Claude0.1.2可见工具投影、Agent项目图片鉴权及草稿保护接线。根verify手机169/后端414/入口8、原生340、完整lint0错误（56/1既有警告）、四通道/未来夹具和官方隔离验证通过；[版本目录](../releases/android/kelivo-preview/0.1.7/)交付新APK/源码/网关/两插件。双源交付已通过：GitHub产品提交`415f419`及preview标签匹配，10份版本文件完整下载一致、5921源码匹配；App源latest9/previous8、APK/源码完整下载及原四通道保持通过。运行网关仍旧版、DeepSeek桥接离线，在线切换和手机code9真实联动待验；整体任务in_progress。
 
 本轮[执行说明常显修正](audits/2026-11-07/execution-notes.md)：用户已真机确认code7图片/大图返回、字号、原连接/草稿/浅深主题正常；code7折叠范围未通过，现已修正。code8 `0.1.6-native-preview` 保留说明正文，仅连续工具命令/输出折叠，点击一次查看详情，隐藏工具偏好不隐藏说明。根verify手机165/后端407/入口8、原生340、完整lint0错误（56/1既有警告）通过；APK同签名且5个Web文件匹配。对应源码和APK同步现有GitHub及独立App更新源，实际交付回执见本轮审计。2026-11-07用户回复「已升级，显示符合预期」，code8升级与新折叠范围真机确认通过，本轮闭环；手机安装SHA未独立回拉，整体59组及原Desktop新建仍未完成，[后续计划](plans/2026-11-06-kelivo-device-parity.md)待用户决定启动。
 

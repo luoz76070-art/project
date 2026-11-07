@@ -101,8 +101,107 @@
     "opencode": "not configured"
   },
   "delivery": {
-    "github": "pending",
-    "appSource": "pending"
+    "github": {
+      "status": "passed",
+      "verifiedAt": "2026-11-07T03:01:47.511713+00:00",
+      "productCommit": "415f41961edaaa9bfd4cea0e08ab5b830017a017",
+      "annotatedTag": "codex-to-phone-v0.1.7-native-preview",
+      "remoteRefsVerified": true,
+      "allArtifactBytesIdentical": true,
+      "sourceBlobsAndModesMatchCommit": 5921,
+      "files": [
+        {
+          "file": "README.md",
+          "bytes": 4063,
+          "sha256": "f5b3095023141890eff14019aeb93fa5c8439c94d2843c66163658b0ddcdd454",
+          "byteIdentical": true
+        },
+        {
+          "file": "SHA256SUMS",
+          "bytes": 808,
+          "sha256": "40cea0d905a7c83f9b9c2043d6989302683bfaf1c7dff55d087b6216496d1e42",
+          "byteIdentical": true
+        },
+        {
+          "file": "gateway-package.json",
+          "bytes": 4114,
+          "sha256": "225b290fae4e48a63daf094cf835115f31a6a1f487588eb28ec7badf12c98f38",
+          "byteIdentical": true
+        },
+        {
+          "file": "mobile-claude-0.1.2.tar.gz",
+          "bytes": 11259,
+          "sha256": "5d6953a3fe2004646c02dd691fbf78586d5a676566d617d3de9a1ce91d94a877",
+          "byteIdentical": true
+        },
+        {
+          "file": "mobile-codex-gateway-0.1.7-preview.tar.gz",
+          "bytes": 335202,
+          "sha256": "a1e17bee0f6a90e5a72f25378d6ec10db5b6126697c46f9a0740d83c3c86babe",
+          "byteIdentical": true
+        },
+        {
+          "file": "mobile-codex-kelivo-0.1.7-preview-arm64.apk",
+          "bytes": 60978859,
+          "sha256": "2906505998d00021252aac5ec1dcb44c62ae09fe939ab7c38bb2f8912bd3c4ed",
+          "byteIdentical": true
+        },
+        {
+          "file": "mobile-codex-kelivo-0.1.7-preview-arm64.apk.json",
+          "bytes": 696,
+          "sha256": "6fc1be1153c6f7c763c90ebfe998552e9280c15870db35c51cffac767b77adde",
+          "byteIdentical": true
+        },
+        {
+          "file": "mobile-codex-kelivo-0.1.7-preview-source.tar.gz",
+          "bytes": 21701513,
+          "sha256": "86b75bd3a10e738fcd65f06650d0d02ae340b047b369096421b9c2ccf879de72",
+          "byteIdentical": true
+        },
+        {
+          "file": "mobile-deepseek-0.2.6.tar.gz",
+          "bytes": 21446,
+          "sha256": "31b941e95743dcc4e012e31cbffc6739a8a067f90cb989d5584860713156e7eb",
+          "byteIdentical": true
+        },
+        {
+          "file": "source-package.json",
+          "bytes": 451,
+          "sha256": "3708568ea1f1859369a81f5534275e40e7adbb199afe9adb5f2f1c447ea5e3de",
+          "byteIdentical": true
+        }
+      ]
+    },
+    "appSource": {
+      "status": "passed",
+      "verifiedAt": "2026-11-07T02:57:24.496701+00:00",
+      "latestVersionCode": 9,
+      "previousVersionCode": 8,
+      "previousSourceCode8Retained": true,
+      "apkAndSourceCompleteDownloadsByteIdentical": true,
+      "apkRangeStatus": 206,
+      "cors": "*",
+      "oldChannelsUnchanged": 4,
+      "realAppManifestParser": {
+        "status": "passed",
+        "checkedAt": "2026-11-07T02:53:26.448Z",
+        "source": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/latest.json",
+        "requestUrl": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/latest.json?t=1794020006100",
+        "currentCode8GetsUpdate": true,
+        "manifest": {
+          "platform": "android",
+          "versionCode": 9,
+          "versionName": "0.1.7-native-preview",
+          "apkUrl": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/mobile-codex-0.1.7-native-preview-2906505998d0.apk",
+          "size": 60978859,
+          "sha256": "2906505998d00021252aac5ec1dcb44c62ae09fe939ab7c38bb2f8912bd3c4ed",
+          "notes": "统一所有电脑 Agent 的消息、工具摘要、图片大图、附件、语音和独立草稿；需同步更新配套电脑网关与原宿主插件。",
+          "mandatory": false,
+          "publishedAt": "2026-11-07T02:49:25Z"
+        }
+      },
+      "firstVerificationFailure": "local verification script used the old source metadata directory; corrected and completed; APK full-byte result reused only after unchanged ETag and SHA verification"
+    }
   },
   "phoneCode9": "awaiting user",
   "realAgentLink": "awaiting runtime switch and user confirmation",
