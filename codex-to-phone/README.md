@@ -11,7 +11,7 @@
 [![Flutter](https://img.shields.io/badge/Flutter-3.47.6-02569B?logo=flutter)](apps/kelivo)
 [![License](https://img.shields.io/badge/整合发行-AGPL--3.0-555)](apps/kelivo/LICENSE)
 
-[下载](#下载) · [界面预览](#界面预览) · [开始使用](#开始使用) · [开发与构建](#开发与构建) · [验证记录](docs/audits/2026-11-07/agent-parity.md)
+[下载](#下载) · [界面预览](#界面预览) · [开始使用](#开始使用) · [开发与构建](#开发与构建) · [验证记录](docs/audits/2026-11-07/mobicodex-branding.md)
 
 </div>
 
