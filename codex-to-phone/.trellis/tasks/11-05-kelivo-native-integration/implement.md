@@ -219,6 +219,6 @@ App内更新本轮交付核验通过：见 `docs/audits/2026-11-06/kelivo-update
 - [x] 原生IPC未决输入/问题/审批及队列预检，私有备份与固定候选逐文件核验。
 - [x] 官方原desktop profile加载桥接，正常停止并切换网关；原宿主PID/配置/设备保持。
 - [x] 本地/公网/重连/能力/图片77项通过；用户确认code9与原会话/正文，手机其他交互另验。
-- [ ] 新电脑包、审计与Git交付，保留旧code9手机产物和标签；最终远端结果见独立回执。
+- [x] 新电脑包、审计与Git交付：cef6890已推送；GitHub六份补充及11个源码全量下载一致，原code9十文件/标签保留。最终文档与preview标签同步单独核对。
 
 证据：`docs/audits/2026-11-07/agent-parity-runtime.md`；手机后续计划为`docs/plans/2026-11-07-agent-phone-acceptance.md`，待用户启动。总体in_progress、59组完整验收不变。

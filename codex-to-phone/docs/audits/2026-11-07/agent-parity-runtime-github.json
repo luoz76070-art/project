@@ -1,11 +1,162 @@
 {
   "date": "2026-11-07",
-  "status": "pending-upload-and-download-verification",
-  "scope": "code9 desktop compatibility supplement only",
+  "status": "passed",
+  "verifiedAt": "2026-11-07T03:53:18.550401+00:00",
   "repository": "luoz76070-art/project",
-  "baselineCommit": "6e52efe95de92a72c8eef79dea55a992c5378c14",
+  "sourceCommit": "cef68905dda13d7d96fbc22c8a5c051847283651",
+  "mainAtArtifactVerification": "cef68905dda13d7d96fbc22c8a5c051847283651",
   "directory": "codex-to-phone/releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview",
+  "artifactsDownloaded": 6,
+  "sourceFilesDownloadedAndBlobMatched": 11,
+  "files": [
+    {
+      "kind": "artifact",
+      "file": "releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/README.md",
+      "bytes": 2739,
+      "sha256": "ace8420f352bef00a36dc010b091d0628c132f96c5e3419e8605d8119d11649f",
+      "passed": true
+    },
+    {
+      "kind": "artifact",
+      "file": "releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/SHA256SUMS",
+      "bytes": 449,
+      "sha256": "bd94b0467a51be76c6ba9f7ff155d13c51807577de57b7a0491de0605103b642",
+      "passed": true
+    },
+    {
+      "kind": "artifact",
+      "file": "releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/mobile-codex-gateway-deepseek-0.2.7-preview.tar.gz",
+      "bytes": 333933,
+      "sha256": "52eb709485dce92dc5da0b9de3694f1a0f217efbd4ff96d45e54e27f9da19997",
+      "passed": true
+    },
+    {
+      "kind": "artifact",
+      "file": "releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/mobile-deepseek-0.2.7.tar.gz",
+      "bytes": 21334,
+      "sha256": "487288a5f22a15fb62582313ad20b8c64cdf68bf5de31d518d32b7652a9b024c",
+      "passed": true
+    },
+    {
+      "kind": "artifact",
+      "file": "releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/package.json",
+      "bytes": 5945,
+      "sha256": "32a11bd4233d0b9121b6cb48c724fba5459090161366e9d199d2a50035686dc3",
+      "passed": true
+    },
+    {
+      "kind": "artifact",
+      "file": "releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/source.patch.gz",
+      "bytes": 12686,
+      "sha256": "c694ba11b1baf79980dfc05d987e326e2476eb71773e37e68d0b3ecc17e33574",
+      "passed": true
+    },
+    {
+      "kind": "source",
+      "file": ".trellis/spec/relay/backend/deepseek-contract.md",
+      "bytes": 22339,
+      "sha256": "9956b91ddfe839586fd84109d21a42c1296c5ec700cc76ec0a638431b1ceffa3",
+      "passed": true
+    },
+    {
+      "kind": "source",
+      "file": "apps/relay/src/agents/deepSeekProtocol.ts",
+      "bytes": 3729,
+      "sha256": "09848520a209c20f4be9cdb69b370165973a1578ac1684ad9ebc85a72b151df4",
+      "passed": true
+    },
+    {
+      "kind": "source",
+      "file": "apps/relay/tests/deepSeek.test.mjs",
+      "bytes": 64952,
+      "sha256": "b60e705f7a73d8975857fa79f904dc2b981430503cd350d0738aa4d9ccd013d0",
+      "passed": true
+    },
+    {
+      "kind": "source",
+      "file": "plugins/mobile-deepseek/README.md",
+      "bytes": 9017,
+      "sha256": "efd299a9babc3b6b45f7217a71e44f8d219783b29bcaa5d648ea0d4237b39fbf",
+      "passed": true
+    },
+    {
+      "kind": "source",
+      "file": "plugins/mobile-deepseek/bridge.mjs",
+      "bytes": 23691,
+      "sha256": "f30b9092a8ce4e1115dea3555e196ba452ef8b196d4ba78def15bba2117f2b7b",
+      "passed": true
+    },
+    {
+      "kind": "source",
+      "file": "plugins/mobile-deepseek/interactions.mjs",
+      "bytes": 13176,
+      "sha256": "51b12ae783a235e5a0b0ac0aabf3fc47f06acc2fc7e1735d69827ea7afb65b31",
+      "passed": true
+    },
+    {
+      "kind": "source",
+      "file": "plugins/mobile-deepseek/messages.mjs",
+      "bytes": 5064,
+      "sha256": "8e2dc768e3e9e385f68fddbbf353792df57e382c566b7c4d5cfd56761c0a7f07",
+      "passed": true
+    },
+    {
+      "kind": "source",
+      "file": "plugins/mobile-deepseek/package.json",
+      "bytes": 680,
+      "sha256": "3f39ea6c775283ebd185cbc2c8b46d3fe718c2c79d8f7be339887dd760e0d29f",
+      "passed": true
+    },
+    {
+      "kind": "source",
+      "file": "scripts/check-deepseek-history.mjs",
+      "bytes": 9596,
+      "sha256": "a24dbd77be75feea71fbd705222895de84836cb6fc808b3c0935324cf310c802",
+      "passed": true
+    },
+    {
+      "kind": "source",
+      "file": "scripts/check-deepseek-interactions.mjs",
+      "bytes": 15223,
+      "sha256": "f7eb1fb4d6c921fb395380bd578e510b447b7570892039b72739d44a62f8c993",
+      "passed": true
+    },
+    {
+      "kind": "source",
+      "file": "scripts/check-deepseek-runtime.mjs",
+      "bytes": 18116,
+      "sha256": "77b3176fd0554adc86bded7c01f37eb9e8cd3f4d6ba5bb1a4459baa9274441d0",
+      "passed": true
+    }
+  ],
+  "archiveFilesVerified": 16,
+  "sourcePatchAppliedInIsolatedIndex": true,
+  "sourcePatchFilesVerified": 11,
+  "knownPrivateCredentialScanMatches": 0,
   "androidVersionCode": 9,
-  "originalAndroidReleaseFilesUnchanged": 10,
-  "newPreviewTag": "codex-to-phone-v0.2.7-deepseek-preview"
+  "originalAndroidReleaseFilesUnchanged": [
+    "README.md",
+    "SHA256SUMS",
+    "gateway-package.json",
+    "mobile-claude-0.1.2.tar.gz",
+    "mobile-codex-gateway-0.1.7-preview.tar.gz",
+    "mobile-codex-kelivo-0.1.7-preview-arm64.apk",
+    "mobile-codex-kelivo-0.1.7-preview-arm64.apk.json",
+    "mobile-codex-kelivo-0.1.7-preview-source.tar.gz",
+    "mobile-deepseek-0.2.6.tar.gz",
+    "source-package.json"
+  ],
+  "originalPreviewTag": "codex-to-phone-v0.1.7-native-preview",
+  "originalPreviewTagCommit": "415f41961edaaa9bfd4cea0e08ab5b830017a017",
+  "originalPreviewTagUnchanged": true,
+  "newPreviewTag": "codex-to-phone-v0.2.7-deepseek-preview",
+  "newPreviewTagVerification": "recorded after final documentation push in local audit output; artifact commit above is immutable",
+  "appUpdateSource": {
+    "latestCode": 9,
+    "previousCode": 8,
+    "changedByThisSupplement": false
+  },
+  "githubReleaseCreated": false,
+  "modelRequests": 0,
+  "actualApprovals": 0
 }

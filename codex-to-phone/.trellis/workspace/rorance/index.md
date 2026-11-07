@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 59
+- **Total Sessions**: 60
 - **Last Active**: 2026-11-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~46 | Active |
+| `journal-2.md` | ~93 | Active |
 | `journal-1.md` | ~1988 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 60 | 2026-11-07 | code9网关切换与DeepSeek0.2.7原桥接恢复 | `cef6890` | `main` |
 | 59 | 2026-11-07 | code8执行说明常显与双通道交付 | `b930163` | `main` |
 | 58 | 2026-11-07 | code7配套网关上线与真机验收接续 | - | `main` |
 | 57 | 2026-11-07 | code7 App 内更新补发 | - | `main` |

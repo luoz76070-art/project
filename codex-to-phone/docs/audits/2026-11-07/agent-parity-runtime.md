@@ -35,7 +35,7 @@
 
 [电脑兼容补充目录](../../../releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/)包含实际固定安装程序的两份归档、基线源码补丁、逐文件元数据和 SHA256SUMS。补丁从 `6e52efe95de92a72c8eef79dea55a992c5378c14` 重建 11 个修改源码/契约文件，独立索引应用后与工作区 SHA 一致。原 code9 十份产物和原 preview 标签保持不变，App 更新源继续 latest9/previous8。
 
-GitHub 推送与远端回下载结果由[独立交付回执](agent-parity-runtime-github.json)记录；不创建 GitHub Release，不移动旧标签。
+源码与补充包提交 `cef68905dda13d7d96fbc22c8a5c051847283651` 已推送原 main，六份补充文件与 11 个修改源码已从 GitHub 完整回下载，大小/SHA/全部字节一致；16 个归档文件和补丁重建检查通过。原 code9 十份文件及指向 `415f419` 的旧 preview 标签保持。结果见[独立交付回执](agent-parity-runtime-github.json)；最终记录同步后打新的 `codex-to-phone-v0.2.7-deepseek-preview` 标签，不创建 GitHub Release，不移动旧标签。
 
 ## 验收边界
 

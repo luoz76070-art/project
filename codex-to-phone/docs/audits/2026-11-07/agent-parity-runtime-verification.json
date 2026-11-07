@@ -533,7 +533,10 @@
   "delivery": {
     "directory": "releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview",
     "originalAndroidAndUpdateSourceKeptAtCode9": true,
-    "githubVerification": "pending"
+    "githubVerification": "passed",
+    "sourceCommit": "cef68905dda13d7d96fbc22c8a5c051847283651",
+    "artifactsFullDownloadVerified": 6,
+    "sourceFilesFullDownloadVerified": 11
   },
   "externalModelRequests": 0,
   "actualUserApprovals": 0,
