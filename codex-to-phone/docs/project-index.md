@@ -26,7 +26,7 @@ Kelivo 整合候选（2026-11-04，现有远控视觉试迁移已实施）：用
 
 ## Trellis 与当前优化
 
-最新[MobiCodex 品牌与更新](audits/2026-11-07/mobicodex-branding.md)：code10 / 0.1.8-native-preview 使用选定电脑/手机图标，用户可见名称统一为 MobiCodex；保留应用 ID、签名与数据协议。通过 App 内 APK 覆盖更新交付，手机安装另验；不切换在线网关。
+最新[MobiCodex 品牌与更新](audits/2026-11-07/mobicodex-branding.md)：code10 / 0.1.8-native-preview 使用选定电脑/手机图标，用户可见名称统一为 MobiCodex；保留应用 ID、签名与数据协议。通过 App 内 APK 覆盖更新交付，2026-11-07用户已确认「已升级，图标名称与原配置都正常」，本轮闭环；安装APK/SHA未独立回拉，完整59组验收保持原状态，在线网关未改变。
 
 最新[图片引用修复](audits/2026-11-07/image-reference-fix.md)：定位真机403为隔离副本图片超出原会话cwd。共享网关增加助手Markdown精确文件引用授权，Codex原快照/有界历史及Agent同设备订阅/历史均覆盖；后端422、手机169与完整verify通过。用户批准后固定网关已上线，本地/公网69项断言通过，原指定PNG321,193字节三种路径逐字节一致；原宿主/配置与DeepSeek桥接保持。首次stop旧进程未退出，经官方手机桥接组件重载后自然退出，失败与恢复过程均保留。手机保持code9，无需重装，[电脑修复补充](../releases/android/kelivo-preview/0.1.7/desktop-image-reference-preview/)独立交付；用户已确认「图片已显示，大图和返回正常」，本轮修复闭环。其他通道手机交互及59组完整验收按原计划待启动，总整合任务继续in_progress。
 

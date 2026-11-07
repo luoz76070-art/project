@@ -243,6 +243,6 @@ App内更新本轮交付核验通过：见 `docs/audits/2026-11-06/kelivo-update
 - [x] 用户可见文案、系统入口、更新页、上游归属与新导出品牌；内置技能精确旧 SHA 升级保护。
 - [x] 最终复核补齐新旧备份扫描、聊天工具显示与导出文件名；预 Android12 启动引用避开远控同名资源。
 - [x] 最终原生复跑/成品核验、匹配源码与 GitHub/App 更新源双交付。
-- [ ] 用户确认 code10 覆盖安装、桌面图标/名称、关于页与原数据/连接。
+- [x] 用户对 code10 覆盖安装、桌面图标/名称、关于页与原连接/AI配置的验收问题回复「已升级，图标名称与原配置都正常」；按用户反馈通过，安装APK/SHA未独立回拉。
 
-code10交付回执：源码76da5fb，5934份源码匹配；GitHub6文件及公网APK/源码完整下载一致，latest10/previous9和原四通道保持。手机安装/图标/名称及原配置待用户确认。证据：docs/audits/2026-11-07/mobicodex-branding-verification.json；总体整合任务继续in_progress。
+code10交付回执：源码76da5fb，5934份源码匹配；GitHub6文件及公网APK/源码完整下载一致，latest10/previous9和原四通道保持。2026-11-07用户已确认手机升级、图标名称及原配置正常，本轮品牌与更新需求闭环。证据：docs/audits/2026-11-07/mobicodex-branding-verification.json；总体整合任务继续in_progress，完整59组验收不在本次确认范围。

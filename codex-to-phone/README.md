@@ -130,7 +130,7 @@ node scripts/verify-kelivo.mjs --preview --repeat-tests
 
 APK 输出：`output/kelivo/mobile-codex-kelivo-0.1.8-preview-arm64.apk`。发布目录包含构建元数据及对应源码；缓存、签名私钥、模型凭证和个人数据不入库。自己的构建签名与这里的预览证书不同，不能据此承诺覆盖安装或字节完全相同。
 
-code10 完整 JS/TS verify（手机169/后端422）、最终Dart分析与相关Flutter回归、原生340项和完整Android lint通过；宿主/远控66/1条警告已记录，签名与code9相同。新图标、启动资源、更新页与源码归档已核验，手机覆盖安装待确认；详见[品牌审计](docs/audits/2026-11-07/mobicodex-branding.md)。
+code10 完整 JS/TS verify（手机169/后端422）、最终Dart分析与相关Flutter回归、原生340项和完整Android lint通过；宿主/远控66/1条警告已记录，签名与code9相同。新图标、启动资源、更新页与源码归档已核验；2026-11-07用户已真机确认「已升级，图标名称与原配置都正常」，安装APK/SHA未独立回拉。详见[品牌审计](docs/audits/2026-11-07/mobicodex-branding.md)。
 
 历史 code9 完整 JS/TS verify（手机169/后端414/入口8）、原生340项及完整 Android lint 通过；宿主/远控保留56/1条既有警告。浏览器四通道、未来通道夹具、图片/附件/语音与窄屏大字号已检查；Claude 官方2.1.287严格校验和8项沙箱测试通过。后续 0.2.7 电脑兼容补充的后端419项、新旧官方运行时各30项、类型/lint及构建全部通过，已上线并获用户手机code9原会话/正文确认；其余真实控制、Claude/OpenCode原宿主仍待验。未修改或重打手机APK，沿用原生验证，详见[code9记录](docs/audits/2026-11-07/agent-parity.md)与[运行审计](docs/audits/2026-11-07/agent-parity-runtime.md)。
 

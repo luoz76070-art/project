@@ -1,5 +1,5 @@
 {
-  "status": "passed-delivery-phone-awaiting-user",
+  "status": "passed-delivery-phone-user-confirmed",
   "date": "2026-11-07",
   "versionName": "0.1.8-native-preview",
   "versionCode": 10,
@@ -145,7 +145,23 @@
     "sha256": "55cd1ba56009fde374f2964c560a6f6a0224aba8e0555c79096b3583f7b3c049",
     "bytes": 60752427
   },
-  "phoneInstallation": "awaiting-user-confirmation",
+  "phoneInstallation": "passed-user-confirmed",
+  "phoneAcceptance": {
+    "date": "2026-11-07",
+    "status": "passed-user-confirmed",
+    "source": "call_R3dQZxDafEUVUFsFshKMuBvS",
+    "questionIndex": 0,
+    "question": "请通过「设置 → 应用更新」升级到 0.1.8 / code10，检查桌面新图标、MobiCodex 名称、关于页，以及原电脑连接和 AI 配置。现在是哪种情况？",
+    "userReply": "已升级，图标名称与原配置都正常",
+    "confirmedScope": [
+      "code10-app-update-installation",
+      "launcher-icon-and-MobiCodex-branding",
+      "existing-configuration-retained"
+    ],
+    "installedApkIndependentlyRetrieved": false,
+    "installedApkSha256IndependentlyVerified": false,
+    "full59GroupAcceptance": "not-covered"
+  },
   "realModelAndComputerTasks": "not-executed",
   "onlineGateway": "unchanged"
 }

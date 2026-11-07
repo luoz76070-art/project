@@ -39,4 +39,8 @@
 
 最终交付回执见[mobicodex-branding-verification.json](mobicodex-branding-verification.json)。沿用main与新annotated preview标签 `codex-to-phone-v0.1.8-native-preview`，远端标签展开值单独核对；不新建仓库/分支/Release，不改变在线网关。
 
-ADB当前无手机。手机实际覆盖安装、桌面图标/名称、关于页及原连接/配置仍待用户确认；系统安装器打开或下载成功不记为安装完成。完整59组功能验收继续由原整合任务管理，不扩大本次品牌交付的结论。
+## code10 用户真机验收
+
+2026-11-07，用户对「通过设置 → 应用更新升级到0.1.8/code10，检查桌面新图标、MobiCodex名称、关于页、原电脑连接与AI配置」的验收问题回复：「已升级，图标名称与原配置都正常」。问答来源：`call_R3dQZxDafEUVUFsFshKMuBvS`，第0项。手机覆盖升级、品牌显示及原配置保持按用户反馈记为通过，本轮品牌与更新需求闭环。
+
+验收来源为用户自报，未通过ADB回拉已安装APK或独立核验其SHA256。完整59组功能验收继续由原整合任务管理，不扩大本次品牌交付的结论。
