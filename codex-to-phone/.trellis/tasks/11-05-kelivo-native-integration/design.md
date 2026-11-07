@@ -114,3 +114,8 @@ Kelivo SettingsProvider 继续拥有聊天字号与工具卡片/结果摘要偏�
 预计修改threadImages、threadImageRoutes、CodexStore、新共享引用模块、agentSessionRoutes与对应隔离测试，以及工程/交付记录。手机源码、APK、原宿主插件及其他电脑控制不变。自审：后端是拒绝发生的真实位置；仅精确文件例外不扩根目录；扫描与缓存上限独立验证。在线网关切换仍按version-sync单独确认。
 
 部署结果：用户已单独批准，实际固定bundle与交付SHA一致。管理stop接纳、端口释放、原进程退出三个条件分别验证；首次旧进程端口释放后仍持有桥接连接且未退出，经检查原会话空闲后只重载官方手机桥接组件，旧网关自然退出再启动候选，原profile patch恢复原字节。此为本轮恢复操作，未修改产品源码或宣称解决退出竞态。原图本地/公网验证与手机展示分开记录，见image-reference-fix审计。
+
+
+## 2026-11-07 MobiCodex 品牌与更新
+
+用户明确要求采用选定图标、可见品牌统一为 MobiCodex，并交付手机更新，优先评估热更新。需求、兼容边界、自审和执行检查见 `docs/plans/2026-11-07-mobicodex-branding.md`。当前整合热更新源为空，图标和 Flutter AOT 文案采用既有 App 内 APK 覆盖更新；不自动切网关。

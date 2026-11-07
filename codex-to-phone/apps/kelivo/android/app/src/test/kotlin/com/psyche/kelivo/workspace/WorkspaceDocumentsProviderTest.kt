@@ -117,7 +117,7 @@ class WorkspaceDocumentsProviderTest {
     fun exposesNamedWorkspacesWithoutFlutterOrDuplicateDatabase() {
         workspace()
         workspace("two", "另一个工作区")
-        assertEquals(listOf("Kelivo"), provider.queryRoots(null).strings(Root.COLUMN_TITLE))
+        assertEquals(listOf("MobiCodex"), provider.queryRoots(null).strings(Root.COLUMN_TITLE))
         assertEquals(listOf("工作区一", "另一个工作区"), children().strings(Document.COLUMN_DISPLAY_NAME))
         assertTrue(File(appData, "kelivo.db").exists())
     }
@@ -128,7 +128,7 @@ class WorkspaceDocumentsProviderTest {
         provider.queryRoots(arrayOf(Root.COLUMN_TITLE)).use {
             assertEquals(1, it.columnCount)
             assertTrue(it.moveToFirst())
-            assertEquals("Kelivo", it.getString(0))
+            assertEquals("MobiCodex", it.getString(0))
         }
         children().use {
             assertTrue(it.moveToFirst())

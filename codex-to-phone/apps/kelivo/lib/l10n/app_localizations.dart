@@ -403,7 +403,7 @@ abstract class AppLocalizations {
   /// No description provided for @storageSpaceClearDisplacedDatabasesConfirmMessage.
   ///
   /// In en, this message translates to:
-  /// **'Delete these set-aside databases? Kelivo kept them when it rebuilt its database, and they may be the only surviving copy of those chats and settings. This cannot be undone.'**
+  /// **'Delete these set-aside databases? MobiCodex kept them when it rebuilt its database, and they may be the only surviving copy of those chats and settings. This cannot be undone.'**
   String get storageSpaceClearDisplacedDatabasesConfirmMessage;
 
   /// No description provided for @storageSpaceRestoreTracesHint.
@@ -751,7 +751,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsPageSponsor.
   ///
   /// In en, this message translates to:
-  /// **'Sponsor'**
+  /// **'Support upstream development'**
   String get settingsPageSponsor;
 
   /// No description provided for @settingsPageShare.
@@ -1021,7 +1021,7 @@ abstract class AppLocalizations {
   /// No description provided for @sponsorPageAfdianSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'afdian.com/a/kelivo'**
+  /// **'Support the upstream author'**
   String get sponsorPageAfdianSubtitle;
 
   /// No description provided for @sponsorPageWeChatTitle.
@@ -3289,19 +3289,19 @@ abstract class AppLocalizations {
   /// No description provided for @backupPageRestartContent.
   ///
   /// In en, this message translates to:
-  /// **'Import successful. Restart Kelivo to apply it safely.'**
+  /// **'Import successful. Restart MobiCodex to apply it safely.'**
   String get backupPageRestartContent;
 
   /// No description provided for @backupPageRestartContentWithSkipped.
   ///
   /// In en, this message translates to:
-  /// **'Import completed, but {count} conversations with invalid message ordering were skipped. Restart Kelivo to apply the imported data safely.'**
+  /// **'Import completed, but {count} conversations with invalid message ordering were skipped. Restart MobiCodex to apply the imported data safely.'**
   String backupPageRestartContentWithSkipped(int count);
 
   /// No description provided for @restartAppFailedMessage.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo could not restart automatically. Fully close it, then open it again.'**
+  /// **'MobiCodex could not restart automatically. Fully close it, then open it again.'**
   String get restartAppFailedMessage;
 
   /// No description provided for @backupRestoreRolledBackTitle.
@@ -3313,7 +3313,7 @@ abstract class AppLocalizations {
   /// No description provided for @backupRestoreRolledBackContent.
   ///
   /// In en, this message translates to:
-  /// **'The restore could not be completed. Kelivo verified and kept your previous data.'**
+  /// **'The restore could not be completed. MobiCodex verified and kept your previous data.'**
   String get backupRestoreRolledBackContent;
 
   /// No description provided for @backupRestoreDirectoryBlockedTitle.
@@ -3343,19 +3343,19 @@ abstract class AppLocalizations {
   /// No description provided for @backupRestoreFailureContent.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo could not verify a complete old or new data set, so chat data was not opened. Close Kelivo and try again. If this repeats, keep the diagnostic code for support.'**
+  /// **'MobiCodex could not verify a complete old or new data set, so chat data was not opened. Close MobiCodex and try again. If this repeats, keep the diagnostic code for support.'**
   String get backupRestoreFailureContent;
 
   /// No description provided for @backupRestoreBusinessLeaseUnavailableTitle.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo is already running'**
+  /// **'MobiCodex is already running'**
   String get backupRestoreBusinessLeaseUnavailableTitle;
 
   /// No description provided for @backupRestoreBusinessLeaseUnavailableContent.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo\'s data is still in use by another app process. Close any other Kelivo window, then restart. Your chat data has not been opened by this process.'**
+  /// **'MobiCodex\'s data is still in use by another app process. Close any other MobiCodex window, then restart. Your chat data has not been opened by this process.'**
   String get backupRestoreBusinessLeaseUnavailableContent;
 
   /// No description provided for @restoreProgressTitle.
@@ -3367,7 +3367,7 @@ abstract class AppLocalizations {
   /// No description provided for @restoreProgressWarning.
   ///
   /// In en, this message translates to:
-  /// **'Keep Kelivo open until this finishes. If you close it now, the next launch starts this over.'**
+  /// **'Keep MobiCodex open until this finishes. If you close it now, the next launch starts this over.'**
   String get restoreProgressWarning;
 
   /// No description provided for @restoreProgressStageCheckingBackup.
@@ -3409,7 +3409,7 @@ abstract class AppLocalizations {
   /// No description provided for @backupRestoreFailureRestartButton.
   ///
   /// In en, this message translates to:
-  /// **'Restart Kelivo'**
+  /// **'Restart MobiCodex'**
   String get backupRestoreFailureRestartButton;
 
   /// No description provided for @backupRestoreFailureCopyButton.
@@ -3481,7 +3481,7 @@ abstract class AppLocalizations {
   /// No description provided for @startupRecoveryResetFailed.
   ///
   /// In en, this message translates to:
-  /// **'Reset failed. Fully close Kelivo, then open it again.'**
+  /// **'Reset failed. Fully close MobiCodex, then open it again.'**
   String get startupRecoveryResetFailed;
 
   /// No description provided for @startupRecoveryResetDialogTitle.
@@ -3493,7 +3493,7 @@ abstract class AppLocalizations {
   /// No description provided for @startupRecoveryResetDialogContent.
   ///
   /// In en, this message translates to:
-  /// **'This will not recover your previous chats. Kelivo will keep the current database and existing copies, and start a new empty chat list. To get your chats back, cancel and choose a local copy.'**
+  /// **'This will not recover your previous chats. MobiCodex will keep the current database and existing copies, and start a new empty chat list. To get your chats back, cancel and choose a local copy.'**
   String get startupRecoveryResetDialogContent;
 
   /// No description provided for @startupRecoveryResetDialogConfirm.
@@ -3691,7 +3691,7 @@ abstract class AppLocalizations {
   /// No description provided for @startupRecoveryDangerBody.
   ///
   /// In en, this message translates to:
-  /// **'A fresh start removes the current data from view. Kelivo will preserve the old database and existing copies for recovery. Export a data copy first if possible.'**
+  /// **'A fresh start removes the current data from view. MobiCodex will preserve the old database and existing copies for recovery. Export a data copy first if possible.'**
   String get startupRecoveryDangerBody;
 
   /// No description provided for @startupRecoveryResetAcknowledge.
@@ -3703,13 +3703,13 @@ abstract class AppLocalizations {
   /// No description provided for @startupDatabaseUpdateRequiredTitle.
   ///
   /// In en, this message translates to:
-  /// **'Update Kelivo to continue'**
+  /// **'Update MobiCodex to continue'**
   String get startupDatabaseUpdateRequiredTitle;
 
   /// No description provided for @startupDatabaseUpdateRequiredContent.
   ///
   /// In en, this message translates to:
-  /// **'The chat database on this device was created by a newer version of Kelivo and cannot be opened by this version. Your data has not been changed. Install the latest version of Kelivo, then open it again.'**
+  /// **'The chat database on this device was created by a newer version of MobiCodex and cannot be opened by this version. Your data has not been changed. Install the latest version of MobiCodex, then open it again.'**
   String get startupDatabaseUpdateRequiredContent;
 
   /// No description provided for @startupDatabaseUpdateRequiredDowngradeTitle.
@@ -3727,7 +3727,7 @@ abstract class AppLocalizations {
   /// No description provided for @startupDatabaseUpdateRequiredDowngradeStep1.
   ///
   /// In en, this message translates to:
-  /// **'Install and open the latest Kelivo, then export a backup from Settings → Backup.'**
+  /// **'Install and open the latest MobiCodex, then export a backup from Settings → Backup.'**
   String get startupDatabaseUpdateRequiredDowngradeStep1;
 
   /// No description provided for @startupDatabaseUpdateRequiredDowngradeStep2.
@@ -3823,7 +3823,7 @@ abstract class AppLocalizations {
   /// No description provided for @backupPageForwardCompatBody.
   ///
   /// In en, this message translates to:
-  /// **'This backup was created by a newer version of Kelivo (data format {backupVersion}; this version supports {currentVersion}), and it does not say whether older versions can read it.\n\nYou can continue: anything this version does not recognise will be skipped, and the backup file itself is not modified. But if the newer version changed how existing data is stored, some content may be imported incorrectly.\n\nUpdating Kelivo first is the safer choice.'**
+  /// **'This backup was created by a newer version of MobiCodex (data format {backupVersion}; this version supports {currentVersion}), and it does not say whether older versions can read it.\n\nYou can continue: anything this version does not recognise will be skipped, and the backup file itself is not modified. But if the newer version changed how existing data is stored, some content may be imported incorrectly.\n\nUpdating MobiCodex first is the safer choice.'**
   String backupPageForwardCompatBody(int backupVersion, int currentVersion);
 
   /// No description provided for @backupPageForwardCompatContinue.
@@ -3841,7 +3841,7 @@ abstract class AppLocalizations {
   /// No description provided for @backupPageSchemaTooNewMessage.
   ///
   /// In en, this message translates to:
-  /// **'This backup was created by a newer version of Kelivo and cannot be read by this version. Please update Kelivo and try again.'**
+  /// **'This backup was created by a newer version of MobiCodex and cannot be read by this version. Please update MobiCodex and try again.'**
   String get backupPageSchemaTooNewMessage;
 
   /// No description provided for @backupPageBackupUploaded.
@@ -4189,7 +4189,7 @@ abstract class AppLocalizations {
   /// No description provided for @backupPageIosSystemBackupNote.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo\'s local data is set to be excluded from iCloud device backups. Export a backup file before changing devices or deleting the app.'**
+  /// **'MobiCodex\'s local data is set to be excluded from iCloud device backups. Export a backup file before changing devices or deleting the app.'**
   String get backupPageIosSystemBackupNote;
 
   /// No description provided for @backupPageImportFromCherryStudio.
@@ -4201,7 +4201,7 @@ abstract class AppLocalizations {
   /// No description provided for @backupPageCherryStudioUnsupportedBackupVersion.
   ///
   /// In en, this message translates to:
-  /// **'This backup uses Cherry Studio format version {version}, which Kelivo cannot import yet. Export from Cherry Studio v1 instead, or wait for a Kelivo update that supports Cherry Studio v2 backups.'**
+  /// **'This backup uses Cherry Studio format version {version}, which MobiCodex cannot import yet. Export from Cherry Studio v1 instead, or wait for a MobiCodex update that supports Cherry Studio v2 backups.'**
   String backupPageCherryStudioUnsupportedBackupVersion(String version);
 
   /// No description provided for @backupPageImportFromChatbox.
@@ -8866,7 +8866,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchServicesPageWebFetchFooter.
   ///
   /// In en, this message translates to:
-  /// **'With web search on, the model can also read full pages. When the search service can\'t read pages, local reading is used, which can\'t handle pages that need JavaScript or block bots.\n\nIf you use the page reader configured here, disable the built-in @kelivo/fetch in Settings → MCP to avoid overlapping tools. The page reader configured here will still work.'**
+  /// **'With web search on, the model can also read full pages. When the search service can\'t read pages, local reading is used, which can\'t handle pages that need JavaScript or block bots.\n\nIf you use the page reader configured here, disable the built-in @MobiCodex/fetch in Settings → MCP to avoid overlapping tools. The page reader configured here will still work.'**
   String get searchServicesPageWebFetchFooter;
 
   /// No description provided for @searchServicesPageWebFetchSupported.
@@ -9493,10 +9493,16 @@ abstract class AppLocalizations {
   /// **'You\'ve already been through this door.'**
   String get aboutPageKelivoSearchAlreadyUnlocked;
 
+  /// No description provided for @aboutPageUpstreamSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Upstream open source'**
+  String get aboutPageUpstreamSource;
+
   /// No description provided for @aboutPageAppName.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo'**
+  /// **'MobiCodex'**
   String get aboutPageAppName;
 
   /// No description provided for @aboutPageAppDescription.
@@ -9598,31 +9604,31 @@ abstract class AppLocalizations {
   /// No description provided for @aboutPageJoinQQGroup.
   ///
   /// In en, this message translates to:
-  /// **'Join our QQ Group'**
+  /// **'Upstream QQ community'**
   String get aboutPageJoinQQGroup;
 
   /// No description provided for @aboutPageQQGroupOne.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo Group 1'**
+  /// **'Upstream group 1'**
   String get aboutPageQQGroupOne;
 
   /// No description provided for @aboutPageQQGroupTwo.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo Group 2'**
+  /// **'Upstream group 2'**
   String get aboutPageQQGroupTwo;
 
   /// No description provided for @aboutPageQQGroupThree.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo Group 3'**
+  /// **'Upstream group 3'**
   String get aboutPageQQGroupThree;
 
   /// No description provided for @aboutPageJoinDiscord.
   ///
   /// In en, this message translates to:
-  /// **'Join us on Discord'**
+  /// **'Upstream Discord'**
   String get aboutPageJoinDiscord;
 
   /// No description provided for @displaySettingsPageShowUserAvatarTitle.
@@ -11596,7 +11602,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsShare.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo - Open Source AI Assistant'**
+  /// **'MobiCodex - Open Source AI Assistant'**
   String get settingsShare;
 
   /// No description provided for @searchProviderBingLocalDescription.
@@ -11974,7 +11980,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchServiceNameKelivo.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo'**
+  /// **'MobiCodex'**
   String get searchServiceNameKelivo;
 
   /// No description provided for @searchServicesDialogCountryOptional.
@@ -12496,7 +12502,7 @@ abstract class AppLocalizations {
   /// No description provided for @healthDataSettingsDescription.
   ///
   /// In en, this message translates to:
-  /// **'HealthKit signals available to the current assistant in daily conversation. Switches control what Kelivo may try to read; iOS still manages actual Health access.'**
+  /// **'HealthKit signals available to the current assistant in daily conversation. Switches control what MobiCodex may try to read; iOS still manages actual Health access.'**
   String get healthDataSettingsDescription;
 
   /// No description provided for @healthDataSettingsBadge.
@@ -14938,7 +14944,7 @@ abstract class AppLocalizations {
   /// No description provided for @legacyMemoryExportTitle.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo legacy memory export'**
+  /// **'MobiCodex legacy memory export'**
   String get legacyMemoryExportTitle;
 
   /// No description provided for @legacyMemoryAssistantHeader.
@@ -15988,13 +15994,13 @@ abstract class AppLocalizations {
   /// No description provided for @migrationIntroSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo is moving chat history to a faster SQLite database. The upgrade runs before the app opens so your data stays consistent.'**
+  /// **'MobiCodex is moving chat history to a faster SQLite database. The upgrade runs before the app opens so your data stays consistent.'**
   String get migrationIntroSubtitle;
 
   /// No description provided for @migrationBackupNote.
   ///
   /// In en, this message translates to:
-  /// **'Before migration starts, Kelivo exports a ZIP backup with settings, chat history, and local files.'**
+  /// **'Before migration starts, MobiCodex exports a ZIP backup with settings, chat history, and local files.'**
   String get migrationBackupNote;
 
   /// No description provided for @migrationPerformanceNote.
@@ -16066,7 +16072,7 @@ abstract class AppLocalizations {
   /// No description provided for @migrationBackingUpSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Exporting settings, chat history, uploaded files, images, and fonts. Keep Kelivo open until this finishes.'**
+  /// **'Exporting settings, chat history, uploaded files, images, and fonts. Keep MobiCodex open until this finishes.'**
   String get migrationBackingUpSubtitle;
 
   /// No description provided for @migrationMigratingTitle.
@@ -16078,7 +16084,7 @@ abstract class AppLocalizations {
   /// No description provided for @migrationMigratingSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Writing conversations and messages in batches so large histories do not overload memory. Keep Kelivo in the foreground until migration finishes.'**
+  /// **'Writing conversations and messages in batches so large histories do not overload memory. Keep MobiCodex in the foreground until migration finishes.'**
   String get migrationMigratingSubtitle;
 
   /// No description provided for @migrationBackingUpDetail.
@@ -16186,7 +16192,7 @@ abstract class AppLocalizations {
   /// No description provided for @migrationCompleteSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Your chat history is now stored in SQLite. Restart Kelivo to enter the upgraded app.'**
+  /// **'Your chat history is now stored in SQLite. Restart MobiCodex to enter the upgraded app.'**
   String get migrationCompleteSubtitle;
 
   /// No description provided for @migrationConversationCount.
@@ -16222,7 +16228,7 @@ abstract class AppLocalizations {
   /// No description provided for @migrationRestartButton.
   ///
   /// In en, this message translates to:
-  /// **'Restart Kelivo'**
+  /// **'Restart MobiCodex'**
   String get migrationRestartButton;
 
   /// No description provided for @migrationFailedTitle.
@@ -16270,7 +16276,7 @@ abstract class AppLocalizations {
   /// No description provided for @migrationSkipDialogMessage.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo will start with an empty chat database. Your old chat history stays on disk (renamed with a .retired suffix) but will NOT be migrated and will not appear in the app. Use your backup ZIP if you need to recover it later.'**
+  /// **'MobiCodex will start with an empty chat database. Your old chat history stays on disk (renamed with a .retired suffix) but will NOT be migrated and will not appear in the app. Use your backup ZIP if you need to recover it later.'**
   String get migrationSkipDialogMessage;
 
   /// No description provided for @migrationSkipDialogCancel.
@@ -17050,7 +17056,7 @@ abstract class AppLocalizations {
   /// No description provided for @localSnapshotEnabledSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo periodically saves a copy of its database on this device, so it is never the only one.'**
+  /// **'MobiCodex periodically saves a copy of its database on this device, so it is never the only one.'**
   String get localSnapshotEnabledSubtitle;
 
   /// No description provided for @localSnapshotIntervalTitle.
@@ -17206,7 +17212,7 @@ abstract class AppLocalizations {
   /// No description provided for @localSnapshotCopiesScopeNote.
   ///
   /// In en, this message translates to:
-  /// **'Local copies live on this device only. They protect against damage to your data inside the app, not against losing the device or uninstalling Kelivo — use WebDAV or S3 backup for that.'**
+  /// **'Local copies live on this device only. They protect against damage to your data inside the app, not against losing the device or uninstalling MobiCodex — use WebDAV or S3 backup for that.'**
   String get localSnapshotCopiesScopeNote;
 
   /// No description provided for @localSnapshotOriginAutomatic.
@@ -18442,7 +18448,7 @@ abstract class AppLocalizations {
   /// No description provided for @workspaceEnvRestartBanner.
   ///
   /// In en, this message translates to:
-  /// **'Restart Kelivo to finish'**
+  /// **'Restart MobiCodex to finish'**
   String get workspaceEnvRestartBanner;
 
   /// No description provided for @workspaceEnvDetectingMirrors.
@@ -18628,7 +18634,7 @@ abstract class AppLocalizations {
   /// No description provided for @workspaceEnvNativeExplanation.
   ///
   /// In en, this message translates to:
-  /// **'On desktop, Kelivo uses your system shell instead of a Linux sandbox.'**
+  /// **'On desktop, MobiCodex uses your system shell instead of a Linux sandbox.'**
   String get workspaceEnvNativeExplanation;
 
   /// No description provided for @workspaceEnvNativeShellPath.
@@ -20292,7 +20298,7 @@ abstract class AppLocalizations {
   /// No description provided for @workspaceDesktopManagedHint.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo creates and manages a folder for this project.'**
+  /// **'MobiCodex creates and manages a folder for this project.'**
   String get workspaceDesktopManagedHint;
 
   /// No description provided for @workspaceDesktopHostHint.
@@ -20736,7 +20742,7 @@ abstract class AppLocalizations {
   /// No description provided for @workspaceExternalStorageMessage.
   ///
   /// In en, this message translates to:
-  /// **'To read and write external folders in the workspace and Shell, allow Kelivo to manage files in Android settings. On Android 11 or later, enable All files access. Then select an on-device folder to mount.'**
+  /// **'To read and write external folders in the workspace and Shell, allow MobiCodex to manage files in Android settings. On Android 11 or later, enable All files access. Then select an on-device folder to mount.'**
   String get workspaceExternalStorageMessage;
 
   /// No description provided for @workspaceExternalGrantAccess.
@@ -21138,7 +21144,7 @@ abstract class AppLocalizations {
   /// No description provided for @backgroundTaskTitle.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo task'**
+  /// **'MobiCodex task'**
   String get backgroundTaskTitle;
 
   /// No description provided for @backgroundCompleted.
@@ -21384,7 +21390,7 @@ abstract class AppLocalizations {
   /// No description provided for @backgroundIconDefault.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo icon'**
+  /// **'MobiCodex icon'**
   String get backgroundIconDefault;
 
   /// No description provided for @backgroundIconImage.
@@ -21792,7 +21798,7 @@ abstract class AppLocalizations {
   /// No description provided for @startupRecoverySnapshotBody.
   ///
   /// In en, this message translates to:
-  /// **'Choose a snapshot on this device to recover your chats and settings, even when the database cannot open. Do not uninstall Kelivo: uninstalling also removes these snapshots.'**
+  /// **'Choose a snapshot on this device to recover your chats and settings, even when the database cannot open. Do not uninstall MobiCodex: uninstalling also removes these snapshots.'**
   String get startupRecoverySnapshotBody;
 
   /// No description provided for @startupRecoverySnapshotEmpty.
@@ -21810,7 +21816,7 @@ abstract class AppLocalizations {
   /// No description provided for @startupRecoverySnapshotConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Restore chats and settings from {when}? Changes made after this snapshot will not be included. Existing attachment files and the snapshot will be kept. Kelivo will restart to complete the restore.'**
+  /// **'Restore chats and settings from {when}? Changes made after this snapshot will not be included. Existing attachment files and the snapshot will be kept. MobiCodex will restart to complete the restore.'**
   String startupRecoverySnapshotConfirm(String when);
 
   /// No description provided for @startupRecoverySnapshotFailed.
@@ -21822,7 +21828,7 @@ abstract class AppLocalizations {
   /// No description provided for @startupRecoverySnapshotReady.
   ///
   /// In en, this message translates to:
-  /// **'The snapshot is ready. Restart Kelivo to complete the restore.'**
+  /// **'The snapshot is ready. Restart MobiCodex to complete the restore.'**
   String get startupRecoverySnapshotReady;
 
   /// No description provided for @scheduledTasksTitle.
@@ -21960,7 +21966,7 @@ abstract class AppLocalizations {
   /// No description provided for @scheduledTasksReliability.
   ///
   /// In en, this message translates to:
-  /// **'Keep Kelivo unrestricted in battery settings for more reliable execution. Force stopping the app cancels alarms until you reopen it. Missed runs are skipped; tasks follow the device time zone.'**
+  /// **'Keep MobiCodex unrestricted in battery settings for more reliable execution. Force stopping the app cancels alarms until you reopen it. Missed runs are skipped; tasks follow the device time zone.'**
   String get scheduledTasksReliability;
 
   /// No description provided for @scheduledTasksExecutionDetail.
@@ -22302,7 +22308,7 @@ abstract class AppLocalizations {
   /// No description provided for @scheduledTasksDesktopReliability.
   ///
   /// In en, this message translates to:
-  /// **'Tasks run only while Kelivo is running, including when minimized or in the system tray. Missed times are skipped after quitting or computer sleep. Kelivo will not start automatically.'**
+  /// **'Tasks run only while MobiCodex is running, including when minimized or in the system tray. Missed times are skipped after quitting or computer sleep. MobiCodex will not start automatically.'**
   String get scheduledTasksDesktopReliability;
 
   /// No description provided for @scheduledTasksDesktopExecutionDetail.
@@ -22974,7 +22980,7 @@ abstract class AppLocalizations {
   /// No description provided for @scheduledTasksIOSDetail.
   ///
   /// In en, this message translates to:
-  /// **'iOS background limits prevent Kelivo from waking at a set time to run a model. Instead, content is prepared while the app can run, and the system shows a notification at the scheduled time. Only the next occurrence is prepared. Preparation may not finish after leaving the app; reopen Kelivo to prepare subsequent occurrences.'**
+  /// **'iOS background limits prevent MobiCodex from waking at a set time to run a model. Instead, content is prepared while the app can run, and the system shows a notification at the scheduled time. Only the next occurrence is prepared. Preparation may not finish after leaving the app; reopen MobiCodex to prepare subsequent occurrences.'**
   String get scheduledTasksIOSDetail;
 
   /// No description provided for @scheduledTasksContextPolicy.
@@ -23100,7 +23106,7 @@ abstract class AppLocalizations {
   /// No description provided for @scheduledTasksReminderBody.
   ///
   /// In en, this message translates to:
-  /// **'Your scheduled task is due. Open Kelivo to continue.'**
+  /// **'Your scheduled task is due. Open MobiCodex to continue.'**
   String get scheduledTasksReminderBody;
 
   /// No description provided for @scheduledTasksResultBody.
@@ -23124,7 +23130,7 @@ abstract class AppLocalizations {
   /// No description provided for @scheduledTasksAllowPreparationTip.
   ///
   /// In en, this message translates to:
-  /// **'Generate the next result before its scheduled time, while Kelivo can run. The result stays out of the chat until it is due. Preparation uses text only, without tools, attachments or custom request bodies. It may incur model charges.'**
+  /// **'Generate the next result before its scheduled time, while MobiCodex can run. The result stays out of the chat until it is due. Preparation uses text only, without tools, attachments or custom request bodies. It may incur model charges.'**
   String get scheduledTasksAllowPreparationTip;
 
   /// No description provided for @scheduledTasksContextPolicyTip.
@@ -23136,7 +23142,7 @@ abstract class AppLocalizations {
   /// No description provided for @scheduledTasksPreparationWindowTip.
   ///
   /// In en, this message translates to:
-  /// **'How far ahead of the scheduled time preparation may begin, up to 24 hours. For example, opening Kelivo at noon can prepare the next morning’s reminder. A larger window gives more chances to prepare, but the result may be less current. It does not change the scheduled time or guarantee background execution. Prepare now bypasses this automatic waiting period and all attempt limits.'**
+  /// **'How far ahead of the scheduled time preparation may begin, up to 24 hours. For example, opening MobiCodex at noon can prepare the next morning’s reminder. A larger window gives more chances to prepare, but the result may be less current. It does not change the scheduled time or guarantee background execution. Prepare now bypasses this automatic waiting period and all attempt limits.'**
   String get scheduledTasksPreparationWindowTip;
 
   /// No description provided for @scheduledTasksPreparationAttemptsTip.
@@ -23154,7 +23160,7 @@ abstract class AppLocalizations {
   /// No description provided for @scheduledTasksUnavailableTip.
   ///
   /// In en, this message translates to:
-  /// **'If no prepared result is available and the task cannot run when due, send a reminder or skip the occurrence. A reminder contains no generated answer and requires notifications to be enabled. If Kelivo is open when the task is due, it can run the task then.'**
+  /// **'If no prepared result is available and the task cannot run when due, send a reminder or skip the occurrence. A reminder contains no generated answer and requires notifications to be enabled. If MobiCodex is open when the task is due, it can run the task then.'**
   String get scheduledTasksUnavailableTip;
 
   /// No description provided for @scheduledTasksNotifyTip.
@@ -23457,7 +23463,7 @@ abstract class AppLocalizations {
   /// No description provided for @phoneControlAssistantHint.
   ///
   /// In en, this message translates to:
-  /// **'Both permissions are required: enable Kelivo phone control in system Accessibility settings, then enable Phone Control under your assistant’s Local Tools (also available in the chat tools menu). Each assistant is configured separately. Keep the phone unlocked while running a task.'**
+  /// **'Both permissions are required: enable MobiCodex phone control in system Accessibility settings, then enable Phone Control under your assistant’s Local Tools (also available in the chat tools menu). Each assistant is configured separately. Keep the phone unlocked while running a task.'**
   String get phoneControlAssistantHint;
 
   /// No description provided for @phoneControlRestrictedTitle.
@@ -23469,7 +23475,7 @@ abstract class AppLocalizations {
   /// No description provided for @phoneControlRestrictedHint.
   ///
   /// In en, this message translates to:
-  /// **'For some downloaded APKs, Android requires “Allow restricted settings” in the app info menu first. Tap to open Kelivo’s app info, then return to Accessibility settings.'**
+  /// **'For some downloaded APKs, Android requires “Allow restricted settings” in the app info menu first. Tap to open MobiCodex’s app info, then return to Accessibility settings.'**
   String get phoneControlRestrictedHint;
 
   /// No description provided for @phoneControlEnableAssistant.
@@ -23835,7 +23841,7 @@ abstract class AppLocalizations {
   /// No description provided for @recoveryMissingDataBody.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo could not find the current chat database. It has paused loading and has not created an empty database. We’ll look for previous copies below; existing files will be kept.'**
+  /// **'MobiCodex could not find the current chat database. It has paused loading and has not created an empty database. We’ll look for previous copies below; existing files will be kept.'**
   String get recoveryMissingDataBody;
 
   /// No description provided for @recoveryEmptyDataTitle.
@@ -23901,7 +23907,7 @@ abstract class AppLocalizations {
   /// No description provided for @recoveryStorageFailureBody.
   ///
   /// In en, this message translates to:
-  /// **'The data update could not finish. The original data has been kept. Try reopening Kelivo, or choose a local copy below to recover.'**
+  /// **'The data update could not finish. The original data has been kept. Try reopening MobiCodex, or choose a local copy below to recover.'**
   String get recoveryStorageFailureBody;
 
   /// No description provided for @recoveryProtectingTitle.
@@ -23943,7 +23949,7 @@ abstract class AppLocalizations {
   /// No description provided for @recoveryStorageInsufficientSpaceBody.
   ///
   /// In en, this message translates to:
-  /// **'There is not enough storage to safely prepare your data. Free space in system settings, then reopen Kelivo or recheck the copies below. Keep Kelivo installed and leave its data and local copies in place.'**
+  /// **'There is not enough storage to safely prepare your data. Free space in system settings, then reopen MobiCodex or recheck the copies below. Keep MobiCodex installed and leave its data and local copies in place.'**
   String get recoveryStorageInsufficientSpaceBody;
 
   /// No description provided for @migrationFreshStartTitle.
@@ -24087,7 +24093,7 @@ abstract class AppLocalizations {
   /// No description provided for @backupEncryptionUnsupported.
   ///
   /// In en, this message translates to:
-  /// **'This encrypted backup requires a newer version of Kelivo.'**
+  /// **'This encrypted backup requires a newer version of MobiCodex.'**
   String get backupEncryptionUnsupported;
 
   /// No description provided for @backupProgressEncrypting.
@@ -24399,7 +24405,7 @@ abstract class AppLocalizations {
   /// No description provided for @browserRestoreTabsDescription.
   ///
   /// In en, this message translates to:
-  /// **'Reopen your tabs when Kelivo starts.'**
+  /// **'Reopen your tabs when MobiCodex starts.'**
   String get browserRestoreTabsDescription;
 
   /// No description provided for @browserSaveHistory.
@@ -27243,7 +27249,7 @@ abstract class AppLocalizations {
   /// No description provided for @toolPermissionRequestApprovalDesc.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo will ask before accessing files outside the workspace, running desktop commands, or using other tools that need approval.'**
+  /// **'MobiCodex will ask before accessing files outside the workspace, running desktop commands, or using other tools that need approval.'**
   String get toolPermissionRequestApprovalDesc;
 
   /// No description provided for @contextLimitedInputHint.
@@ -27351,7 +27357,7 @@ abstract class AppLocalizations {
   /// No description provided for @dataDirectoryMoving.
   ///
   /// In en, this message translates to:
-  /// **'Moving and verifying data… Please keep Kelivo open.'**
+  /// **'Moving and verifying data… Please keep MobiCodex open.'**
   String get dataDirectoryMoving;
 
   /// No description provided for @dataDirectoryStartupFailed.
@@ -27423,7 +27429,7 @@ abstract class AppLocalizations {
   /// No description provided for @dataDirectoryGenericError.
   ///
   /// In en, this message translates to:
-  /// **'The operation could not finish. Check available disk space, folder permissions and whether another Kelivo process is running, then retry. Existing data has been kept.'**
+  /// **'The operation could not finish. Check available disk space, folder permissions and whether another MobiCodex process is running, then retry. Existing data has been kept.'**
   String get dataDirectoryGenericError;
 
   /// No description provided for @dataDirectoryCancelHint.
@@ -27849,7 +27855,7 @@ abstract class AppLocalizations {
   /// No description provided for @recoveryGuideBody.
   ///
   /// In en, this message translates to:
-  /// **'Kelivo paused loading your data. We’ll look for local copies so you can choose what to recover. Existing files will be kept.'**
+  /// **'MobiCodex paused loading your data. We’ll look for local copies so you can choose what to recover. Existing files will be kept.'**
   String get recoveryGuideBody;
 
   /// No description provided for @recoverySpaceTitle.
@@ -27885,7 +27891,7 @@ abstract class AppLocalizations {
   /// No description provided for @recoveryRestoreRetryBody.
   ///
   /// In en, this message translates to:
-  /// **'The restore could not be completed. The selected copy has been kept. Check local copies again or reopen Kelivo to continue.'**
+  /// **'The restore could not be completed. The selected copy has been kept. Check local copies again or reopen MobiCodex to continue.'**
   String get recoveryRestoreRetryBody;
 
   /// No description provided for @recoverySpaceAmount.
@@ -27897,7 +27903,7 @@ abstract class AppLocalizations {
   /// No description provided for @recoveryCopiesNeedUpdate.
   ///
   /// In en, this message translates to:
-  /// **'Some copies were made by a newer version of Kelivo. Update Kelivo before restoring them. These copies have been kept.'**
+  /// **'Some copies were made by a newer version of MobiCodex. Update MobiCodex before restoring them. These copies have been kept.'**
   String get recoveryCopiesNeedUpdate;
 
   /// No description provided for @imageContextTitle.

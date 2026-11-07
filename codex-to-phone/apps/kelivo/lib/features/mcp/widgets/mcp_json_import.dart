@@ -178,7 +178,7 @@ class _McpJsonImportState extends State<_McpJsonImport> {
                         size: 18,
                       ),
                       const SizedBox(width: 10),
-                      Expanded(child: Text(server.name)),
+                      Expanded(child: Text(server.displayName)),
                       Text(
                         server.transport.name.toUpperCase(),
                         style: TextStyle(

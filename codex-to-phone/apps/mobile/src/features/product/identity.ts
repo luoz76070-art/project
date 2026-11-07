@@ -1,2 +1,3 @@
-export const productVersionCode = 9;
-export const productVersionLabel = "v0.1.7-native-preview";
+export const productDisplayName = "MobiCodex";
+export const productVersionCode = 10;
+export const productVersionLabel = "v0.1.8-native-preview";

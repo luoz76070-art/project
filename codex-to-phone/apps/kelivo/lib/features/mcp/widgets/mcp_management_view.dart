@@ -379,7 +379,7 @@ class _McpManagementViewState extends State<McpManagementView> {
       return showDialog<void>(
         context: context,
         builder: (ctx) => McpErrorDetailsDialog(
-          serverName: server.name,
+          serverName: server.displayName,
           message: message,
           onReconnect: () => reconnect(ctx),
         ),
@@ -388,7 +388,7 @@ class _McpManagementViewState extends State<McpManagementView> {
     return showFormSheet<void>(
       context,
       builder: (ctx) => McpErrorDetailsSheet(
-        serverName: server.name,
+        serverName: server.displayName,
         message: message,
         onReconnect: () => reconnect(ctx),
       ),
@@ -406,7 +406,7 @@ class _McpManagementViewState extends State<McpManagementView> {
       _showMenu(
         rowContext,
         anchor: anchor ?? box.localToGlobal(box.size.center(Offset.zero)),
-        title: server.name,
+        title: server.displayName,
         items: [
           ActionSheetItem(
             icon: Lucide.ListChecks,

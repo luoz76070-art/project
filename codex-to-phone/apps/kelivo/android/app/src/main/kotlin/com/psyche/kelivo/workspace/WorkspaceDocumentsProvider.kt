@@ -41,7 +41,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
             addValues(mapOf(
                 Root.COLUMN_ROOT_ID to WorkspaceDocumentPaths.ROOT,
                 Root.COLUMN_DOCUMENT_ID to WorkspaceDocumentPaths.ROOT,
-                Root.COLUMN_TITLE to "Kelivo",
+                Root.COLUMN_TITLE to "MobiCodex",
                 Root.COLUMN_ICON to R.mipmap.ic_launcher,
                 Root.COLUMN_FLAGS to (Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD),
                 Root.COLUMN_MIME_TYPES to "*/*",
@@ -53,7 +53,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
             if (documentId == WorkspaceDocumentPaths.ROOT) {
                 addValues(mapOf(
                     Document.COLUMN_DOCUMENT_ID to documentId,
-                    Document.COLUMN_DISPLAY_NAME to "Kelivo",
+                    Document.COLUMN_DISPLAY_NAME to "MobiCodex",
                     Document.COLUMN_MIME_TYPE to Document.MIME_TYPE_DIR,
                     Document.COLUMN_FLAGS to if (Build.VERSION.SDK_INT >= 30) Document.FLAG_DIR_BLOCKS_OPEN_DOCUMENT_TREE else 0,
                 ))

@@ -345,6 +345,6 @@ final class _IoOAuthCallback implements OAuthCallback {
 }
 
 String _callbackPage() => '''<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Kelivo</title></head>
-<body><p>Authorization received. You may close this window and return to Kelivo.</p>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>MobiCodex</title></head>
+<body><p>Authorization received. You may close this window and return to MobiCodex.</p>
 </body></html>''';

@@ -104,7 +104,7 @@ Stream<StreamChunk> sendOpenAIStream(
         modelId: modelId,
       )) {
     throw UnsupportedError(
-      'Kelivo supports Vercel Responses native web search with OpenAI models. '
+      'MobiCodex supports Vercel Responses native web search with OpenAI models. '
       'Use Chat Completions for Vercel Gateway search with other models.',
     );
   }

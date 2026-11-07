@@ -373,7 +373,7 @@ class HiveToSqliteMigrationService {
         .toIso8601String()
         .replaceAll(':', '-')
         .replaceAll('.', '-');
-    return 'kelivo_migration_backup_$timestamp.zip';
+    return 'mobicodex_migration_backup_$timestamp.zip';
   }
 
   Future<File> _backupToFile(

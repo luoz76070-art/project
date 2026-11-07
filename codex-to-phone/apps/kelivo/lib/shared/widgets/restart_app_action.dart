@@ -17,7 +17,7 @@ Future<bool> requestAppRestart(
       FlutterErrorDetails(
         exception: error,
         stack: stackTrace,
-        library: 'Kelivo restart',
+        library: 'MobiCodex restart',
         context: ErrorDescription('while requesting a process restart'),
       ),
     );

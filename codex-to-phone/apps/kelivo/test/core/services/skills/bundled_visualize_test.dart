@@ -79,6 +79,16 @@ void main() {
       );
       expect(visualize.record.source, SkillSource.bundled);
       expect(visualize.record.enabled, isTrue);
+      expect(visualize.description, contains('MobiCodex interface'));
+      expect(
+        await file('references/protocol.md').readAsString(),
+        startsWith('# MobiCodex UI protocol\n'),
+      );
+      expect(
+        await file('references/protocol.md').readAsString(),
+        contains('ui 1 catalog "kelivo.native/1"'),
+      );
+      expect(await file('SKILL.md').readAsString(), contains('`kelivo-ui`'));
       final assets = UiGuidance.generateAssets();
       final actual = Directory(p.join(root.path, 'visualize'))
           .listSync(recursive: true)

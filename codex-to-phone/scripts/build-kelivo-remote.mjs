@@ -22,6 +22,10 @@ await new Promise((resolve, reject) => {
   child.once('error', reject);
   child.once('exit', (code, signal) => code === 0 ? resolve() : reject(new Error(`Kelivo remote build failed (${signal ?? code})`)));
 });
+const indexPath = path.join(destination, 'index.html');
+const indexHtml = await readFile(indexPath, 'utf8');
+if (!indexHtml.includes('<title>Mobile Codex</title>')) throw new Error('Unexpected remote page title.');
+await writeFile(indexPath, indexHtml.replace('<title>Mobile Codex</title>', '<title>MobiCodex</title>'));
 await writeFile(path.join(destination, 'remote-host.json'), JSON.stringify({
   revision: 1,
   applicationId: channel.applicationId,

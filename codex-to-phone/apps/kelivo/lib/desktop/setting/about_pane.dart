@@ -212,12 +212,22 @@ class _DesktopAboutPaneState extends State<DesktopAboutPane> {
                   _DeskNavRow(
                     icon: lucide.Lucide.Earth,
                     label: l10n.aboutPageWebsite,
-                    onTap: () => _openUrl('https://kelivo.psycheas.top/'),
+                    onTap: () => _openUrl(
+                      'https://github.com/luoz76070-art/project/tree/main/codex-to-phone',
+                    ),
                   ),
                   const _DeskRowDivider(),
                   _DeskNavRowSvg(
                     svgAsset: 'assets/icons/github.svg',
                     label: l10n.aboutPageGithub,
+                    onTap: () => _openUrl(
+                      'https://github.com/luoz76070-art/project/tree/main/codex-to-phone',
+                    ),
+                  ),
+                  const _DeskRowDivider(),
+                  _DeskNavRow(
+                    icon: lucide.Lucide.Code,
+                    label: l10n.aboutPageUpstreamSource,
                     onTap: () =>
                         _openUrl('https://github.com/Chevey339/kelivo'),
                   ),

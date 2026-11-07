@@ -338,7 +338,7 @@ class _RestoreFailureScreenState extends State<RestoreFailureScreen> {
         '-',
       );
       final file = File(
-        '${Directory.systemTemp.path}/kelivo-startup-failure-$stamp.txt',
+        '${Directory.systemTemp.path}/mobicodex-startup-failure-$stamp.txt',
       );
       await file.writeAsString(_diagnosticText, flush: true);
       if (_isDesktop) {
@@ -657,7 +657,7 @@ class _RestoreFailureScreenState extends State<RestoreFailureScreen> {
       FlutterErrorDetails(
         exception: error,
         stack: stackTrace,
-        library: 'Kelivo restore',
+        library: 'MobiCodex restore',
         context: ErrorDescription(context),
       ),
     );

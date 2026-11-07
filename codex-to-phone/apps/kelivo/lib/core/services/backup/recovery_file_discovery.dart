@@ -19,7 +19,7 @@ abstract final class RecoveryFileDiscovery {
   ).hasMatch(name);
 
   static bool isSnapshotArchive(String name) => RegExp(
-    r'^(?:kelivo-snapshot-|kelivo_backup_).+\.zip$',
+    r'^(?:kelivo|mobicodex)(?:-snapshot-|_backup_).+\.zip$',
     caseSensitive: false,
   ).hasMatch(name);
 

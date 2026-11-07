@@ -477,7 +477,9 @@ class SettingsPage extends StatelessWidget {
                 icon: Lucide.Library,
                 label: l10n.settingsPageDocs,
                 onTap: () async {
-                  final uri = Uri.parse('https://kelivo.psycheas.top/');
+                  final uri = Uri.parse(
+                    'https://github.com/luoz76070-art/project/blob/main/codex-to-phone/docs/usage.md',
+                  );
                   if (!await launchUrl(uri, mode: LaunchMode.platformDefault)) {
                     await launchUrl(uri, mode: LaunchMode.externalApplication);
                   }

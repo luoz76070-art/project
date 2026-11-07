@@ -162,7 +162,8 @@ class _ImagePreviewDesktopDialogState
       final ext = p.extension(widget.file.path).isNotEmpty
           ? p.extension(widget.file.path)
           : '.png';
-      final defaultName = 'kelivo-${DateTime.now().millisecondsSinceEpoch}$ext';
+      final defaultName =
+          'mobicodex-${DateTime.now().millisecondsSinceEpoch}$ext';
       final allowed = [ext.replaceFirst('.', '').toLowerCase()];
       final String? savePath = await FilePicker.platform.saveFile(
         dialogTitle: l10n.imageViewerPageSaveButton,
@@ -1073,7 +1074,7 @@ class _ImagePreviewSheetState extends State<_ImagePreviewSheet> {
     setState(() => _saving = true);
     final l10n = AppLocalizations.of(context)!;
     try {
-      final name = 'kelivo-${DateTime.now().millisecondsSinceEpoch}';
+      final name = 'mobicodex-${DateTime.now().millisecondsSinceEpoch}';
       final result = await _saveImagePreviewFile(widget.file, name: name);
       if (!mounted) return;
       bool success = false;

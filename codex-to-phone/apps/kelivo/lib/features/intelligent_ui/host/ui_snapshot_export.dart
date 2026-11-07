@@ -80,7 +80,7 @@ Future<void> exportUiSnapshot(
       ),
     );
     if (format == null || !context.mounted) return;
-    final name = 'kelivo-ui-${DateTime.now().microsecondsSinceEpoch}';
+    final name = 'mobicodex-ui-${DateTime.now().microsecondsSinceEpoch}';
     if (format != 'png') {
       await saveExportTextWithPicker(
         context,

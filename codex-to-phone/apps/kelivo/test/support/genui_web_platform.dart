@@ -96,7 +96,7 @@ class FakeGenUiWebController extends PlatformWebViewController {
     navigation?.started?.call('about:blank');
     if (html.contains('<title>Kelivo preview closed</title>')) {
       await owner.emptyWait?.future;
-      title = 'Kelivo preview closed';
+      title = 'MobiCodex preview closed';
       if (owner.finishEmpty) navigation?.finished?.call('about:blank');
     } else if (owner.finishInitial) {
       navigation?.finished?.call('about:blank');

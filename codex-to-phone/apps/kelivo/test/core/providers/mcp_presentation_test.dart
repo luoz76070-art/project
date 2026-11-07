@@ -20,6 +20,27 @@ class _Mcp extends McpProvider {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'built-in display branding preserves serialized server and tool identity',
+    () {
+      final legacy = McpServerConfig(
+        id: 'kelivo_fetch',
+        enabled: false,
+        name: '@kelivo/fetch',
+        transport: McpTransportType.inmemory,
+        tools: [McpToolConfig(name: 'kelivo_fetch', enabled: false)],
+      ).toJson();
+      final server = McpServerConfig.fromJson(legacy);
+      expect(server.displayName, '@MobiCodex/fetch');
+      expect(server.toJson(), legacy);
+      expect(server.copyWith(name: 'My fetch').displayName, 'My fetch');
+      expect(
+        server.copyWith(transport: McpTransportType.http).displayName,
+        '@kelivo/fetch',
+      );
+      expect(server.copyWith(id: 'custom-fetch').displayName, '@kelivo/fetch');
+    },
+  );
   late BusinessTestHarness harness;
   late _Mcp mcp;
   setUp(() async {

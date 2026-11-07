@@ -42,7 +42,7 @@ class WorkspaceDirectoryAccess(private val context: Context) {
 
     fun requestStorageAccess(result: MethodChannel.Result) {
         val activity = attachedActivity ?: run {
-            result.error("foreground_activity_required", "Open Kelivo to grant storage access.", null)
+            result.error("foreground_activity_required", "Open MobiCodex to grant storage access.", null)
             return
         }
         if (hasStorageAccess()) {
@@ -75,7 +75,7 @@ class WorkspaceDirectoryAccess(private val context: Context) {
 
     fun pick(result: MethodChannel.Result) {
         val activity = attachedActivity ?: run {
-            result.error("foreground_activity_required", "Open Kelivo to choose a folder.", null)
+            result.error("foreground_activity_required", "Open MobiCodex to choose a folder.", null)
             return
         }
         if (!hasStorageAccess()) {

@@ -11,6 +11,31 @@ void main() {
   });
   tearDown(() => root.delete(recursive: true));
 
+  test(
+    'retained archives from both brand versions remain discoverable',
+    () async {
+      final snapshots = await Directory('${root.path}/snapshots').create();
+      const names = [
+        'kelivo_backup_2026-11-07T00-00-00.000.zip',
+        'kelivo-snapshot-2026-11-07T00-00-00.000.zip',
+        'mobicodex_backup_2026-11-07T00-00-00.000.zip',
+        'mobicodex-snapshot-2026-11-07T00-00-00.000.zip',
+      ];
+      for (final name in names) {
+        await File('${snapshots.path}/$name').writeAsString(name);
+      }
+      await File('${snapshots.path}/unrelated.zip').writeAsString('unrelated');
+      final archives = await RecoveryFileDiscovery.archives(root);
+      expect(
+        archives.map((file) => file.uri.pathSegments.last),
+        unorderedEquals(names),
+      );
+      for (final file in archives) {
+        expect(await file.readAsString(), file.uri.pathSegments.last);
+      }
+    },
+  );
+
   test('trash traversal never follows links outside the data root', () async {
     final outside = await Directory.systemTemp.createTemp('outside-recovery-');
     addTearDown(() => outside.delete(recursive: true));

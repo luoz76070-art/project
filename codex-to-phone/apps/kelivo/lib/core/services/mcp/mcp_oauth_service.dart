@@ -645,7 +645,9 @@ final class McpOAuthService {
         _cachedDynamicRegistration(
           discovery,
           redirectUri: callback.redirectUri,
-          clientName: serverName.trim().isEmpty ? 'Kelivo' : serverName.trim(),
+          clientName: serverName.trim().isEmpty
+              ? 'MobiCodex'
+              : serverName.trim(),
           scopes: scopes,
         ),
       );

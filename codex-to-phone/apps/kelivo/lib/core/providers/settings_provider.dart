@@ -1470,7 +1470,7 @@ class SettingsProvider extends ChangeNotifier {
     if (_providerConfigs.isEmpty) {
       // Seed a couple of sensible defaults on first launch, but do not recreate
       // providers implicitly during later reads (e.g., when switching chats).
-      ensureProviderConfig('KelivoIN', defaultName: 'KelivoIN');
+      ensureProviderConfig('KelivoIN', defaultName: 'MobiCodex IN');
       ensureProviderConfig('Tensdaq', defaultName: 'Tensdaq');
       ensureProviderConfig('SiliconFlow', defaultName: 'SiliconFlow');
       ensureProviderConfig('AIhubmix', defaultName: 'AIhubmix');
@@ -6477,7 +6477,10 @@ class ProviderConfig {
   factory ProviderConfig.fromJson(Map<String, dynamic> json) => ProviderConfig(
     id: json['id'] as String? ?? (json['name'] as String? ?? ''),
     enabled: json['enabled'] as bool? ?? true,
-    name: json['name'] as String? ?? '',
+    name:
+        (json['id'] ?? json['name']) == 'KelivoIN' && json['name'] == 'KelivoIN'
+        ? 'MobiCodex IN'
+        : json['name'] as String? ?? '',
     apiKey: json['apiKey'] as String? ?? '',
     oauthProvider: json['oauthProvider'] == null
         ? null
@@ -6696,7 +6699,9 @@ class ProviderConfig {
           return ProviderConfig(
             id: key,
             enabled: defaultEnabled(key),
-            name: displayName ?? key,
+            name: displayName == null || displayName == 'KelivoIN'
+                ? 'MobiCodex IN'
+                : displayName,
             apiKey: '',
             baseUrl: _defaultBase(key),
             providerType: ProviderKind.openai,

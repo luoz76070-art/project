@@ -43,7 +43,7 @@ class PhoneControlService : AccessibilityService() {
         fun execute(json: String, complete: (String) -> Unit) {
             val service = connected
             if (service == null) {
-                complete(error("SERVICE_UNAVAILABLE", "Enable Kelivo phone control in Android Accessibility settings. If already enabled, turn the service off and on again.").toString())
+                complete(error("SERVICE_UNAVAILABLE", "Enable MobiCodex phone control in Android Accessibility settings. If already enabled, turn the service off and on again.").toString())
                 return
             }
             service.execute(json) { complete(it.toString()) }

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:Kelivo/core/database/extension_entity_store.dart';
@@ -5,6 +6,7 @@ import 'package:Kelivo/core/models/skill_record.dart';
 import 'package:Kelivo/core/services/skills/skills_service.dart';
 import 'package:Kelivo/core/services/workspace/workspace_tools_service.dart';
 import 'package:Kelivo/utils/mcp_structured_image.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -14,6 +16,36 @@ import '../../../support/business_test_harness.dart';
 class _MissingAssets extends CachingAssetBundle {
   @override
   Future<ByteData> load(String key) async => throw StateError('asset missing');
+}
+
+class _InterceptedAssets extends CachingAssetBundle {
+  _InterceptedAssets(this.beforeLoad);
+
+  final Future<void> Function(String key) beforeLoad;
+
+  @override
+  Future<ByteData> load(String key) async {
+    await beforeLoad(key);
+    return rootBundle.load(key);
+  }
+}
+
+// git show HEAD originals, verified against integrations/kelivo/source-files.json.
+const _legacyAssetSha256 = {
+  'skill-creator/SKILL.md':
+      'e6dab535a636aafa4f99bc54c33134072ce120a33a060e72d24d155f49324e44',
+  'visualize/SKILL.md':
+      'b22b1a04cfbf070e15b14b43b17518dcd19142b083b417a900bce41b2955007e',
+  'visualize/references/protocol.md':
+      'f7d6093980cc09344d99b639bc71241c7722f0843371e37643c19878d6eeebdd',
+};
+
+Future<List<int>> _legacyAssetBytes(String relative) async {
+  final asset = await rootBundle.loadString('assets/skills/$relative');
+  final bytes = utf8.encode(asset.replaceAll('MobiCodex', 'Kelivo'));
+  // Reconstruct only the natural-language rename, then require exact old bytes.
+  expect(sha256.convert(bytes).toString(), _legacyAssetSha256[relative]);
+  return bytes;
 }
 
 class _FailingSkillStore extends ExtensionEntityStore {
@@ -59,6 +91,14 @@ void main() {
     return service;
   }
 
+  Future<void> restoreLegacyAssets() async {
+    for (final relative in _legacyAssetSha256.keys) {
+      await File(
+        p.join(root.path, relative),
+      ).writeAsBytes(await _legacyAssetBytes(relative));
+    }
+  }
+
   test(
     'bundled creator is enabled, discoverable and readable without a workspace',
     () async {
@@ -74,6 +114,9 @@ void main() {
       expect(parsed.name, skill.record.id);
       expect(parsed.description.length, lessThanOrEqualTo(200));
       expect(parsed.body.trim(), isNotEmpty);
+      expect(markdown, contains('works in MobiCodex'));
+      expect(markdown, isNot(contains('Kelivo')));
+      expect(markdown, contains('kelivo://skills/'));
       expect(
         buildAvailableSkillsFragment(
           service.resolveForAssistant(null),
@@ -92,6 +135,267 @@ void main() {
       expect(result.content, contains('# Skill Creator'));
     },
   );
+
+  test(
+    'refreshes exact legacy bundled files without changing user choices',
+    () async {
+      final installed = createService();
+      await installed.loaded;
+      final records = <String, Map<String, dynamic>>{};
+      for (final skill in installed.skills) {
+        await installed.setEnabled(skill.record.id, false);
+        await installed.incrementUseCount(skill.record.id);
+        records[skill.record.id] = (await store.get(
+          ExtensionEntityStore.kindSkill,
+          skill.record.id,
+        ))!.payload;
+        await File(
+          p.join(root.path, '.bundled-${skill.record.id}'),
+        ).writeAsString('1 \r\n');
+      }
+      await restoreLegacyAssets();
+
+      final upgraded = createService();
+      await upgraded.loaded;
+      for (final relative in _legacyAssetSha256.keys) {
+        expect(
+          await File(p.join(root.path, relative)).readAsString(),
+          await rootBundle.loadString('assets/skills/$relative'),
+        );
+      }
+      for (final skill in upgraded.skills) {
+        expect(skill.record.toJson(), records[skill.record.id]);
+        expect(
+          await File(
+            p.join(root.path, '.bundled-${skill.record.id}'),
+          ).readAsString(),
+          '1 \r\n',
+        );
+      }
+      // New bytes need no asset read or another write on subsequent startups.
+      final restarted = createService(assets: _MissingAssets());
+      await restarted.loaded;
+      expect(restarted.skills, hasLength(2));
+    },
+  );
+
+  test('refresh keeps byte-level edits and missing references', () async {
+    await createService().loaded;
+    await restoreLegacyAssets();
+    final creator = File(p.join(root.path, 'skill-creator/SKILL.md'));
+    final editedCreator = '${await creator.readAsString()}\n';
+    await creator.writeAsString(editedCreator);
+    final protocol = File(
+      p.join(root.path, 'visualize/references/protocol.md'),
+    );
+    final editedProtocol = (await protocol.readAsString()).replaceAll(
+      '\n',
+      '\r\n',
+    );
+    await protocol.writeAsString(editedProtocol);
+    final deleted = File(p.join(root.path, 'visualize/references/content.md'));
+    await deleted.delete();
+    final notes = File(p.join(root.path, 'visualize/notes.txt'));
+    await notes.writeAsString('User notes');
+
+    await createService().loaded;
+    expect(await creator.readAsString(), editedCreator);
+    expect(await protocol.readAsString(), editedProtocol);
+    expect(await deleted.exists(), isFalse);
+    expect(await notes.readAsString(), 'User notes');
+    expect(
+      await File(p.join(root.path, 'visualize/SKILL.md')).readAsString(),
+      await rootBundle.loadString('assets/skills/visualize/SKILL.md'),
+    );
+  });
+
+  for (final source in [
+    SkillSource.paste,
+    SkillSource.file,
+    SkillSource.github,
+  ]) {
+    test(
+      'does not refresh exact legacy bytes owned by ${source.name}',
+      () async {
+        final installed = createService();
+        await installed.loaded;
+        await restoreLegacyAssets();
+        for (final skill in installed.skills) {
+          await store.upsert(
+            ExtensionEntityStore.kindSkill,
+            skill.record.id,
+            skill.record.copyWith(source: source).toJson(),
+          );
+        }
+        await createService(assets: _MissingAssets()).loaded;
+        for (final relative in _legacyAssetSha256.keys) {
+          expect(
+            await File(p.join(root.path, relative)).readAsBytes(),
+            await _legacyAssetBytes(relative),
+          );
+        }
+      },
+    );
+  }
+
+  test(
+    'exact legacy bytes without bundled metadata remain user-owned',
+    () async {
+      await createService().loaded;
+      await restoreLegacyAssets();
+      await store.delete(ExtensionEntityStore.kindSkill, 'visualize');
+
+      final restarted = createService();
+      await restarted.loaded;
+      final visualize = restarted.skills.singleWhere(
+        (s) => s.record.id == 'visualize',
+      );
+      expect(visualize.record.source, SkillSource.file);
+      for (final relative in _legacyAssetSha256.keys.where(
+        (path) => path.startsWith('visualize/'),
+      )) {
+        expect(
+          await File(p.join(root.path, relative)).readAsBytes(),
+          await _legacyAssetBytes(relative),
+        );
+      }
+    },
+  );
+
+  test(
+    'refresh also covers a bundled installation without a receipt',
+    () async {
+      await createService().loaded;
+      await restoreLegacyAssets();
+      await File(p.join(root.path, '.bundled-visualize')).delete();
+
+      await createService().loaded;
+      expect(
+        await File(p.join(root.path, 'visualize/SKILL.md')).readAsString(),
+        await rootBundle.loadString('assets/skills/visualize/SKILL.md'),
+      );
+      expect(
+        await File(p.join(root.path, '.bundled-visualize')).readAsString(),
+        '1\n',
+      );
+    },
+  );
+
+  test(
+    'does not refresh leftover references after entrypoint deletion',
+    () async {
+      await createService().loaded;
+      await restoreLegacyAssets();
+      await File(p.join(root.path, 'visualize/SKILL.md')).delete();
+      final restarted = createService();
+      await restarted.loaded;
+      expect(restarted.skills.map((s) => s.record.id), ['skill-creator']);
+      expect(
+        await File(p.join(root.path, 'visualize/SKILL.md')).exists(),
+        isFalse,
+      );
+      expect(
+        await File(
+          p.join(root.path, 'visualize/references/protocol.md'),
+        ).readAsBytes(),
+        await _legacyAssetBytes('visualize/references/protocol.md'),
+      );
+      expect(
+        await File(p.join(root.path, '.bundled-visualize')).readAsString(),
+        '1\n',
+      );
+    },
+  );
+
+  for (final remove in [false, true]) {
+    test(
+      'rechecks a concurrent ${remove ? 'deletion' : 'edit'} before publishing',
+      () async {
+        await createService().loaded;
+        await restoreLegacyAssets();
+        final target = File(p.join(root.path, 'skill-creator/SKILL.md'));
+        final edited = '${await target.readAsString()}\nUser edit\n';
+        final assets = _InterceptedAssets((key) async {
+          if (key != 'assets/skills/skill-creator/SKILL.md') return;
+          if (remove) {
+            await target.delete();
+          } else {
+            await target.writeAsString(edited);
+          }
+        });
+        await createService(assets: assets).loaded;
+        if (remove) {
+          expect(await target.exists(), isFalse);
+        } else {
+          expect(await target.readAsString(), edited);
+        }
+        expect(
+          await root
+              .list()
+              .where((e) => p.basename(e.path).startsWith('.bundled-branding-'))
+              .toList(),
+          isEmpty,
+        );
+      },
+    );
+  }
+
+  test(
+    'refresh asset failure preserves the old file and receipt for retry',
+    () async {
+      await createService().loaded;
+      await restoreLegacyAssets();
+      await expectLater(
+        createService(assets: _MissingAssets()).loaded,
+        throwsStateError,
+      );
+      expect(
+        await File(p.join(root.path, 'skill-creator/SKILL.md')).readAsBytes(),
+        await _legacyAssetBytes('skill-creator/SKILL.md'),
+      );
+      expect(
+        await File(p.join(root.path, '.bundled-skill-creator')).readAsString(),
+        '1\n',
+      );
+      await createService().loaded;
+      expect(
+        await File(p.join(root.path, 'skill-creator/SKILL.md')).readAsString(),
+        await rootBundle.loadString('assets/skills/skill-creator/SKILL.md'),
+      );
+    },
+  );
+
+  for (final linkParent in [false, true]) {
+    test(
+      'refresh never follows a ${linkParent ? 'parent' : 'file'} symlink',
+      () async {
+        await createService().loaded;
+        await restoreLegacyAssets();
+        final outside = await Directory.systemTemp.createTemp(
+          'bundled-branding-canary-',
+        );
+        addTearDown(() => outside.delete(recursive: true));
+        final canary = File(p.join(outside.path, 'protocol.md'));
+        final old = await _legacyAssetBytes('visualize/references/protocol.md');
+        await canary.writeAsBytes(old);
+        final reference = File(
+          p.join(root.path, 'visualize/references/protocol.md'),
+        );
+        if (linkParent) {
+          await reference.parent.delete(recursive: true);
+          await Link(reference.parent.path).create(outside.path);
+        } else {
+          await reference.delete();
+          await Link(reference.path).create(canary.path);
+        }
+        await createService().loaded;
+        expect(await canary.readAsBytes(), old);
+      },
+      skip: Platform.isWindows
+          ? 'Symlink creation needs host-specific privileges'
+          : false,
+    );
+  }
 
   test(
     'restart preserves edits, disabled state and usage without duplicating',

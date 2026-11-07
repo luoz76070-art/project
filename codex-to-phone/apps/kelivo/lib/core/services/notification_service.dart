@@ -168,7 +168,7 @@ class NotificationService {
           enableVibration: true,
           category: AndroidNotificationCategory.message,
           visibility: NotificationVisibility.public,
-          ticker: 'Kelivo',
+          ticker: 'MobiCodex',
           styleInformation: BigTextStyleInformation(
             body ?? 'Assistant reply has been generated',
           ),

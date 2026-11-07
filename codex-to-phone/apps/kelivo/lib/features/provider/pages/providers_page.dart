@@ -506,7 +506,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
     _p('Gemini', 'Gemini', enabled: true, models: 0),
     _p('OpenRouter', 'OpenRouter', enabled: true, models: 0),
     _p('Vercel AI Gateway', 'Vercel', enabled: false, models: 0),
-    _p('KelivoIN', 'KelivoIN', enabled: true, models: 0),
+    _p('KelivoIN', 'MobiCodex IN', enabled: true, models: 0),
     _p('Tensdaq', 'Tensdaq', enabled: false, models: 0),
     _p('DeepSeek', 'DeepSeek', enabled: false, models: 0),
     _p('AIhubmix', 'AIhubmix', enabled: false, models: 0),

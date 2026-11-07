@@ -234,7 +234,7 @@ void main() {
 
     expect(find.text('Let’s recover your chats'), findsOneWidget);
     expect(find.textContaining('paused loading your data'), findsOneWidget);
-    expect(find.text('Restart Kelivo'), findsOneWidget);
+    expect(find.text('Restart MobiCodex'), findsOneWidget);
 
     // The first screen guides recovery; diagnostics remain accessible.
     expect(
@@ -250,7 +250,7 @@ void main() {
     expect(find.text('restore_startup_receipt'), findsOneWidget);
     expect(find.text('Restore gate'), findsOneWidget);
 
-    await tester.tap(find.text('Restart Kelivo'));
+    await tester.tap(find.text('Restart MobiCodex'));
     await tester.pump();
     expect(restartCalls, 1);
   });
@@ -293,9 +293,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Kelivo is already running'), findsOneWidget);
+    expect(find.text('MobiCodex is already running'), findsOneWidget);
     expect(find.textContaining('another app process'), findsOneWidget);
-    expect(find.text('Restart Kelivo'), findsOneWidget);
+    expect(find.text('Restart MobiCodex'), findsOneWidget);
     // A lease conflict is not a data problem, so no file-level actions.
     expect(find.text('Other options'), findsNothing);
   });

@@ -172,6 +172,13 @@ class McpServerConfig {
   final bool enabled;
   final String name;
   final McpTransportType transport;
+  // Display branding must not rename persisted servers or function-call IDs.
+  String get displayName =>
+      transport == McpTransportType.inmemory &&
+          id == 'kelivo_fetch' &&
+          name == '@kelivo/fetch'
+      ? '@MobiCodex/fetch'
+      : name;
   // For SSE/HTTP
   final String url; // SSE endpoint or HTTP base URL
   final List<McpToolConfig> tools;
@@ -1754,7 +1761,7 @@ class McpProvider extends ChangeNotifier {
         return false;
       }
       final clientConfig = mcp.McpClient.simpleConfig(
-        name: 'Kelivo MCP',
+        name: 'MobiCodex MCP',
         version: '1.0.0',
         enableDebugLogging: false,
         requestTimeout: _requestTimeout,

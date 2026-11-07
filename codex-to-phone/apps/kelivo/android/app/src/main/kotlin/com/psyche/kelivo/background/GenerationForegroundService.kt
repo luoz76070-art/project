@@ -55,7 +55,7 @@ class GenerationForegroundService : Service() {
     private fun acquireWakeLock() {
         if (wakeLock?.isHeld == true) return
         wakeLock = getSystemService(PowerManager::class.java).newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK, "Kelivo:Generation").apply {
+            PowerManager.PARTIAL_WAKE_LOCK, "MobiCodex:Generation").apply {
             setReferenceCounted(false)
             acquire()
         }

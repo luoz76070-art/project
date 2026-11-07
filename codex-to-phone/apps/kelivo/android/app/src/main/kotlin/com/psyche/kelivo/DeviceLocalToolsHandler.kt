@@ -261,7 +261,7 @@ class DeviceLocalToolsHandler(private val context: Context) {
             return
         }
         if (attachedActivity == null) {
-            result.success(errorPayload("FOREGROUND_REQUIRED", "Open Kelivo to grant calendar permission."))
+            result.success(errorPayload("FOREGROUND_REQUIRED", "Open MobiCodex to grant calendar permission."))
             return
         }
         pendingCalendarPermissionCallback = { granted ->

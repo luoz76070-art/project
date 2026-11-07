@@ -70,7 +70,7 @@ class _UiWebBlockAdapterState extends State<UiWebBlockAdapter> {
       onOpen: (document) => showUiWebPreview(context, document),
       onExportHtml: (document) => saveExportTextWithPicker(
         context,
-        filename: 'kelivo-web-${DateTime.now().microsecondsSinceEpoch}.html',
+        filename: 'mobicodex-web-${DateTime.now().microsecondsSinceEpoch}.html',
         content: document.html,
         allowedExtensions: const ['html'],
       ),

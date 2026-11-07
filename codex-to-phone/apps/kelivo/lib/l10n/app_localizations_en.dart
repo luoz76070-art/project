@@ -178,7 +178,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get storageSpaceClearDisplacedDatabasesConfirmMessage =>
-      'Delete these set-aside databases? Kelivo kept them when it rebuilt its database, and they may be the only surviving copy of those chats and settings. This cannot be undone.';
+      'Delete these set-aside databases? MobiCodex kept them when it rebuilt its database, and they may be the only surviving copy of those chats and settings. This cannot be undone.';
 
   @override
   String get storageSpaceRestoreTracesHint =>
@@ -378,7 +378,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPageLogs => 'Logs';
 
   @override
-  String get settingsPageSponsor => 'Sponsor';
+  String get settingsPageSponsor => 'Support upstream development';
 
   @override
   String get settingsPageShare => 'Share';
@@ -523,7 +523,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sponsorPageAfdianTitle => 'Afdian';
 
   @override
-  String get sponsorPageAfdianSubtitle => 'afdian.com/a/kelivo';
+  String get sponsorPageAfdianSubtitle => 'Support the upstream author';
 
   @override
   String get sponsorPageWeChatTitle => 'WeChat Sponsor';
@@ -1733,23 +1733,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupPageRestartContent =>
-      'Import successful. Restart Kelivo to apply it safely.';
+      'Import successful. Restart MobiCodex to apply it safely.';
 
   @override
   String backupPageRestartContentWithSkipped(int count) {
-    return 'Import completed, but $count conversations with invalid message ordering were skipped. Restart Kelivo to apply the imported data safely.';
+    return 'Import completed, but $count conversations with invalid message ordering were skipped. Restart MobiCodex to apply the imported data safely.';
   }
 
   @override
   String get restartAppFailedMessage =>
-      'Kelivo could not restart automatically. Fully close it, then open it again.';
+      'MobiCodex could not restart automatically. Fully close it, then open it again.';
 
   @override
   String get backupRestoreRolledBackTitle => 'Restore was rolled back';
 
   @override
   String get backupRestoreRolledBackContent =>
-      'The restore could not be completed. Kelivo verified and kept your previous data.';
+      'The restore could not be completed. MobiCodex verified and kept your previous data.';
 
   @override
   String get backupRestoreDirectoryBlockedTitle =>
@@ -1767,22 +1767,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupRestoreFailureContent =>
-      'Kelivo could not verify a complete old or new data set, so chat data was not opened. Close Kelivo and try again. If this repeats, keep the diagnostic code for support.';
+      'MobiCodex could not verify a complete old or new data set, so chat data was not opened. Close MobiCodex and try again. If this repeats, keep the diagnostic code for support.';
 
   @override
   String get backupRestoreBusinessLeaseUnavailableTitle =>
-      'Kelivo is already running';
+      'MobiCodex is already running';
 
   @override
   String get backupRestoreBusinessLeaseUnavailableContent =>
-      'Kelivo\'s data is still in use by another app process. Close any other Kelivo window, then restart. Your chat data has not been opened by this process.';
+      'MobiCodex\'s data is still in use by another app process. Close any other MobiCodex window, then restart. Your chat data has not been opened by this process.';
 
   @override
   String get restoreProgressTitle => 'Restoring your backup';
 
   @override
   String get restoreProgressWarning =>
-      'Keep Kelivo open until this finishes. If you close it now, the next launch starts this over.';
+      'Keep MobiCodex open until this finishes. If you close it now, the next launch starts this over.';
 
   @override
   String get restoreProgressStageCheckingBackup => 'Checking the backup';
@@ -1804,7 +1804,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get restoreProgressStageFinishing => 'Finishing up';
 
   @override
-  String get backupRestoreFailureRestartButton => 'Restart Kelivo';
+  String get backupRestoreFailureRestartButton => 'Restart MobiCodex';
 
   @override
   String get backupRestoreFailureCopyButton => 'Copy diagnostic code';
@@ -1845,7 +1845,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get startupRecoveryResetFailed =>
-      'Reset failed. Fully close Kelivo, then open it again.';
+      'Reset failed. Fully close MobiCodex, then open it again.';
 
   @override
   String get startupRecoveryResetDialogTitle =>
@@ -1853,7 +1853,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get startupRecoveryResetDialogContent =>
-      'This will not recover your previous chats. Kelivo will keep the current database and existing copies, and start a new empty chat list. To get your chats back, cancel and choose a local copy.';
+      'This will not recover your previous chats. MobiCodex will keep the current database and existing copies, and start a new empty chat list. To get your chats back, cancel and choose a local copy.';
 
   @override
   String get startupRecoveryResetDialogConfirm => 'Keep copies and start fresh';
@@ -1968,18 +1968,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get startupRecoveryDangerBody =>
-      'A fresh start removes the current data from view. Kelivo will preserve the old database and existing copies for recovery. Export a data copy first if possible.';
+      'A fresh start removes the current data from view. MobiCodex will preserve the old database and existing copies for recovery. Export a data copy first if possible.';
 
   @override
   String get startupRecoveryResetAcknowledge =>
       'I choose to continue with an empty chat list without recovering my chats now.';
 
   @override
-  String get startupDatabaseUpdateRequiredTitle => 'Update Kelivo to continue';
+  String get startupDatabaseUpdateRequiredTitle =>
+      'Update MobiCodex to continue';
 
   @override
   String get startupDatabaseUpdateRequiredContent =>
-      'The chat database on this device was created by a newer version of Kelivo and cannot be opened by this version. Your data has not been changed. Install the latest version of Kelivo, then open it again.';
+      'The chat database on this device was created by a newer version of MobiCodex and cannot be opened by this version. Your data has not been changed. Install the latest version of MobiCodex, then open it again.';
 
   @override
   String get startupDatabaseUpdateRequiredDowngradeTitle =>
@@ -1991,7 +1992,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get startupDatabaseUpdateRequiredDowngradeStep1 =>
-      'Install and open the latest Kelivo, then export a backup from Settings → Backup.';
+      'Install and open the latest MobiCodex, then export a backup from Settings → Backup.';
 
   @override
   String startupDatabaseUpdateRequiredDowngradeStep2(String url) {
@@ -2050,7 +2051,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String backupPageForwardCompatBody(int backupVersion, int currentVersion) {
-    return 'This backup was created by a newer version of Kelivo (data format $backupVersion; this version supports $currentVersion), and it does not say whether older versions can read it.\n\nYou can continue: anything this version does not recognise will be skipped, and the backup file itself is not modified. But if the newer version changed how existing data is stored, some content may be imported incorrectly.\n\nUpdating Kelivo first is the safer choice.';
+    return 'This backup was created by a newer version of MobiCodex (data format $backupVersion; this version supports $currentVersion), and it does not say whether older versions can read it.\n\nYou can continue: anything this version does not recognise will be skipped, and the backup file itself is not modified. But if the newer version changed how existing data is stored, some content may be imported incorrectly.\n\nUpdating MobiCodex first is the safer choice.';
   }
 
   @override
@@ -2061,7 +2062,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupPageSchemaTooNewMessage =>
-      'This backup was created by a newer version of Kelivo and cannot be read by this version. Please update Kelivo and try again.';
+      'This backup was created by a newer version of MobiCodex and cannot be read by this version. Please update MobiCodex and try again.';
 
   @override
   String get backupPageBackupUploaded => 'Backup uploaded';
@@ -2244,14 +2245,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupPageIosSystemBackupNote =>
-      'Kelivo\'s local data is set to be excluded from iCloud device backups. Export a backup file before changing devices or deleting the app.';
+      'MobiCodex\'s local data is set to be excluded from iCloud device backups. Export a backup file before changing devices or deleting the app.';
 
   @override
   String get backupPageImportFromCherryStudio => 'Import from Cherry Studio';
 
   @override
   String backupPageCherryStudioUnsupportedBackupVersion(String version) {
-    return 'This backup uses Cherry Studio format version $version, which Kelivo cannot import yet. Export from Cherry Studio v1 instead, or wait for a Kelivo update that supports Cherry Studio v2 backups.';
+    return 'This backup uses Cherry Studio format version $version, which MobiCodex cannot import yet. Export from Cherry Studio v1 instead, or wait for a MobiCodex update that supports Cherry Studio v2 backups.';
   }
 
   @override
@@ -4833,7 +4834,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchServicesPageWebFetchFooter =>
-      'With web search on, the model can also read full pages. When the search service can\'t read pages, local reading is used, which can\'t handle pages that need JavaScript or block bots.\n\nIf you use the page reader configured here, disable the built-in @kelivo/fetch in Settings → MCP to avoid overlapping tools. The page reader configured here will still work.';
+      'With web search on, the model can also read full pages. When the search service can\'t read pages, local reading is used, which can\'t handle pages that need JavaScript or block bots.\n\nIf you use the page reader configured here, disable the built-in @MobiCodex/fetch in Settings → MCP to avoid overlapping tools. The page reader configured here will still work.';
 
   @override
   String get searchServicesPageWebFetchSupported => 'Can read web pages';
@@ -5188,7 +5189,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'You\'ve already been through this door.';
 
   @override
-  String get aboutPageAppName => 'Kelivo';
+  String get aboutPageUpstreamSource => 'Upstream open source';
+
+  @override
+  String get aboutPageAppName => 'MobiCodex';
 
   @override
   String get aboutPageAppDescription => 'Open-source AI Assistant';
@@ -5243,19 +5247,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutPageLicense => 'License';
 
   @override
-  String get aboutPageJoinQQGroup => 'Join our QQ Group';
+  String get aboutPageJoinQQGroup => 'Upstream QQ community';
 
   @override
-  String get aboutPageQQGroupOne => 'Kelivo Group 1';
+  String get aboutPageQQGroupOne => 'Upstream group 1';
 
   @override
-  String get aboutPageQQGroupTwo => 'Kelivo Group 2';
+  String get aboutPageQQGroupTwo => 'Upstream group 2';
 
   @override
-  String get aboutPageQQGroupThree => 'Kelivo Group 3';
+  String get aboutPageQQGroupThree => 'Upstream group 3';
 
   @override
-  String get aboutPageJoinDiscord => 'Join us on Discord';
+  String get aboutPageJoinDiscord => 'Upstream Discord';
 
   @override
   String get displaySettingsPageShowUserAvatarTitle => 'Show User Avatar';
@@ -6362,7 +6366,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get settingsShare => 'Kelivo - Open Source AI Assistant';
+  String get settingsShare => 'MobiCodex - Open Source AI Assistant';
 
   @override
   String get searchProviderBingLocalDescription =>
@@ -6579,7 +6583,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Maximum tokens must be between 1024 and 32768.';
 
   @override
-  String get searchServiceNameKelivo => 'Kelivo';
+  String get searchServiceNameKelivo => 'MobiCodex';
 
   @override
   String get searchServicesDialogCountryOptional => 'Country/region (optional)';
@@ -6864,7 +6868,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get healthDataSettingsDescription =>
-      'HealthKit signals available to the current assistant in daily conversation. Switches control what Kelivo may try to read; iOS still manages actual Health access.';
+      'HealthKit signals available to the current assistant in daily conversation. Switches control what MobiCodex may try to read; iOS still manages actual Health access.';
 
   @override
   String healthDataSettingsBadge(int selected, int total) {
@@ -8227,7 +8231,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get legacyMemoryExport => 'Export';
 
   @override
-  String get legacyMemoryExportTitle => 'Kelivo legacy memory export';
+  String get legacyMemoryExportTitle => 'MobiCodex legacy memory export';
 
   @override
   String legacyMemoryAssistantHeader(String name) {
@@ -8865,11 +8869,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get migrationIntroSubtitle =>
-      'Kelivo is moving chat history to a faster SQLite database. The upgrade runs before the app opens so your data stays consistent.';
+      'MobiCodex is moving chat history to a faster SQLite database. The upgrade runs before the app opens so your data stays consistent.';
 
   @override
   String get migrationBackupNote =>
-      'Before migration starts, Kelivo exports a ZIP backup with settings, chat history, and local files.';
+      'Before migration starts, MobiCodex exports a ZIP backup with settings, chat history, and local files.';
 
   @override
   String get migrationPerformanceNote =>
@@ -8909,14 +8913,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get migrationBackingUpSubtitle =>
-      'Exporting settings, chat history, uploaded files, images, and fonts. Keep Kelivo open until this finishes.';
+      'Exporting settings, chat history, uploaded files, images, and fonts. Keep MobiCodex open until this finishes.';
 
   @override
   String get migrationMigratingTitle => 'Migrating to SQLite';
 
   @override
   String get migrationMigratingSubtitle =>
-      'Writing conversations and messages in batches so large histories do not overload memory. Keep Kelivo in the foreground until migration finishes.';
+      'Writing conversations and messages in batches so large histories do not overload memory. Keep MobiCodex in the foreground until migration finishes.';
 
   @override
   String migrationBackingUpDetail(String fileName) {
@@ -8976,7 +8980,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get migrationCompleteSubtitle =>
-      'Your chat history is now stored in SQLite. Restart Kelivo to enter the upgraded app.';
+      'Your chat history is now stored in SQLite. Restart MobiCodex to enter the upgraded app.';
 
   @override
   String get migrationConversationCount => 'Conversations';
@@ -8994,7 +8998,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get migrationMissingFilesCount => 'Missing files';
 
   @override
-  String get migrationRestartButton => 'Restart Kelivo';
+  String get migrationRestartButton => 'Restart MobiCodex';
 
   @override
   String get migrationFailedTitle => 'Migration Failed';
@@ -9020,7 +9024,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get migrationSkipDialogMessage =>
-      'Kelivo will start with an empty chat database. Your old chat history stays on disk (renamed with a .retired suffix) but will NOT be migrated and will not appear in the app. Use your backup ZIP if you need to recover it later.';
+      'MobiCodex will start with an empty chat database. Your old chat history stays on disk (renamed with a .retired suffix) but will NOT be migrated and will not appear in the app. Use your backup ZIP if you need to recover it later.';
 
   @override
   String get migrationSkipDialogCancel => 'Cancel';
@@ -9448,7 +9452,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get localSnapshotEnabledSubtitle =>
-      'Kelivo periodically saves a copy of its database on this device, so it is never the only one.';
+      'MobiCodex periodically saves a copy of its database on this device, so it is never the only one.';
 
   @override
   String get localSnapshotIntervalTitle => 'How often';
@@ -9563,7 +9567,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get localSnapshotCopiesScopeNote =>
-      'Local copies live on this device only. They protect against damage to your data inside the app, not against losing the device or uninstalling Kelivo — use WebDAV or S3 backup for that.';
+      'Local copies live on this device only. They protect against damage to your data inside the app, not against losing the device or uninstalling MobiCodex — use WebDAV or S3 backup for that.';
 
   @override
   String get localSnapshotOriginAutomatic => 'Automatic';
@@ -10285,7 +10289,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get workspaceEnvUpToDate => 'You\'re up to date';
 
   @override
-  String get workspaceEnvRestartBanner => 'Restart Kelivo to finish';
+  String get workspaceEnvRestartBanner => 'Restart MobiCodex to finish';
 
   @override
   String get workspaceEnvDetectingMirrors => 'Detecting fastest mirrors…';
@@ -10402,7 +10406,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get workspaceEnvNativeExplanation =>
-      'On desktop, Kelivo uses your system shell instead of a Linux sandbox.';
+      'On desktop, MobiCodex uses your system shell instead of a Linux sandbox.';
 
   @override
   String workspaceEnvNativeShellPath(String path) {
@@ -11336,7 +11340,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get workspaceDesktopManagedHint =>
-      'Kelivo creates and manages a folder for this project.';
+      'MobiCodex creates and manages a folder for this project.';
 
   @override
   String get workspaceDesktopHostHint =>
@@ -11593,7 +11597,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get workspaceExternalStorageMessage =>
-      'To read and write external folders in the workspace and Shell, allow Kelivo to manage files in Android settings. On Android 11 or later, enable All files access. Then select an on-device folder to mount.';
+      'To read and write external folders in the workspace and Shell, allow MobiCodex to manage files in Android settings. On Android 11 or later, enable All files access. Then select an on-device folder to mount.';
 
   @override
   String get workspaceExternalGrantAccess => 'Grant access';
@@ -11817,7 +11821,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backgroundSettingsTitle => 'Background tasks';
 
   @override
-  String get backgroundTaskTitle => 'Kelivo task';
+  String get backgroundTaskTitle => 'MobiCodex task';
 
   @override
   String get backgroundCompleted => 'Generation complete';
@@ -11953,7 +11957,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backgroundOverlayIcon => 'Floating icon';
 
   @override
-  String get backgroundIconDefault => 'Kelivo icon';
+  String get backgroundIconDefault => 'MobiCodex icon';
 
   @override
   String get backgroundIconImage => 'Choose image';
@@ -12174,7 +12178,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get startupRecoverySnapshotBody =>
-      'Choose a snapshot on this device to recover your chats and settings, even when the database cannot open. Do not uninstall Kelivo: uninstalling also removes these snapshots.';
+      'Choose a snapshot on this device to recover your chats and settings, even when the database cannot open. Do not uninstall MobiCodex: uninstalling also removes these snapshots.';
 
   @override
   String get startupRecoverySnapshotEmpty =>
@@ -12185,7 +12189,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String startupRecoverySnapshotConfirm(String when) {
-    return 'Restore chats and settings from $when? Changes made after this snapshot will not be included. Existing attachment files and the snapshot will be kept. Kelivo will restart to complete the restore.';
+    return 'Restore chats and settings from $when? Changes made after this snapshot will not be included. Existing attachment files and the snapshot will be kept. MobiCodex will restart to complete the restore.';
   }
 
   @override
@@ -12195,7 +12199,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get startupRecoverySnapshotReady =>
-      'The snapshot is ready. Restart Kelivo to complete the restore.';
+      'The snapshot is ready. Restart MobiCodex to complete the restore.';
 
   @override
   String get scheduledTasksTitle => 'Scheduled tasks';
@@ -12269,7 +12273,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get scheduledTasksReliability =>
-      'Keep Kelivo unrestricted in battery settings for more reliable execution. Force stopping the app cancels alarms until you reopen it. Missed runs are skipped; tasks follow the device time zone.';
+      'Keep MobiCodex unrestricted in battery settings for more reliable execution. Force stopping the app cancels alarms until you reopen it. Missed runs are skipped; tasks follow the device time zone.';
 
   @override
   String get scheduledTasksExecutionDetail =>
@@ -12457,7 +12461,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get scheduledTasksDesktopReliability =>
-      'Tasks run only while Kelivo is running, including when minimized or in the system tray. Missed times are skipped after quitting or computer sleep. Kelivo will not start automatically.';
+      'Tasks run only while MobiCodex is running, including when minimized or in the system tray. Missed times are skipped after quitting or computer sleep. MobiCodex will not start automatically.';
 
   @override
   String get scheduledTasksDesktopExecutionDetail =>
@@ -12855,7 +12859,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get scheduledTasksIOSDetail =>
-      'iOS background limits prevent Kelivo from waking at a set time to run a model. Instead, content is prepared while the app can run, and the system shows a notification at the scheduled time. Only the next occurrence is prepared. Preparation may not finish after leaving the app; reopen Kelivo to prepare subsequent occurrences.';
+      'iOS background limits prevent MobiCodex from waking at a set time to run a model. Instead, content is prepared while the app can run, and the system shows a notification at the scheduled time. Only the next occurrence is prepared. Preparation may not finish after leaving the app; reopen MobiCodex to prepare subsequent occurrences.';
 
   @override
   String get scheduledTasksContextPolicy => 'Conversation context';
@@ -12921,7 +12925,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get scheduledTasksReminderBody =>
-      'Your scheduled task is due. Open Kelivo to continue.';
+      'Your scheduled task is due. Open MobiCodex to continue.';
 
   @override
   String get scheduledTasksResultBody => 'Your scheduled task result is ready.';
@@ -12935,7 +12939,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get scheduledTasksAllowPreparationTip =>
-      'Generate the next result before its scheduled time, while Kelivo can run. The result stays out of the chat until it is due. Preparation uses text only, without tools, attachments or custom request bodies. It may incur model charges.';
+      'Generate the next result before its scheduled time, while MobiCodex can run. The result stays out of the chat until it is due. Preparation uses text only, without tools, attachments or custom request bodies. It may incur model charges.';
 
   @override
   String get scheduledTasksContextPolicyTip =>
@@ -12943,7 +12947,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get scheduledTasksPreparationWindowTip =>
-      'How far ahead of the scheduled time preparation may begin, up to 24 hours. For example, opening Kelivo at noon can prepare the next morning’s reminder. A larger window gives more chances to prepare, but the result may be less current. It does not change the scheduled time or guarantee background execution. Prepare now bypasses this automatic waiting period and all attempt limits.';
+      'How far ahead of the scheduled time preparation may begin, up to 24 hours. For example, opening MobiCodex at noon can prepare the next morning’s reminder. A larger window gives more chances to prepare, but the result may be less current. It does not change the scheduled time or guarantee background execution. Prepare now bypasses this automatic waiting period and all attempt limits.';
 
   @override
   String get scheduledTasksPreparationAttemptsTip =>
@@ -12955,7 +12959,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get scheduledTasksUnavailableTip =>
-      'If no prepared result is available and the task cannot run when due, send a reminder or skip the occurrence. A reminder contains no generated answer and requires notifications to be enabled. If Kelivo is open when the task is due, it can run the task then.';
+      'If no prepared result is available and the task cannot run when due, send a reminder or skip the occurrence. A reminder contains no generated answer and requires notifications to be enabled. If MobiCodex is open when the task is due, it can run the task then.';
 
   @override
   String get scheduledTasksNotifyTip =>
@@ -13158,14 +13162,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get phoneControlAssistantHint =>
-      'Both permissions are required: enable Kelivo phone control in system Accessibility settings, then enable Phone Control under your assistant’s Local Tools (also available in the chat tools menu). Each assistant is configured separately. Keep the phone unlocked while running a task.';
+      'Both permissions are required: enable MobiCodex phone control in system Accessibility settings, then enable Phone Control under your assistant’s Local Tools (also available in the chat tools menu). Each assistant is configured separately. Keep the phone unlocked while running a task.';
 
   @override
   String get phoneControlRestrictedTitle => 'Accessibility switch unavailable?';
 
   @override
   String get phoneControlRestrictedHint =>
-      'For some downloaded APKs, Android requires “Allow restricted settings” in the app info menu first. Tap to open Kelivo’s app info, then return to Accessibility settings.';
+      'For some downloaded APKs, Android requires “Allow restricted settings” in the app info menu first. Tap to open MobiCodex’s app info, then return to Accessibility settings.';
 
   @override
   String get phoneControlEnableAssistant =>
@@ -13366,7 +13370,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recoveryMissingDataBody =>
-      'Kelivo could not find the current chat database. It has paused loading and has not created an empty database. We’ll look for previous copies below; existing files will be kept.';
+      'MobiCodex could not find the current chat database. It has paused loading and has not created an empty database. We’ll look for previous copies below; existing files will be kept.';
 
   @override
   String get recoveryEmptyDataTitle => 'Current chat history is empty';
@@ -13409,7 +13413,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recoveryStorageFailureBody =>
-      'The data update could not finish. The original data has been kept. Try reopening Kelivo, or choose a local copy below to recover.';
+      'The data update could not finish. The original data has been kept. Try reopening MobiCodex, or choose a local copy below to recover.';
 
   @override
   String get recoveryProtectingTitle => 'Protecting the chat database';
@@ -13435,7 +13439,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recoveryStorageInsufficientSpaceBody =>
-      'There is not enough storage to safely prepare your data. Free space in system settings, then reopen Kelivo or recheck the copies below. Keep Kelivo installed and leave its data and local copies in place.';
+      'There is not enough storage to safely prepare your data. Free space in system settings, then reopen MobiCodex or recheck the copies below. Keep MobiCodex installed and leave its data and local copies in place.';
 
   @override
   String get migrationFreshStartTitle => 'Fresh start is ready';
@@ -13521,7 +13525,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupEncryptionUnsupported =>
-      'This encrypted backup requires a newer version of Kelivo.';
+      'This encrypted backup requires a newer version of MobiCodex.';
 
   @override
   String get backupProgressEncrypting => 'Encrypting backup';
@@ -13689,7 +13693,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get browserRestoreTabsDescription =>
-      'Reopen your tabs when Kelivo starts.';
+      'Reopen your tabs when MobiCodex starts.';
 
   @override
   String get browserSaveHistory => 'Save history';
@@ -15420,7 +15424,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get toolPermissionRequestApprovalDesc =>
-      'Kelivo will ask before accessing files outside the workspace, running desktop commands, or using other tools that need approval.';
+      'MobiCodex will ask before accessing files outside the workspace, running desktop commands, or using other tools that need approval.';
 
   @override
   String get contextLimitedInputHint =>
@@ -15481,7 +15485,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dataDirectoryMoving =>
-      'Moving and verifying data… Please keep Kelivo open.';
+      'Moving and verifying data… Please keep MobiCodex open.';
 
   @override
   String get dataDirectoryStartupFailed => 'Unable to open the data directory';
@@ -15527,7 +15531,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dataDirectoryGenericError =>
-      'The operation could not finish. Check available disk space, folder permissions and whether another Kelivo process is running, then retry. Existing data has been kept.';
+      'The operation could not finish. Check available disk space, folder permissions and whether another MobiCodex process is running, then retry. Existing data has been kept.';
 
   @override
   String get dataDirectoryCancelHint =>
@@ -15772,7 +15776,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recoveryGuideBody =>
-      'Kelivo paused loading your data. We’ll look for local copies so you can choose what to recover. Existing files will be kept.';
+      'MobiCodex paused loading your data. We’ll look for local copies so you can choose what to recover. Existing files will be kept.';
 
   @override
   String get recoverySpaceTitle => 'Some free space is needed';
@@ -15793,7 +15797,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recoveryRestoreRetryBody =>
-      'The restore could not be completed. The selected copy has been kept. Check local copies again or reopen Kelivo to continue.';
+      'The restore could not be completed. The selected copy has been kept. Check local copies again or reopen MobiCodex to continue.';
 
   @override
   String recoverySpaceAmount(String required, String available) {
@@ -15802,7 +15806,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recoveryCopiesNeedUpdate =>
-      'Some copies were made by a newer version of Kelivo. Update Kelivo before restoring them. These copies have been kept.';
+      'Some copies were made by a newer version of MobiCodex. Update MobiCodex before restoring them. These copies have been kept.';
 
   @override
   String get imageContextTitle => 'Image context';

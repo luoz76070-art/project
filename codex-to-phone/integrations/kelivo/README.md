@@ -8,7 +8,15 @@
 
 2026-11-06视觉修正：以AI对话页为基准调整电脑页，最新本地code5及验证见[视觉审计](../../docs/audits/2026-11-06/kelivo-visual.md)。公开下载仍code4，code5未上传、未真机验收。
 
-## 当前 code9 交付
+## 当前 code10 品牌交付
+
+2026-11-07：产品可见品牌统一为 MobiCodex，采用用户选定的黑白电脑/手机图标及浅深启动图。版本 `0.1.8-native-preview` / code10，同包名/签名覆盖更新，数据库、OAuth、备份及工具身份保持兼容。原始 Kelivo 开源归属保留；App 内 APK 更新同时提供 GitHub 对应源码，现有 Web 热更新不能替换原生资源。详见[版本目录](../../releases/android/kelivo-preview/0.1.8/)和[品牌审计](../../docs/audits/2026-11-07/mobicodex-branding.md)。沿用当前图片修复网关与 DeepSeek0.2.7，本轮无在线网关切换。
+
+### 品牌资源再生成
+
+在 `apps/kelivo` 使用固定 Dart SDK，先运行 `dart run tool/prepare_mobicodex_branding.dart`，再依次运行 `dart run flutter_launcher_icons -f tool/mobicodex_icons.yaml`、`dart run flutter_native_splash:create --path=tool/mobicodex_splash.yaml`，最后运行 `dart run tool/prepare_mobicodex_branding.dart --finalize-android`。最后一步将四份旧系统启动背景指向仅宿主提供的 `android12splash`，避免远控模块的同名 `splash` 横竖屏资源覆盖。生成后复查主题继承、图标裁切、完整 Android lint 和实际资源合并结果。
+
+## 历史 code9 交付
 
 2026-11-07：所有电脑 Agent 共用当前 Codex 的聊天/工具/输入/图片/附件/语音体验，后续 SessionAdapter 通道复用。版本 `0.1.7-native-preview` / code9，配套 DeepSeek0.2.6、Claude0.1.2和新网关。原宿主控制能力保持，未知结果不重发。[版本目录](../../releases/android/kelivo-preview/0.1.7/)及[检查、发布与真实联动边界](../../docs/audits/2026-11-07/agent-parity.md)。本机在线网关/原插件未随源码自动切换；手机code9和真实联动单列待验。
 
@@ -16,7 +24,7 @@
 
 2026-11-07：用户确认 code7 图片/大图、字号、连接/草稿/主题正常；code8 修正折叠范围，执行说明常显，只有连续工具的命令与输出收起，点击一次即可查看详情。版本 `0.1.6-native-preview` / code8；交付[版本目录](../../releases/android/kelivo-preview/0.1.6/)与[检查记录](../../docs/audits/2026-11-07/execution-notes.md)。沿用已升级的code7图片网关，无需再次切换。独立 App 更新源与 GitHub 同步交付，code6/7可在设置更新，用户已确认升级code8且显示符合预期。下文 code7 与更早内容保留历史含义。
 
-## 当前 code7 交付
+## 历史 code7 交付
 
 2026-11-07：动态折叠执行摘要、紧凑代码/日志字号、Kelivo 聊天显示偏好桥，以及 Codex 项目内图片的鉴权读取/Markdown 展示与大图。签名预览为 `0.1.5-native-preview` / code7；[GitHub 版本目录](../../releases/android/kelivo-preview/0.1.5/)包含 APK、匹配源码和配套网关。图片接口需要新版网关；当前Mac已在[后续真机验收轮](../../docs/audits/2026-11-07/device-link.md)完成网关升级和55项本地/公网检查，其他使用者仍需按版本说明升级自己的网关。code7 已补发独立自托管更新源，code6 可在「设置 → 应用更新」升级，见[发布核验](../../docs/audits/2026-11-07/app-update.md)。历史 code4/5/6 状态保留如下，不代表当前 GitHub 版本。
 
@@ -52,11 +60,11 @@ node scripts/verify-kelivo.mjs --preview --repeat-tests
 签名预览产物：
 
 ```text
-output/kelivo/mobile-codex-kelivo-0.1.7-preview-arm64.apk
-output/kelivo/mobile-codex-kelivo-0.1.7-preview-arm64.apk.json
+output/kelivo/mobile-codex-kelivo-0.1.8-preview-arm64.apk
+output/kelivo/mobile-codex-kelivo-0.1.8-preview-arm64.apk.json
 ```
 
-包名 `com.mobilecodex.kelivo.preview`，版本 `0.1.7-native-preview` / code9，minSdk24，Flutter AOT 为 arm64。预览使用显式启用的本机 Android Debug 签名，不是生产发布签名。元数据记录实际大小、SHA256、签名及上游提交。
+包名 `com.mobilecodex.kelivo.preview`，版本 `0.1.8-native-preview` / code10，minSdk24，Flutter AOT 为 arm64。预览使用显式启用的本机 Android Debug 签名，不是生产发布签名。元数据记录实际大小、SHA256、签名及上游提交。
 
 ## 跨运行时契约
 

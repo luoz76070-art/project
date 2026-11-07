@@ -24,7 +24,7 @@ import '../ui_host_scope.dart';
 import 'web_gallery.dart';
 
 const genUiMessageFixture = r'''ui 1 catalog "kelivo.native/1"
-$name: string = "Kelivo"
+$name: string = "MobiCodex"
 $amount: number = 3
 root = Column(children=[form,total,ask,reset])
 form = Form(children=[nameField,amountField])

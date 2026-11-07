@@ -449,7 +449,7 @@ class _AboutPageState extends State<AboutPage> {
                             behavior: HitTestBehavior.opaque,
                             onTap: _onAppNameTap,
                             child: Text(
-                              'Kelivo',
+                              l10n.aboutPageAppName,
                               key: const ValueKey('about-page-app-name'),
                               style: TextStyle(
                                 fontSize: 16,
@@ -522,7 +522,9 @@ class _AboutPageState extends State<AboutPage> {
                 icon: Lucide.Earth,
                 label: l10n.aboutPageWebsite,
                 onTap: () async {
-                  final uri = Uri.parse('https://kelivo.psycheas.top/');
+                  final uri = Uri.parse(
+                    'https://github.com/luoz76070-art/project/tree/main/codex-to-phone',
+                  );
                   if (!await launchUrl(uri, mode: LaunchMode.platformDefault)) {
                     await launchUrl(uri, mode: LaunchMode.externalApplication);
                   }
@@ -533,6 +535,15 @@ class _AboutPageState extends State<AboutPage> {
                 context,
                 svgAsset: 'assets/icons/github.svg',
                 label: l10n.aboutPageGithub,
+                onTap: () => _openUrl(
+                  'https://github.com/luoz76070-art/project/tree/main/codex-to-phone',
+                ),
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Code,
+                label: l10n.aboutPageUpstreamSource,
                 onTap: () => _openUrl('https://github.com/Chevey339/kelivo'),
               ),
               _iosDivider(context),

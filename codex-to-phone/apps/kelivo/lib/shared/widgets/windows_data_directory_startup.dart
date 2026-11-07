@@ -70,7 +70,7 @@ class _DataDirectoryStartupApp extends StatelessWidget {
     final palette = ThemePalettes.defaultPalette;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Kelivo',
+      title: 'MobiCodex',
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       theme: buildLightThemeForScheme(palette.light),

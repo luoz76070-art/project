@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -74,6 +75,7 @@ class SkillsService extends ChangeNotifier {
       final root = await _ensureRoot();
       for (final bundle in _bundledSkillFiles.entries) {
         await _seedBundledSkill(root, assets, bundle.key, bundle.value);
+        await _refreshBundledBranding(root, assets, bundle.key);
       }
     }
     await _rescan();
@@ -93,6 +95,89 @@ class SkillsService extends ChangeNotifier {
       'references/web.md',
     ],
   };
+
+  // Exact pre-MobiCodex assets, also verified against source-files.json.
+  // Only these unchanged bundled files may receive this branding refresh.
+  static const _legacyBundledBrandingSha256 = <String, Map<String, String>>{
+    'skill-creator': {
+      'SKILL.md':
+          'e6dab535a636aafa4f99bc54c33134072ce120a33a060e72d24d155f49324e44',
+    },
+    'visualize': {
+      'SKILL.md':
+          'b22b1a04cfbf070e15b14b43b17518dcd19142b083b417a900bce41b2955007e',
+      'references/protocol.md':
+          'f7d6093980cc09344d99b639bc71241c7722f0843371e37643c19878d6eeebdd',
+    },
+  };
+
+  Future<void> _refreshBundledBranding(
+    Directory root,
+    AssetBundle assets,
+    String id,
+  ) async {
+    final hashes = _legacyBundledBrandingSha256[id];
+    if (hashes == null) return;
+    final entity = await store.get(ExtensionEntityStore.kindSkill, id);
+    if (entity == null ||
+        SkillRecord.fromJson(entity.payload).source != SkillSource.bundled) {
+      return;
+    }
+    // A missing entrypoint is a deletion, even if old references remain.
+    if (!await _isBundledBrandingFile(root, id, 'SKILL.md')) return;
+    for (final entry in hashes.entries) {
+      final relative = entry.key;
+      if (!await _isBundledBrandingFile(root, id, relative)) continue;
+      final target = File(p.join(root.path, id, relative));
+      if (sha256.convert(await target.readAsBytes()).toString() !=
+          entry.value) {
+        continue;
+      }
+      final data = await assets.load('assets/skills/$id/$relative');
+      final staging = await root.createTemp('.bundled-branding-');
+      try {
+        final replacement = File(p.join(staging.path, 'replacement'));
+        await replacement.writeAsBytes(
+          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+          flush: true,
+        );
+        // Asset loading can yield to an edit or deletion. Check again before
+        // atomically publishing, without changing receipts or skill settings.
+        if (!await _isBundledBrandingFile(root, id, 'SKILL.md') ||
+            !await _isBundledBrandingFile(root, id, relative) ||
+            sha256.convert(await target.readAsBytes()).toString() !=
+                entry.value) {
+          continue;
+        }
+        await replacement.rename(target.path);
+      } finally {
+        await staging.delete(recursive: true);
+      }
+    }
+  }
+
+  Future<bool> _isBundledBrandingFile(
+    Directory root,
+    String id,
+    String relative,
+  ) async {
+    // The refresh allowlist contains only entrypoints and direct references.
+    for (final path in [
+      root.path,
+      p.join(root.path, id),
+      p.join(root.path, id, p.dirname(relative)),
+    ]) {
+      if (await FileSystemEntity.type(path, followLinks: false) !=
+          FileSystemEntityType.directory) {
+        return false;
+      }
+    }
+    return await FileSystemEntity.type(
+          p.join(root.path, id, relative),
+          followLinks: false,
+        ) ==
+        FileSystemEntityType.file;
+  }
 
   Future<void> _seedBundledSkill(
     Directory root,
@@ -793,7 +878,7 @@ class SkillsService extends ChangeNotifier {
   }
 
   static const Map<String, String> _githubHeaders = {
-    'User-Agent': 'Kelivo',
+    'User-Agent': 'MobiCodex',
     'Accept': 'application/vnd.github+json',
   };
 }

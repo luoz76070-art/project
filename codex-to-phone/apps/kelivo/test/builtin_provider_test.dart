@@ -15,6 +15,31 @@ import 'package:Kelivo/core/services/model_spec/model_spec_resolver.dart';
 import 'package:Kelivo/features/provider/widgets/share_provider_sheet.dart';
 
 void main() {
+  test(
+    'branding upgrades only the built-in default name and keeps its settings',
+    () {
+      final legacy = ProviderConfig.defaultsFor('KelivoIN')
+          .copyWith(
+            name: 'KelivoIN',
+            apiKey: 'synthetic-provider-key',
+            baseUrl: 'https://custom.example.test/v1',
+            models: ['custom-model'],
+          )
+          .toJson();
+      final restored = ProviderConfig.fromJson(legacy);
+      expect(restored.name, 'MobiCodex IN');
+      expect(restored.toJson(), {...legacy, 'name': 'MobiCodex IN'});
+      expect(
+        ProviderConfig.fromJson({...legacy, 'name': 'My service'}).name,
+        'My service',
+      );
+      expect(
+        ProviderConfig.fromJson({...legacy, 'id': 'custom-service'}).name,
+        'KelivoIN',
+      );
+    },
+  );
+
   test('KelivoIN defaults expose the requested models and capabilities', () {
     final config = ProviderConfig.defaultsFor('KelivoIN');
     expect(config.baseUrl, 'https://api.psycheas.top/v1');

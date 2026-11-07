@@ -7,7 +7,7 @@ import { apkBusy, apkCanContinue, readAndroidUpdateManifest } from "../updates/a
 import { ApkUpdateProgress } from "../updates/ApkUpdateProgress";
 import { useApkUpdate } from "../updates/useApkUpdate";
 import { productBeforeNavigate } from "./host";
-import { productVersionCode, productVersionLabel } from "./identity";
+import { productDisplayName, productVersionCode, productVersionLabel } from "./identity";
 
 export function ProductUpdatesPage({ onBack }: { onBack: () => void }) {
   const apk = useApkUpdate();
@@ -58,7 +58,7 @@ export function ProductUpdatesPage({ onBack }: { onBack: () => void }) {
     <div className="product-updates-body">
       <section className="product-update-card" aria-label="应用版本">
         <span className="product-update-icon"><Download size={28} /></span>
-        <h2>Mobile Codex Preview</h2>
+        <h2>{productDisplayName}</h2>
         <p>当前版本 {productVersionLabel}</p>
         <p className="product-update-summary" role="status">{checking ? "正在检查新版本…" : error ? "暂时无法检查更新" : available ? `发现新版本 v${manifest?.versionName}` : checked ? "当前已是最新版本" : "尚未检查更新"}</p>
       </section>

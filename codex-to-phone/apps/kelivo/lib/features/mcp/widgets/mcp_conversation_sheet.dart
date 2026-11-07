@@ -229,7 +229,7 @@ class _ConversationMcpSheet extends StatelessWidget {
                                               children: [
                                                 Expanded(
                                                   child: Text(
-                                                    s.name,
+                                                    s.displayName,
                                                     style: TextStyle(
                                                       fontWeight: AppFontWeights
                                                           .emphasis,

@@ -3,8 +3,9 @@ import 'package:uuid/uuid.dart';
 
 import '../../providers/settings_provider.dart';
 
-const String _openRouterAppReferer = 'https://github.com/Chevey339/kelivo';
-const String _openRouterAppTitle = 'Kelivo';
+const String _openRouterAppReferer =
+    'https://github.com/luoz76070-art/project/tree/main/codex-to-phone';
+const String _openRouterAppTitle = 'MobiCodex';
 const String _openRouterAppCategories = 'general-chat';
 
 /// Resolve once per generation, before retries and tool follow-up rounds.

@@ -615,7 +615,7 @@ class KelivoDiagramBlockState extends State<KelivoDiagramBlock> {
       final result = await ImageGallerySaverPlus.saveImage(
         bytes,
         quality: 100,
-        name: 'kelivo-$prefix-${DateTime.now().millisecondsSinceEpoch}',
+        name: 'mobicodex-$prefix-${DateTime.now().millisecondsSinceEpoch}',
       );
       if (result is Map) {
         final isSuccess =

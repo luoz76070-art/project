@@ -571,7 +571,7 @@ class _McpGroup extends StatelessWidget {
                     radius: 7,
                     showBackground: false,
                   ),
-                  label: server.name,
+                  label: server.displayName,
                   selected: selected.contains(server.id),
                   detail:
                       '${server.tools.where((tool) => tool.enabled).length}/${server.tools.length}',
@@ -580,7 +580,7 @@ class _McpGroup extends StatelessWidget {
                   ),
                   trailing: IosSwitch(
                     value: selected.contains(server.id),
-                    semanticLabel: server.name,
+                    semanticLabel: server.displayName,
                     onChanged: (value) =>
                         unawaited(setSelected(server.id, value)),
                   ),

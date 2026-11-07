@@ -58,7 +58,7 @@ class BrandAssets {
         MapEntry(RegExp(r'xai'), 'xai.svg'),
         MapEntry(RegExp(r'juhenext'), 'juhenext.png'),
         MapEntry(RegExp(r'302'), '302ai-color.svg'),
-        MapEntry(RegExp(r'kelivo'), 'kelivo.png'),
+        MapEntry(RegExp(r'kelivo|mobicodex'), 'kelivo.png'),
         MapEntry(RegExp(r'tensdaq'), 'tensdaq-color.svg'),
         MapEntry(RegExp(r'marucode|muteki'), 'marucode.png'),
         MapEntry(RegExp(r'iflow|心流'), 'iflow-color.svg'),
@@ -254,7 +254,7 @@ class BrandAssets {
     ),
     BrandIconOption(
       id: 'kelivo',
-      label: 'Kelivo',
+      label: 'MobiCodex',
       asset: 'assets/icons/kelivo.png',
     ),
     BrandIconOption(

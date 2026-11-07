@@ -48,7 +48,7 @@ class KelivoSearchService extends SearchService<KelivoOptions> {
   }
 
   @override
-  String get name => 'Kelivo';
+  String get name => 'MobiCodex';
 
   @override
   Widget description(BuildContext context) => const SizedBox.shrink();
@@ -87,7 +87,7 @@ class KelivoSearchService extends SearchService<KelivoOptions> {
 
       return SearchResult(items: results);
     } catch (e) {
-      throw Exception('Kelivo search failed: $e');
+      throw Exception('MobiCodex search failed: $e');
     } finally {
       if (ownsClient) httpClient.close();
     }

@@ -307,7 +307,7 @@ Future<void> _tableImage(
       final result = await ImageGallerySaverPlus.saveImage(
         bytes,
         quality: 100,
-        name: 'kelivo-table-${_stamp()}',
+        name: 'mobicodex-table-${_stamp()}',
       );
       if (result is Map) {
         ok =
@@ -320,7 +320,7 @@ Future<void> _tableImage(
       try {
         final clipboard = SystemClipboard.instance;
         if (clipboard != null) {
-          final item = DataWriterItem(suggestedName: 'kelivo-table.png')
+          final item = DataWriterItem(suggestedName: 'mobicodex-table.png')
             ..add(Formats.png(bytes));
           await clipboard.write([item]);
           ok = true;
@@ -330,7 +330,7 @@ Future<void> _tableImage(
       }
       if (!ok) {
         final file = File(
-          p.join(Directory.systemTemp.path, 'kelivo-table-${_stamp()}.png'),
+          p.join(Directory.systemTemp.path, 'mobicodex-table-${_stamp()}.png'),
         );
         await file.writeAsBytes(bytes, flush: true);
         ok = await ClipboardImages.setImagePath(file.path);

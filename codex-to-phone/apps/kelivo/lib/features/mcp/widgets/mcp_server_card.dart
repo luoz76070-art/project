@@ -111,7 +111,7 @@ class McpServerCard extends StatelessWidget {
       enabled: true,
       checked: selectionMode ? selected : null,
       label:
-          '${selectionMode ? l10n.mcpPageSelectServer(server.name) : server.name}, $summary',
+          '${selectionMode ? l10n.mcpPageSelectServer(server.displayName) : server.displayName}, $summary',
       onTap: activate,
       onLongPress: onLongPress,
       child: _TactileRow(
@@ -194,7 +194,7 @@ class McpServerCard extends StatelessWidget {
                           children: [
                             ExcludeSemantics(
                               child: Text(
-                                server.name,
+                                server.displayName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -263,7 +263,7 @@ class McpServerCard extends StatelessWidget {
                           child: IosSwitch(
                             value: server.enabled,
                             onChanged: onEnabledChanged,
-                            semanticLabel: server.name,
+                            semanticLabel: server.displayName,
                             width: 36,
                             height: 22,
                           ),

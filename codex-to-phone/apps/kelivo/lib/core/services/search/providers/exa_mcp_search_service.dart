@@ -89,7 +89,7 @@ class ExaMcpSearchService extends SearchService<ExaMcpOptions>
         terminateOnClose: false,
       );
       final client = mcp.Client(
-        name: 'Kelivo',
+        name: 'MobiCodex',
         version: '1.0.0',
         requestTimeout: timeout,
       );

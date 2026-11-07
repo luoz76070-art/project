@@ -79,7 +79,7 @@ for name in paths:
 (OUT / 'source-scan.json').write_text(json.dumps({'files': len(paths), 'findings': findings, 'reviewedUpstreamSyntheticFixtures': reviewed_fixtures}, indent=2) + '\n')
 assert not findings, 'Inspect source-scan.json before distribution; no secret values are printed.'
 
-readme = f'''# Mobile Codex Kelivo 整合预览：code{metadata['versionCode']} 对应源码
+readme = f'''# MobiCodex 整合预览：code{metadata['versionCode']} 对应源码
 
 此归档对应 Android 预览 {metadata['versionName']} / versionCode {metadata['versionCode']}。
 APK 包名 com.mobilecodex.kelivo.preview，arm64-v8a，Android 7.0/API24 起。
@@ -109,6 +109,9 @@ MOBILE_CODEX_COMPILE_JAVA_HOME / MOBILE_CODEX_TEST_JAVA_HOME（JDK21+）。
 
 ## 本预览范围
 
+用户选定电脑/手机黑白图标用于 Android 图标、启动画面与内置品牌图，用户可见品牌统一为 MobiCodex。
+应用 ID、签名、OAuth、数据库、备份和工具协议保持兼容；原始开源归属保留。
+图标及 Flutter 原生资源通过 App 内 APK 覆盖安装更新，不能由现有 Web 热更新替换。
 AI、电脑、设置统一入口；两个功能可独立使用，可主动交接单条正文至已有电脑会话。
 支持设置内 APK 检查、下载、校验与系统安装确认；整合热更新未接通。
 电脑执行说明始终可见，连续工具的详细命令与输出默认动态折叠；字号与工具显示跟随 Kelivo 偏好。
@@ -119,7 +122,7 @@ GitHub 版本包与自托管更新通道分别交付；本次源码提交不会�
 code4/5 需先手动覆盖安装本版本一次，之后可在 App 内更新。
 代码保留与部分测试不代表59组全部验收。原Desktop新建、真机/最低系统及完整真实联动继续待验。
 '''
-notice = '''Mobile Codex Kelivo integration preview, modified 2026-11-07.
+notice = '''MobiCodex integration preview, modified 2026-11-07.
 Kelivo: https://github.com/Chevey339/kelivo, v1.3.4, commit 4a7da9b6f5d77caccb9f8aaf656232a93ab14708.
 Kelivo copyright and AGPL terms are preserved in apps/kelivo/LICENSE.
 Codex To Phone contributors: MIT terms preserved in LICENSE.mobile-codex.

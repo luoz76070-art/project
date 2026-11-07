@@ -268,7 +268,7 @@ class LocalSnapshotProvider extends ChangeNotifier {
         '${at.year}${two(at.month)}${two(at.day)}'
         '-${two(at.hour)}${two(at.minute)}${two(at.second)}';
     final kind = copy.kind == LocalCopyKind.snapshot ? 'snapshot' : 'recovered';
-    return 'kelivo-$kind-$stamp.zip';
+    return 'mobicodex-$kind-$stamp.zip';
   }
 
   /// The interval currently in force, resolving the automatic setting against

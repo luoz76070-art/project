@@ -72,7 +72,7 @@ async function main() {
     const metadata = JSON.parse(await readFile(path.join(release, 'output-metadata.json'), 'utf8'));
     if (metadata.applicationId !== 'com.mobilecodex.kelivo.preview' || metadata.elements.length !== 1) throw new Error('Unexpected preview identity or APK count.');
     const item = metadata.elements[0];
-    if (item.versionName !== '0.1.7-native-preview' || item.versionCode !== 9 || path.basename(item.outputFile) !== item.outputFile) throw new Error('Unexpected preview version.');
+    if (item.versionName !== '0.1.8-native-preview' || item.versionCode !== 10 || path.basename(item.outputFile) !== item.outputFile) throw new Error('Unexpected preview version.');
     const identity = await readFile(path.join(root, 'apps/mobile/src/features/product/identity.ts'), 'utf8');
     if (!identity.includes(`productVersionCode = ${item.versionCode};`) || !identity.includes(`productVersionLabel = "v${item.versionName}";`)) throw new Error('Web and native preview versions differ.');
     const apk = path.join(release, item.outputFile);
@@ -81,7 +81,7 @@ async function main() {
     const signature = spawnSync(path.join(sdk, 'build-tools', buildTools, 'apksigner'), ['verify', '--print-certs', apk], { env, encoding: 'utf8' });
     if (signature.status !== 0) throw new Error('Preview APK signature could not be verified.');
     const output = path.join(root, 'output/kelivo'); await mkdir(output, { recursive: true });
-    const destination = path.join(output, 'mobile-codex-kelivo-0.1.7-preview-arm64.apk');
+    const destination = path.join(output, 'mobile-codex-kelivo-0.1.8-preview-arm64.apk');
     await copyFile(apk, destination);
     const bytes = await readFile(destination);
     await writeFile(`${destination}.json`, JSON.stringify({ applicationId: metadata.applicationId, versionCode: item.versionCode, versionName: item.versionName,
