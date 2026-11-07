@@ -3,7 +3,7 @@
 ## 电脑网关图片引用修复 · 2026-11-07（预览，沿用code9）
 
 - 修复会话引用隔离副本图片时被项目目录规则误拦截的问题；Codex及全部电脑Agent允许原助手消息中明确引用的精确图片，历史页同样适用。未引用文件、代码示例和其他会话不能借用授权。
-- 后端422、手机169、类型/lint/构建及更新路径检查通过。用户授权后新固定网关已上线，本地/公网69项断言通过，原指定图片321,193字节三种路径读取一致，原配置/宿主及DeepSeek桥接保持。手机图片重试、大图与返回待用户回执；[独立交付](releases/android/kelivo-preview/0.1.7/desktop-image-reference-preview/)与[切换审计](docs/audits/2026-11-07/image-reference-fix.md)。手机APK及更新源继续code9，无需重装。
+- 后端422、手机169、类型/lint/构建及更新路径检查通过。用户授权后新固定网关已上线，本地/公网69项断言通过，原指定图片321,193字节三种路径读取一致，原配置/宿主及DeepSeek桥接保持。用户已真机确认「图片已显示，大图和返回正常」，本轮修复闭环；[独立交付](releases/android/kelivo-preview/0.1.7/desktop-image-reference-preview/)与[切换审计](docs/audits/2026-11-07/image-reference-fix.md)。手机APK及更新源继续code9，无需重装。
 
 ## DeepSeek桥接0.2.7 · 2026-11-07（电脑兼容补充，沿用code9）
 

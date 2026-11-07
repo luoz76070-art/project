@@ -368,10 +368,15 @@
     "versionName": "0.1.7-native-preview",
     "versionCode": 9,
     "reinstallRequired": false,
-    "displayConfirmed": false,
-    "largeImageConfirmed": false,
-    "returnConfirmed": false,
-    "status": "pending-user-confirmation"
+    "displayConfirmed": true,
+    "largeImageConfirmed": true,
+    "returnConfirmed": true,
+    "status": "passed-user-confirmed",
+    "confirmationDate": "2026-11-07",
+    "evidence": "user-response-in-current-chat",
+    "userReply": "图片已显示，大图和返回正常",
+    "scope": "original-reported-codex-image",
+    "installedApkShaIndependentlyVerified": false
   },
   "modelRequests": 0,
   "actualApprovals": 0

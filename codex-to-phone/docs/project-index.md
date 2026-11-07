@@ -26,7 +26,7 @@ Kelivo 整合候选（2026-11-04，现有远控视觉试迁移已实施）：用
 
 ## Trellis 与当前优化
 
-最新[图片引用修复](audits/2026-11-07/image-reference-fix.md)：定位真机403为隔离副本图片超出原会话cwd。共享网关增加助手Markdown精确文件引用授权，Codex原快照/有界历史及Agent同设备订阅/历史均覆盖；后端422、手机169与完整verify通过。用户批准后固定网关已上线，本地/公网69项断言通过，原指定PNG321,193字节三种路径逐字节一致；原宿主/配置与DeepSeek桥接保持。首次stop旧进程未退出，经官方手机桥接组件重载后自然退出，失败与恢复过程均保留。手机保持code9，无需重装，[电脑修复补充](../releases/android/kelivo-preview/0.1.7/desktop-image-reference-preview/)独立交付；手机图片重试、大图/返回待用户回执，总整合任务继续in_progress。
+最新[图片引用修复](audits/2026-11-07/image-reference-fix.md)：定位真机403为隔离副本图片超出原会话cwd。共享网关增加助手Markdown精确文件引用授权，Codex原快照/有界历史及Agent同设备订阅/历史均覆盖；后端422、手机169与完整verify通过。用户批准后固定网关已上线，本地/公网69项断言通过，原指定PNG321,193字节三种路径逐字节一致；原宿主/配置与DeepSeek桥接保持。首次stop旧进程未退出，经官方手机桥接组件重载后自然退出，失败与恢复过程均保留。手机保持code9，无需重装，[电脑修复补充](../releases/android/kelivo-preview/0.1.7/desktop-image-reference-preview/)独立交付；用户已确认「图片已显示，大图和返回正常」，本轮修复闭环。其他通道手机交互及59组完整验收按原计划待启动，总整合任务继续in_progress。
 
 本轮[code9运行切换与DeepSeek原桥接恢复](audits/2026-11-07/agent-parity-runtime.md)：按用户授权完成私有备份、官方原desktop插件0.2.7加载和固定网关正常切换，适配实际Harness0.2.2-rc.1，保留原进程/配置/设备及严格版本/审批边界。后端419、新旧官方各30、类型/lint/构建及本地/公网77检查通过；原会话40消息含14工具记录、重连身份和图片接口通过。用户确认手机已升级code9、DeepSeek原会话与正文正常，安装SHA未独立回拉。新[电脑兼容补充目录](../releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/)保留原code9十份交付文件及更新源latest9/previous8；GitHub回执见本轮审计。真实发送/工具偏好/手机图片/附件语音/审批停止等列入[下一轮验收计划](plans/2026-11-07-agent-phone-acceptance.md)，等待用户启动；Claude/OpenCode未配置原宿主，总整合任务及59组继续in_progress。下段“旧网关/桥接离线”为此前交付时状态，已由本轮恢复。
 
