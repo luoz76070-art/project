@@ -72,6 +72,8 @@ const server = http.createServer(async (req, res) => {
       state.messages = [message('render-user', 'user', '检查电脑页的执行记录和图片展示', 'userMessage'),
         message('render-commentary', 'assistant', '正在检查项目，执行明细可按需展开。', 'agentMessage', 'commentary'),
         ...Array.from({ length: count }, (_, i) => message(`render-tool-${i}`, 'tool', `Command: rg check-${i + 1}\nOutput:\nsynthetic result ${i + 1}`, 'commandExecution'))];
+      if (url.searchParams.get('notes') === '1') state.messages.splice(2 + Math.ceil(count / 2), 0,
+        message('render-commentary-next', 'assistant', '第一步检查已完成，继续核对显示效果。', 'agentMessage', 'commentary'));
       if (complete) state.messages.push(message('render-final', 'assistant', '检查完成，图片与代码如下。\n\n![合成验收截图](/workspace/codex-to-phone/output/rendering-chart.png)\n\n```ts\nconst connected = true;\nconst imageReady = true;\n```', 'agentMessage', 'final_answer'));
       state.turnStatus = complete ? 'completed' : 'inProgress'; state.activity = complete ? undefined : 'working'; state.cursor++;
       for (const notify of notifications.values()) notify();

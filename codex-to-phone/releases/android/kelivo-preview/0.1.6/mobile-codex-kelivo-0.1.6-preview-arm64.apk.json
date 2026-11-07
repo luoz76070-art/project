@@ -1,0 +1,11 @@
+{
+  "applicationId": "com.mobilecodex.kelivo.preview",
+  "versionCode": 8,
+  "versionName": "0.1.6-native-preview",
+  "abi": "arm64-v8a",
+  "bytes": 60977711,
+  "sha256": "17c6936f4058e6372c1e21d86aef569af7ce6ccaccf1a776e52220ee38465ed8",
+  "signing": "Local preview signing; not a production release",
+  "signature": "Signer #1 certificate DN: C=US, O=Android, CN=Android Debug\nSigner #1 certificate SHA-256 digest: 3ffb81f3524a590f469b80476951a22fbc6e441a470b9270079a8c1d452c4a38\nSigner #1 certificate SHA-1 digest: c5ffdb72d35158a73124c9f4852b2839841d6e42\nSigner #1 certificate MD5 digest: e9efb1dc30c97e16b05708079dcc44ce",
+  "upstreamCommit": "4a7da9b6f5d77caccb9f8aaf656232a93ab14708"
+}

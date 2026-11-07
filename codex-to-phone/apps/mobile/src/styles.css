@@ -2350,7 +2350,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .handoff-preview { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow: auto; font: inherit; }
 .handoff-resume { position: fixed; right: 12px; bottom: calc(88px + env(safe-area-inset-bottom)); z-index: 50; background: var(--panel-solid); }
 
-/* Execution stays a single live summary until explicitly expanded. */
+/* Execution notes stay visible; only consecutive tool details use a live summary. */
 .process-toggle > span { display: flex; align-items: center; gap: 8px; overflow: hidden; }
 .process-toggle strong { flex-shrink: 0; font-size: .8125rem; font-weight: 500; }
 .process-toggle em { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-style: normal; font-size: .75rem; }

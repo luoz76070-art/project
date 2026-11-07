@@ -1,5 +1,11 @@
 # 设计与边界自审
 
+## 2026-11-07 执行说明常显
+
+缺口归属 MessageProcess：现有逻辑分组正确保存同 turn 的说明和工具，却将两者全部延迟挂载。保留分组/完成判定，在展示层按原顺序将说明直接交给原 MessageBubble，将连续工具拆成独立的 ToolProcess 折叠区。工具区稳定绑定首工具 ID，后续增量保持手动选择、终稿到达默认收起。仅工具区使用 message-process 类，显示偏好不再连带隐藏说明。
+
+MessageTimeline 的 renderMessage 增加可选的展开工具详情参数，App/Agent 两处传给原工具组件，打开工具区时直接显示原命令/输出，避免重复点击内层折叠。失败在摘要中保留数量，原字号/图像/控制路径保持。预期改动限 components、两处渲染接线、样式注释、真实展示回归、版本与交付记录；不改消息数据、缓存、通信或在线网关。
+
 ## 当前缺口与所有者
 
 现有React远控已统一视觉；缺少Kelivo Dart/Flutter运行时和两个同级入口。Kelivo Application持有唯一FlutterEngine、后台/定时/工作区服务和数据库，原Capacitor BridgeActivity持有远控六个插件。优先保留Kelivo主运行时，按Android Activity/模块组合复用原远控源码；避免将两种运行时代码混成共享包。

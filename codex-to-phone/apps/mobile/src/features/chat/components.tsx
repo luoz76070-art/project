@@ -104,6 +104,7 @@ export function MessageBubble({
   onSmoothDone,
   onCopy,
   assistantLabel = "Codex",
+  expandToolDetails = false,
 }: {
   message: CodexMessage;
   smooth: boolean;
@@ -111,8 +112,9 @@ export function MessageBubble({
   onSmoothDone: () => void;
   onCopy: () => void;
   assistantLabel?: string;
+  expandToolDetails?: boolean;
 }) {
-  if (isToolMessage(message)) return <ToolMessageBubble message={message} onCopy={onCopy} />;
+  if (isToolMessage(message)) return <ToolMessageBubble message={message} onCopy={onCopy} expanded={expandToolDetails} />;
   const parsed = parseMessageAttachments(message);
 
   return (
@@ -135,7 +137,9 @@ export function MessageBubble({
   );
 }
 
-export function MessageTimeline({ messages, renderMessage, running = false }: { messages: CodexMessage[]; renderMessage: (message: CodexMessage) => ReactNode; running?: boolean }) {
+type RenderMessage = (message: CodexMessage, expandToolDetails?: boolean) => ReactNode;
+
+export function MessageTimeline({ messages, renderMessage, running = false }: { messages: CodexMessage[]; renderMessage: RenderMessage; running?: boolean }) {
   const keyCounts = new Map<string, number>();
   for (const message of messages) {
     const key = messageDisplayKey(message);
@@ -147,33 +151,48 @@ export function MessageTimeline({ messages, renderMessage, running = false }: { 
     : <MessageProcess key={`process:${group.id}`} messages={group.messages} completed={group.completed} running={running && index === groups.length - 1} renderMessage={renderMessage} />);
 }
 
-function MessageProcess({ messages, completed, running, renderMessage }: { messages: CodexMessage[]; completed: boolean; running: boolean; renderMessage: (message: CodexMessage) => ReactNode }) {
+function MessageProcess({ messages, completed, running, renderMessage }: { messages: CodexMessage[]; completed: boolean; running: boolean; renderMessage: RenderMessage }) {
+  const records: Array<{ kind: "message"; message: CodexMessage } | { kind: "tools"; messages: CodexMessage[] }> = [];
+  for (const message of messages) {
+    if (!isToolMessage(message)) {
+      records.push({ kind: "message", message });
+      continue;
+    }
+    const previous = records.at(-1);
+    if (previous?.kind === "tools") previous.messages.push(message);
+    else records.push({ kind: "tools", messages: [message] });
+  }
+  return records.map((record, index) => record.kind === "message"
+    ? <Fragment key={`record:${record.message.id}`}>{renderMessage(record.message)}</Fragment>
+    : <ToolProcess key={`tools:${record.messages[0].id}`} messages={record.messages} completed={completed} running={running && index === records.length - 1} renderMessage={renderMessage} />);
+}
+
+function ToolProcess({ messages, completed, running, renderMessage }: { messages: CodexMessage[]; completed: boolean; running: boolean; renderMessage: RenderMessage }) {
   const contentId = useId();
   const [choice, setChoice] = useState<{ completed: boolean; expanded: boolean } | null>(null);
   const expanded = choice?.completed === completed ? choice.expanded : false;
-  const tools = messages.filter(isToolMessage);
-  const failures = tools.filter(message => summarizeToolMessage(message).failed).length;
-  const latest = tools.at(-1);
+  const failures = messages.filter(message => summarizeToolMessage(message).failed).length;
+  const latest = messages.at(-1);
   const action = latest ? summarizeToolMessage(latest).action : "正在处理请求";
   const active = running && !completed;
-  return <section className="message-process" aria-label="执行过程">
+  return <section className="message-process" aria-label="命令与输出">
     <button type="button" className="process-toggle" aria-expanded={expanded} aria-controls={contentId} onClick={() => setChoice({ completed, expanded: !expanded })}>
       {active ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <Terminal size={15} aria-hidden="true" />}
       <span><strong>{active ? "正在执行" : completed ? "执行完成" : "执行记录"}</strong><em>{action}</em></span>
       <small className={failures ? "process-failures" : undefined}>{failures ? `${failures} 项异常 · ` : ""}{messages.length} 项</small><ChevronRight size={15} className="process-chevron" aria-hidden="true" />
     </button>
     <div id={contentId} className="process-content" hidden={!expanded}>
-      {expanded && messages.map(message => <Fragment key={message.id}>{renderMessage(message)}</Fragment>)}
+      {expanded && messages.map(message => <Fragment key={message.id}>{renderMessage(message, true)}</Fragment>)}
     </div>
   </section>;
 }
 
-export function ToolMessageBubble({ message, onCopy }: { message: CodexMessage; onCopy: () => void }) {
+export function ToolMessageBubble({ message, onCopy, expanded = false }: { message: CodexMessage; onCopy: () => void; expanded?: boolean }) {
   const summary = summarizeToolMessage(message);
   const rawText = toolRawText(message);
   const hasRawText = rawText.trim().length > 0;
   return (
-    <details className={`tool-message ${summary.failed ? "failed" : ""} ${hasRawText ? "" : "no-raw"}`} open={summary.failed || !hasRawText}>
+    <details className={`tool-message ${summary.failed ? "failed" : ""} ${hasRawText ? "" : "no-raw"}`} open={expanded || !hasRawText}>
       <summary>
         <span>
           {summary.failed ? <AlertCircle size={15} /> : <Terminal size={15} />}

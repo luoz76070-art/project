@@ -14,7 +14,7 @@
 
 组件可使用纯展示模型；HTTP 不依赖 React 组件。继续使用本地 React hooks，不为拆文件引入状态库。
 
-执行过程展示共用`MessageTimeline`和纯函数`groupMessageProcesses(messages: CodexMessage[]): MessageGroup[]`。`isProcessMessage`仅接受assistant/commentary或已知工具kind（plan、commandExecution、fileChange、function_call、function_call_output、custom_tool_call、custom_tool_call_output、mcpToolCall、webSearch、task_started）；`messagesForRender`必须保留这些工具，否则折叠区展开也无法查看。默认收起为动态执行摘要，点击展开；同段后续明确final_answer到达保持默认折叠；已知同turn可跨引导输入匹配，缺turn则以用户输入为边界，不把不同已知turn合成一组。最终/未知阶段正文、用户和交互卡片独立可见，不按空闲状态或最后一条正文猜测完成。折叠状态只在组件内按稳定首消息ID绑定，执行及终稿阶段默认收起，进入终稿阶段自动收起一次，后续增量保持手动选择；重开默认按阶段展示。Codex保留原phase及真实turnId；DeepSeek插件0.2.1在原生成功turn结束时提升末步为final_answer，实时/历史同源，协议缺字段时保留原文，不由手机猜测。只投影显示，不改控制/原消息；协议边界见Relay的deepseek-contract。
+执行过程展示共用`MessageTimeline`和纯函数`groupMessageProcesses(messages: CodexMessage[]): MessageGroup[]`。逻辑分组保留assistant/commentary和已知工具kind，messagesForRender必须保留这些记录；展示时commentary说明始终按原顺序直接渲染，只有连续工具调用进入ToolProcess动态摘要。默认收起命令/输出，点击一次直接查看原详情，工具偏好只隐藏工具区。明确final_answer到达只收起工具区；说明、最终/未知阶段正文、用户和交互卡片独立可见。已知同turn可跨引导输入匹配，缺turn以用户输入为边界，不合并不同已知turn。工具展开状态按稳定首工具ID绑定，终稿阶段默认收起一次，后续增量保持手动选择；不按空闲状态猜测完成。Codex保留原phase/turnId；DeepSeek提升最终阶段的契约沿Relay定义。只投影显示，不改控制、缓存或原消息。
 
 ## 已实施的状态契约
 

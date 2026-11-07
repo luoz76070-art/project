@@ -6,7 +6,7 @@
 
 Flutter 的 KelivoApplication 拥有唯一主引擎、AI业务和全局设置。`integrations/kelivo/remote-android` 直接引用原远控 Java/资源，保留六个插件；ProductHost 负责本地导航、外观及有界交接存储锁。远控是内部 Activity，不声明 Application/launcher，不调用手机模型。原 `apps/mobile` 和 `apps/relay` 启动/打包边界保留。
 
-当前本地独立包：`com.mobilecodex.kelivo.preview`，`0.1.4-native-preview` / code6，minSdk24，arm64 AOT；公开下载已更新为code6。Namespace 继续为上游值，不等于实际包名。Android OAuth scheme 为 `mobilecodex.kelivo.preview`，Manifest/Kotlin/Dart/测试须同时核对；其他平台不全局替换。备份 URI 仅增加精确包白名单。
+当前本地独立包：`com.mobilecodex.kelivo.preview`，`0.1.6-native-preview` / code8，minSdk24，arm64 AOT；独立通道交付见execution-notes审计。Namespace 继续为上游值，不等于实际包名。Android OAuth scheme 为 `mobilecodex.kelivo.preview`，Manifest/Kotlin/Dart/测试须同时核对；其他平台不全局替换。备份 URI 仅增加精确包白名单。
 
 ## 导航与状态
 
@@ -36,7 +36,7 @@ Flutter `prepareHandoff` 仅传所选单条非流式消息正文，64KiB上限�
 
 ## 更新与验证
 
-整合Android预览不得请求上游Kelivo更新；用户2026-11-06新增App内更新后，APK源改为`integrations/kelivo/update-channel.json`中的独立kelivo-preview/latest.json，热更新保持为空。构建覆盖独立远控环境变量，Gradle核对相同通道与宿主身份，Web显示code6。统一设置通过openAppUpdates传递一次性openUpdates，Web初始化后直接挂载ProductUpdatesPage，不要求配对、也不挂载Workspace/Agent。电脑设置跳转同一页。更新页复用原ApkUpdatePlugin/useApkUpdate/清单校验，所有下载/包身份/签名/恢复契约遵循apk-update-contract；下载/校验/安装器待确认时阻止跨入口导航，硬件返回更新页后回全局设置。原独立远控仍使用自身版本和通道；不能把两套版本常量混为一套。
+整合Android预览不得请求上游Kelivo更新；用户2026-11-06新增App内更新后，APK源改为`integrations/kelivo/update-channel.json`中的独立kelivo-preview/latest.json，热更新保持为空。构建覆盖独立远控环境变量，Gradle核对相同通道与宿主身份，Web显示宿主当前版本。统一设置通过openAppUpdates传递一次性openUpdates，Web初始化后直接挂载ProductUpdatesPage，不要求配对、也不挂载Workspace/Agent。电脑设置跳转同一页。更新页复用原ApkUpdatePlugin/useApkUpdate/清单校验，所有下载/包身份/签名/恢复契约遵循apk-update-contract；下载/校验/安装器待确认时阻止跨入口导航，硬件返回更新页后回全局设置。原独立远控仍使用自身版本和通道；不能把两套版本常量混为一套。
 
 手动APK交付使用独立`android/kelivo-preview`静态目录，不将code4发布到原独立远控preview通道。发布前后保存并核对原正式、preview、previous及hot清单；发布后完整回下载核对本地大小/SHA/字节，下载可用与真机安装分别记录。随下载提供对应修改源码、固定依赖/构建说明、AGPL及原MIT/第三方归属；源码归档不得包含本机私钥/配置/用户数据或工具缓存，不能以未含整合修改的旧提交替代。code4/5无内置整合更新入口，需手动覆盖安装code6一次，之后可在App内检查并安装后续APK；不能声称旧code4能凭空开通。系统授权/安装由Android确认，浏览器替身不算真机升级。
 

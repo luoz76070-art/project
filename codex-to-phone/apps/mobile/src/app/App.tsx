@@ -1853,10 +1853,11 @@ function Workspace({ connection, scope, onApply, onOpenAgents, handoff, onHandof
               </div>
             )}
             <MessageMediaProvider key={activeThreadKey} endpoint={endpoint} token={token} threadId={activeThreadKey}>
-            <MessageTimeline messages={visibleMessages} running={isLiveTurnActive} renderMessage={(message) => (
+            <MessageTimeline messages={visibleMessages} running={isLiveTurnActive} renderMessage={(message, expandToolDetails) => (
               <React.Fragment>
                 <MessageBubble
                   message={message}
+                  expandToolDetails={expandToolDetails}
                   smooth={smoothLatestAssistant && message.id === latestAssistantMessageId}
                   smoothPending={smoothPending && message.id === latestAssistantMessageId}
                   onSmoothDone={() => {

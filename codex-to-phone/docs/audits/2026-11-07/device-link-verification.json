@@ -278,9 +278,20 @@
       "adbAvailable": false,
       "installedApkHashIndependentlyVerified": false
     },
-    "imageAndViewer": "awaiting user",
-    "executionSummary": "awaiting user",
-    "connectionDraftsThemes": "awaiting user"
+    "imageAndViewer": {
+      "result": "passed-user-confirmed",
+      "evidence": "图片显示，大图打开和返回都正常"
+    },
+    "executionSummary": {
+      "fontSize": "passed-user-confirmed",
+      "folding": "needs-correction",
+      "evidence": "会把执行记录也被折叠了，字体和大小差不多合适",
+      "requirement": "执行记录应显示，只有详细命令和输出需要折叠"
+    },
+    "connectionDraftsThemes": {
+      "result": "passed-user-confirmed",
+      "evidence": "已检查，都正常"
+    }
   },
   "deepseek": {
     "baseline": "preexisting-offline",
