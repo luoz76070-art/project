@@ -1,0 +1,241 @@
+{
+  "date": "2026-11-07",
+  "versionName": "0.1.6-native-preview",
+  "versionCode": 8,
+  "code7PhoneFeedback": {
+    "imageAndViewer": "passed-user-confirmed",
+    "fontSizes": "passed-user-confirmed",
+    "connectionDraftThemes": "passed-user-confirmed",
+    "folding": "needs-correction; fixed by code8"
+  },
+  "rootVerify": {
+    "status": "passed-final-rerun",
+    "mobile": 165,
+    "relay": 407,
+    "verification": 8,
+    "firstRunRelay": {
+      "passed": 406,
+      "failed": 1,
+      "test": "threadList file watcher deadline; isolated retry and full rerun passed"
+    }
+  },
+  "nativeTests": {
+    "tests": 340,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "nativeTestSuites": 39,
+  "lint": {
+    "errors": 0,
+    "fatal": 0,
+    "hostWarnings": 56,
+    "remoteWarnings": 1
+  },
+  "apk": {
+    "applicationId": "com.mobilecodex.kelivo.preview",
+    "versionCode": 8,
+    "versionName": "0.1.6-native-preview",
+    "abi": "arm64-v8a",
+    "bytes": 60977711,
+    "sha256": "17c6936f4058e6372c1e21d86aef569af7ce6ccaccf1a776e52220ee38465ed8",
+    "signing": "Local preview signing; not a production release",
+    "signature": "Signer #1 certificate DN: C=US, O=Android, CN=Android Debug\nSigner #1 certificate SHA-256 digest: 3ffb81f3524a590f469b80476951a22fbc6e441a470b9270079a8c1d452c4a38\nSigner #1 certificate SHA-1 digest: c5ffdb72d35158a73124c9f4852b2839841d6e42\nSigner #1 certificate MD5 digest: e9efb1dc30c97e16b05708079dcc44ce",
+    "upstreamCommit": "4a7da9b6f5d77caccb9f8aaf656232a93ab14708"
+  },
+  "source": {
+    "archive": "mobile-codex-kelivo-0.1.6-preview-source.tar.gz",
+    "bytes": 21689287,
+    "sha256": "0e70b16fd7c968801eb186f5243f3a59aa9d466fd6f075c66722424f4605a4c3",
+    "sourceFiles": 5917,
+    "archiveEntries": 5922,
+    "upstreamFilesIncluded": 5052,
+    "allArchiveBytesVerified": true,
+    "unreviewedSecretPatternFindings": 0,
+    "reviewedUpstreamSyntheticFixtures": 13,
+    "apkSha256": "17c6936f4058e6372c1e21d86aef569af7ce6ccaccf1a776e52220ee38465ed8"
+  },
+  "apkWeb": {
+    "status": "passed",
+    "versionCode": 8,
+    "samePreviewCertificateAs7": true,
+    "webFiles": [
+      {
+        "file": "assets/public/assets/AgentWorkspace-BQrCWO-h.js",
+        "sha256": "a236ea0a1b5b24c75c094725193645951d70f031510d95fe75d1e6c534e30037",
+        "matchesBuild": true
+      },
+      {
+        "file": "assets/public/assets/index-CQMyHZQa.js",
+        "sha256": "8b3c6796abe0b9ea0f7460d898b17822c14ff160eb3a870e955420ae23f678b3",
+        "matchesBuild": true
+      },
+      {
+        "file": "assets/public/assets/index-DJwAQIyK.css",
+        "sha256": "e85c612c5c65c1a3b4b9a6dd0561e15b10a46bb69d4aa35c134e3c7ba1f4a9ee",
+        "matchesBuild": true
+      },
+      {
+        "file": "assets/public/index.html",
+        "sha256": "880cf6564522fc46c9fdbe307d3d01331ccbed349ea2185f2c119c37bcfe5228",
+        "matchesBuild": true
+      },
+      {
+        "file": "assets/public/remote-host.json",
+        "sha256": "059ec5ef907c996bff1ab5039df9ba631401a0fb1a3a3631d4e7735f4a8eb63c",
+        "matchesBuild": true
+      }
+    ],
+    "arm64Aot": true,
+    "testFixturesExcluded": true,
+    "requiredNativePlugins": [
+      "ProductHostPlugin",
+      "HotUpdatePlugin",
+      "ApkUpdatePlugin",
+      "SecureCredentialsPlugin",
+      "VoiceRecorderPlugin",
+      "ClipboardPlugin",
+      "DiagnosticExportPlugin"
+    ],
+    "phoneInstalled": false,
+    "firstCheckerAttempt": "incorrect expected plugin names corrected from actual registration; not a product failure"
+  },
+  "browser": {
+    "status": "passed",
+    "environment": "isolated loopback fixture; CUA in-app browser",
+    "viewportChecks": [
+      {
+        "width": 390,
+        "height": 844,
+        "notesOutsideToolFolds": true,
+        "oneClickShows20RawOutputs": true,
+        "incrementTo40KeepsExpansion": true,
+        "finalCollapsesToolsOnly": true,
+        "bodyFontPx": 15,
+        "codeFontPx": 12,
+        "imageNaturalWidth": 720,
+        "largeViewerOpenAndClose": true,
+        "horizontalOverflow": false
+      },
+      {
+        "width": 360,
+        "height": 800,
+        "dark": true,
+        "textScale": 1.5,
+        "toolCards": false,
+        "notesAndFinalDisplay": "block",
+        "toolGroupDisplay": "none",
+        "bodyFontPx": 22.5,
+        "horizontalOverflow": false
+      },
+      {
+        "width": 430,
+        "height": 900,
+        "dark": true,
+        "notesOutsideToolFolds": true,
+        "collapsedByDefault": true,
+        "imageNaturalWidth": 720,
+        "consoleErrors": 0,
+        "horizontalOverflow": false
+      }
+    ],
+    "interleavedNotes": {
+      "notes": 2,
+      "toolGroups": 2,
+      "toolCounts": [
+        10,
+        10
+      ],
+      "orderPreserved": true
+    },
+    "deviceInstallationTested": false,
+    "modelTasksSent": 0
+  },
+  "delivery": "passed",
+  "code8PhoneInstallation": "awaiting user",
+  "code8PhoneFolding": "awaiting user",
+  "gatewayChanged": false,
+  "modelTasksSent": 0,
+  "fullParityCompleted": false,
+  "publication": {
+    "status": "passed",
+    "completeDownloadsByteIdentical": 2,
+    "oldChannelsUnchanged": 4,
+    "latestCode": 8,
+    "previousCode": 7,
+    "sourcePreviousCode": 7,
+    "apkRangeStatus": 206,
+    "completeApkAndSourceDownloadsByteIdentical": true
+  },
+  "appManifest": {
+    "status": "passed",
+    "checkedAt": "2026-11-07T00:55:57.270Z",
+    "source": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/latest.json",
+    "requestUrl": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/latest.json?t=1794012956876",
+    "currentCode7GetsUpdate": true,
+    "manifest": {
+      "platform": "android",
+      "versionCode": 8,
+      "versionName": "0.1.6-native-preview",
+      "apkUrl": "https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/mobile-codex-0.1.6-native-preview-17c6936f4058.apk",
+      "size": 60977711,
+      "sha256": "17c6936f4058e6372c1e21d86aef569af7ce6ccaccf1a776e52220ee38465ed8",
+      "notes": "执行说明与记录直接显示，仅折叠详细命令和输出；点击一次查看详情，保留现有字号、图片及连接能力。",
+      "mandatory": false,
+      "publishedAt": "2026-11-07T00:54:33Z"
+    }
+  },
+  "github": {
+    "status": "passed",
+    "verifiedAt": "2026-11-07T01:00:33.048264+00:00",
+    "commit": "b9301639d3dddc81c412e259202092ff59e3b06e",
+    "tag": "codex-to-phone-v0.1.6-native-preview",
+    "files": [
+      {
+        "file": "README.md",
+        "bytes": 2699,
+        "sha256": "b37c36303a69079e46c4197d13ae4b7fe96a26836387d7ccee7049712e936a1d",
+        "byteIdentical": true
+      },
+      {
+        "file": "SHA256SUMS",
+        "bytes": 224,
+        "sha256": "6c29685a83ae77e20667d766f0feeec58943550b20e91d8f578a687185538119",
+        "byteIdentical": true
+      },
+      {
+        "file": "mobile-codex-kelivo-0.1.6-preview-arm64.apk",
+        "bytes": 60977711,
+        "sha256": "17c6936f4058e6372c1e21d86aef569af7ce6ccaccf1a776e52220ee38465ed8",
+        "byteIdentical": true
+      },
+      {
+        "file": "mobile-codex-kelivo-0.1.6-preview-arm64.apk.json",
+        "bytes": 696,
+        "sha256": "7cab1ae888d03e901b046d791db3255ef5355f8ba76359f55379b5596a167b49",
+        "byteIdentical": true
+      },
+      {
+        "file": "mobile-codex-kelivo-0.1.6-preview-source.tar.gz",
+        "bytes": 21689287,
+        "sha256": "0e70b16fd7c968801eb186f5243f3a59aa9d466fd6f075c66722424f4605a4c3",
+        "byteIdentical": true
+      },
+      {
+        "file": "source-package.json",
+        "bytes": 451,
+        "sha256": "cca8a18bede9682e09b6799f9fc8e64ffd7e5848afa2863aff8f57ffb8f65396",
+        "byteIdentical": true
+      }
+    ],
+    "allBytesIdentical": true,
+    "sourceFilesMatchCommit": 5917,
+    "newPhoneInstallation": "awaiting user"
+  },
+  "sourceCommit": {
+    "status": "passed",
+    "commit": "b9301639d3dddc81c412e259202092ff59e3b06e",
+    "sourceFiles": 5917,
+    "allArchiveSourcesMatchGitCommit": true
+  }
+}

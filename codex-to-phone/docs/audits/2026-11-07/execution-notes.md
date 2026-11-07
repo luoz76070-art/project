@@ -32,3 +32,11 @@
 独立App更新源先发布源码，再APK/清单，最后安装页；previous保留code7及对应源码，原正式/preview/previous/hot四通道保持。发布与公网完整字节/SHA、Range/CORS、实际App清单解析及Git远端核验结果在本轮交付回执补充。code6/7可在「设置 → 应用更新 → 检查更新」安装，新折叠效果仍待手机复测；系统安装器启动不等于完成安装。
 
 原始构建/检查/发布材料位于`output/audit/2026-11-07/execution-notes/`。本轮沿用现有打包、源码扫描、版本范围检查和原子上传流程；没有新增通用技能或自动化。已上线code7图片网关保持，无需再部署。DeepSeek原有离线问题搁置，整体59组及原Desktop新建仍未完成，不将本次反馈修正称为完整整合验收。
+
+## 最终双通道回执
+
+源码提交 `b9301639d3dddc81c412e259202092ff59e3b06e` 与 annotated 标签 `codex-to-phone-v0.1.6-native-preview` 已正常原子推送；标签展开值等于该提交。5917个归档源码逐项匹配该提交的Git blob。GitHub版本目录全部6个文件（含APK/源码/校验值/元数据）已从该提交完整回下载、大小/SHA/全部字节一致；大文件使用验证过的HTTP206区间拼合。GitHub接受58.15MiB APK并提示超过推荐50MiB，未使用LFS或改写历史。
+
+App源latest8/previous7，源码previous逐字节对应发布前code7。安装页200且字节匹配；APK60,977,711字节、源码21,689,287字节完整HTTPS回下载，与本地逐字节及SHA一致；APK Range206/CORS通过，原四通道清单内容及SHA保持。实际App清单读取/解析函数从公网识别code8，code7可升级。公开汇总见[execution-notes-verification.json](execution-notes-verification.json)。
+
+用户已收到升级与折叠效果复测问题；未取得code8手机反馈，继续绿色进度。code7已通过项保持，无需再次切换电脑网关。本轮临时夹具与浏览器页已关闭，原在线网关保持。
