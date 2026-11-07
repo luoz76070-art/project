@@ -25,3 +25,5 @@
 [独立电脑修复补充](../../../releases/android/kelivo-preview/0.1.7/desktop-image-reference-preview/)交付网关、基线源码覆盖归档、逐文件元数据及SHA；旧code9/DeepSeek0.2.7交付文件不覆盖。手机更新源保持latest9/previous8。
 
 候选bundle SHA256 `a7c895b883ed14ba851dc99ba97bf5452a41f9e8e84137a1837e1c8cb025e828`，独立归档337,434字节，6份网关文件及10份源码覆盖文件解包后逐字节核验通过，私有凭证扫描0匹配。固定目录、私有备份和回退点已准备，旧网关仍在线；[脱敏回执](image-reference-fix-verification.json)。依`docs/ops/version-sync.md`请求本轮在线网关切换单独确认。未获确认前不停止在线网关。切换后核对原图片本地/公网字节、鉴权及配置/原宿主保持，再请用户手机点击重试。其余手机交互与59组完整验收保持原待验范围。
+
+源码及补充包提交 `8aaac32db744d6dcb7bbd15a619ac771294442bb` 已正常推送原 main，5份补充交付文件和10份源码从GitHub完整回下载逐字节一致，见[GitHub回执](image-reference-fix-github.json)。最终文档同步后标记 `codex-to-phone-v0.1.7-image-reference-preview`；该预览标签记录已验证候选，不表示在线切换或真机通过。沿用既有版本同步/私有备份流程，补充共享图片契约，未新增技能或自动化。
