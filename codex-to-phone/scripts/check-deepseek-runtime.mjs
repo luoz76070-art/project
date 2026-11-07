@@ -16,14 +16,15 @@ if (!runtime || !path.isAbsolute(runtime) || process.argv.length !== 3) {
 const modules = path.join(runtime, 'node_modules');
 async function manifest(name) { return JSON.parse(await fs.readFile(path.join(modules, name, 'package.json'), 'utf8')); }
 const version = (await manifest('@deepseek-ai/dsh')).version;
-assert.ok(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5'].includes(version), 'Unsupported isolated runtime');
+assert.ok(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1'].includes(version), 'Unsupported isolated runtime');
 for (const name of ['dsh', 'dsh-app-boot', 'dsh-agent', 'dsh-agent-loop', 'dsh-session', 'dsh-session-query', 'dsh-llm', 'dsh-agent-loop-testkit']) {
   assert.equal((await manifest(`@deepseek-ai/${name}`)).version, version, `Unexpected official ${name} version`);
 }
-assert.equal((await manifest('@deepseek-ai/cordis')).version, '4.0.5');
+const cordisVersion = version === '0.2.2-rc.1' ? '4.1.0' : '4.0.5';
+assert.equal((await manifest('@deepseek-ai/cordis')).version, cordisVersion);
 const load = name => import(pathToFileURL(path.join(modules, '@deepseek-ai', name, 'lib/index.js')).href);
-const [{ Context }, { default: Loader }, boot, { AgentRegistry, emitAgentEvent }, { SessionStore }, { default: SessionQuery }, { createUserMessage, LlmAdapter }, testkit] = await Promise.all([
-  load('cordis'), load('cordis-plugin-loader'), load('dsh-app-boot'), load('dsh-agent'), load('dsh-session'), load('dsh-session-query'), load('dsh-llm'), load('dsh-agent-loop-testkit'),
+const [{ Context }, { default: Loader }, boot, { AgentRegistry, emitAgentEvent }, { SessionStore }, { default: SessionQuery }, { default: Projections }, { createUserMessage, LlmAdapter }, testkit] = await Promise.all([
+  load('cordis'), load('cordis-plugin-loader'), load('dsh-app-boot'), load('dsh-agent'), load('dsh-session'), load('dsh-session-query'), load('dsh-session-projection'), load('dsh-llm'), load('dsh-agent-loop-testkit'),
 ]);
 function eventReader(response) {
   assert.equal(response.status, 200);
@@ -57,7 +58,7 @@ try {
   await fs.cp(fileURLToPath(new URL('../plugins/mobile-deepseek', import.meta.url)), plugin, { recursive: true });
   const pluginManifest = JSON.parse(await fs.readFile(path.join(plugin, 'package.json'), 'utf8'));
   assert.equal(boot.evaluatePluginCompatibility(pluginManifest, undefined, version), undefined);
-  for (const unsupported of ['0.2.1-rc.1', '0.2.1-rc.4', '0.2.1-rc.6', '0.2.1', '0.2.2']) {
+  for (const unsupported of ['0.2.1-rc.1', '0.2.1-rc.4', '0.2.1-rc.6', '0.2.1', '0.2.2', '0.2.2-rc.2']) {
     assert.ok(boot.evaluatePluginCompatibility(pluginManifest, undefined, unsupported));
   }
   checks.officialVersionGate = true;
@@ -75,7 +76,7 @@ try {
   assert.equal(entries.length, 1);
   assert.equal(entries[0].name, 'dsh-mobile-codex');
   checks.bundleComposition = true;
-  const env = Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'LANG'].filter(key => process.env[key]).map(key => [key, process.env[key]]));
+  const env = Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'LANG', 'ELECTRON_RUN_AS_NODE'].filter(key => process.env[key]).map(key => [key, process.env[key]]));
   const dump = spawnSync(process.execPath, [anchor, '--profile', 'mobile-codex-isolation', '--dump-config'], {
     cwd: sandbox, env: { ...env, DSH_HOME: dshHome }, encoding: 'utf8', timeout: 15000,
   });
@@ -99,6 +100,7 @@ try {
   assert.equal(entry.fiber.state, pendingState);
   checks.waitsForServices = true;
 
+  await ctx.plugin(Projections).await();
   const sessions = ctx.plugin(SessionStore);
   const agents = ctx.plugin(AgentRegistry);
   const query = ctx.plugin(SessionQuery);
@@ -112,7 +114,7 @@ try {
     assert.equal(response.status, 200);
     return response.json();
   }
-  assert.deepEqual(await json('/info'), { protocol: 1, harnessVersion: version, messagePhases: true, interactions: false });
+  assert.deepEqual(await json('/info'), { protocol: 1, harnessVersion: version, messagePhases: true, toolMessages: 1, interactions: false });
   assert.deepEqual((await json('/sessions')).sessions, []);
   checks.officialLoaderActive = true;
 
@@ -174,7 +176,7 @@ try {
   await replacement.await();
   await entry.fiber.await();
   assert.equal(entry.fiber.state, activeState);
-  assert.deepEqual(await json('/info'), { protocol: 1, harnessVersion: version, messagePhases: true, interactions: false });
+  assert.deepEqual(await json('/info'), { protocol: 1, harnessVersion: version, messagePhases: true, toolMessages: 1, interactions: false });
   await loader.dispose();
   await assert.rejects(fetch(`${base}/info`, { signal: AbortSignal.timeout(2000) }));
   checks.reloadAndAsyncUnload = true;
@@ -284,7 +286,7 @@ try {
   } catch (error) {
     throw new Error(JSON.stringify({ phase, fixtureRequests, agentStatus: realAgent?.status, snapshotStatus: live?.status, submission: live?.submission, texts: live?.messages?.map(message => message.text) }), { cause: error });
   } finally { await loopCtx.fiber.dispose(); }
-  console.log(JSON.stringify({ version, cordis: '4.0.5', checks, externalModelRequests: 0, fixtureModelRequests: fixtureRequests, userProfilesChanged: false, originalSessionControlVerified: false }, null, 2));
+  console.log(JSON.stringify({ version, cordis: cordisVersion, checks, externalModelRequests: 0, fixtureModelRequests: fixtureRequests, userProfilesChanged: false, originalSessionControlVerified: false }, null, 2));
 } finally {
   clearTimeout(streamDeadline);
   stream?.abort();

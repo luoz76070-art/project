@@ -35,7 +35,7 @@ export function messageOf(event) {
       visible = `Tool: ${data.name.slice(0, 256)}\n${args}`;
     } else {
       const output = event.type === 'tool/result' ? data?.message : data;
-      if (!output || typeof output.isError !== 'boolean') return null;
+      if (!output || (typeof output.isError !== 'boolean' && !(event.type === 'tool/result' && output.isError === undefined))) return null;
       visible = `${output.isError ? 'Status: failed\n' : ''}${text(output.content) || (output.isError ? '工具执行失败，请在电脑查看详情。' : '工具执行完成，无文本输出。')}`;
     }
     return { id: `tool-${call ? 'call' : 'result'}-${event.seq}`, timestamp: new Date(time).toISOString(), role: 'tool',

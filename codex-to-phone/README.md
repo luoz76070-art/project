@@ -19,7 +19,7 @@ Mobile Codex 把 Kelivo 的 AI 客户端与 Codex To Phone 的电脑控制能力
 
 当前交付为 **0.1.7-native-preview / versionCode 9**，面向 Android arm64 手机。源码保留不等于所有功能都完成验收；完整 Kelivo 功能对照、最低系统、系统插件与部分真实联动仍在逐项检查，详见[验收账本](docs/audits/2026-11-06/kelivo-parity-evidence.md)。
 
-2026-11-07，用户已真机确认 App 内升级至 code8，执行说明直接显示、仅详细命令与输出折叠，显示符合预期。code7 的图片/大图、字号、原连接/草稿/主题此前也已确认通过；本轮修正验收闭环，证据与边界见[验收记录](docs/audits/2026-11-07/agent-parity.md)。
+2026-11-07，用户已真机确认升级 code9，DeepSeek 原会话和正文正常。配套网关及 DeepSeek 0.2.7 原桥接已上线，兼容实际宿主 0.2.2-rc.1；本地/公网 77 项检查通过。code8 说明常显与 code7 图片/大图、字号、连接/草稿/主题的真机证据保留；code9 其余真实交互仍按项验收，详见[运行记录](docs/audits/2026-11-07/agent-parity-runtime.md)。
 
 ## 下载
 
@@ -27,7 +27,8 @@ Mobile Codex 把 Kelivo 的 AI 客户端与 Codex To Phone 的电脑控制能力
 | --- | --- |
 | [Android APK：0.1.7 预览版](https://github.com/luoz76070-art/project/raw/refs/heads/main/codex-to-phone/releases/android/kelivo-preview/0.1.7/mobile-codex-kelivo-0.1.7-preview-arm64.apk) | Android 7.0+、arm64-v8a；同包名预览覆盖安装 |
 | [对应源码归档](releases/android/kelivo-preview/0.1.7/mobile-codex-kelivo-0.1.7-preview-source.tar.gz) | 与本 APK 对应的源码、依赖锁、构建入口和逐文件 SHA256 |
-| [配套电脑网关与插件](releases/android/kelivo-preview/0.1.7/README.md#电脑端配套更新) | 自包含 Node 网关、DeepSeek 0.2.6、Claude 0.1.2，无个人配置 |
+| [最新电脑兼容补充：DeepSeek 0.2.7](releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/) | 配套网关、原 profile 桥接、源码补丁；新增 Harness 0.2.2-rc.1 兼容，无个人配置 |
+| [code9 原配套网关与插件](releases/android/kelivo-preview/0.1.7/README.md#电脑端配套更新) | 原归档保留，含 Claude 0.1.2；DeepSeek 新宿主请用上面的 0.2.7 补充 |
 | [校验值与版本说明](releases/android/kelivo-preview/0.1.7/) | SHA256、APK 元数据、兼容边界及网关升级步骤 |
 
 安装包约 58.2 MiB，包名为 `com.mobilecodex.kelivo.preview`，使用本地预览证书签名。它与原独立 Codex To Phone App 的包名不同。code6/7/8 使用者可直接覆盖安装；手机安装器会要求你确认。
@@ -124,7 +125,7 @@ node scripts/verify-kelivo.mjs --preview --repeat-tests
 
 APK 输出：`output/kelivo/mobile-codex-kelivo-0.1.7-preview-arm64.apk`。发布目录包含构建元数据及对应源码；缓存、签名私钥、模型凭证和个人数据不入库。自己的构建签名与这里的预览证书不同，不能据此承诺覆盖安装或字节完全相同。
 
-本轮完整 JS/TS verify（手机169/后端414/入口8）、原生340项及完整 Android lint 通过；宿主/远控保留56/1条既有警告。DeepSeek 官方隔离运行时/历史/交互检查，以及 Claude 官方2.1.287严格校验和8项沙箱测试通过。浏览器四通道、未来通道夹具、图片/附件/语音与窄屏大字号已检查。**code9手机升级与各原宿主真实联动仍待验收**；电脑网关和插件须单独升级。本轮未改Flutter业务，未重跑其全量，详见[本轮记录](docs/audits/2026-11-07/agent-parity.md)。
+code9 完整 JS/TS verify（手机169/后端414/入口8）、原生340项及完整 Android lint 通过；宿主/远控保留56/1条既有警告。浏览器四通道、未来通道夹具、图片/附件/语音与窄屏大字号已检查；Claude 官方2.1.287严格校验和8项沙箱测试通过。后续 0.2.7 电脑兼容补充的后端419项、新旧官方运行时各30项、类型/lint及构建全部通过，已上线并获用户手机code9原会话/正文确认；其余真实控制、Claude/OpenCode原宿主仍待验。未修改或重打手机APK，沿用原生验证，详见[code9记录](docs/audits/2026-11-07/agent-parity.md)与[运行审计](docs/audits/2026-11-07/agent-parity-runtime.md)。
 
 ## 致谢与许可
 

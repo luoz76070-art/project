@@ -57,7 +57,8 @@ export function createDeepSeekInteractions(ctx) {
           || Object.keys(o).some(key => !['label', 'description'].includes(key)))) return null;
       if (q.intent !== undefined && (!q.intent || q.intent.kind !== 'plan-review' || !string(q.intent.approve, 10000)
         || !options.some(o => o.label === q.intent.approve) || q.detail === undefined
-        || Object.keys(q.intent).some(key => !['kind', 'approve'].includes(key)))) return null;
+        || (q.intent.callId !== undefined && (!string(q.intent.callId, 512) || !q.intent.callId))
+        || Object.keys(q.intent).some(key => !['kind', 'approve', 'callId'].includes(key)))) return null;
       // Keep detail in the existing field so already installed APK21 also shows the entire plan.
       const question = q.detail === undefined ? q.question : `${q.question}\n\n${q.detail}`;
       if (!string(question)) return null;

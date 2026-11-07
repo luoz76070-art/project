@@ -10,7 +10,7 @@ import { createDeepSeekBridge } from '../plugins/mobile-deepseek/bridge.mjs';
 const runtime = process.argv[2];
 if (!runtime || !path.isAbsolute(runtime) || process.argv.length !== 3) throw new Error('Usage: node scripts/check-deepseek-interactions.mjs <absolute-isolated-runtime-directory>');
 const version = JSON.parse(await fs.readFile(path.join(runtime, 'node_modules/@deepseek-ai/dsh-llm/package.json'), 'utf8')).version;
-assert.ok(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5'].includes(version), 'Unsupported isolated runtime');
+assert.ok(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1'].includes(version), 'Unsupported isolated runtime');
 const load = name => import(pathToFileURL(path.join(runtime, 'node_modules/@deepseek-ai', name, 'lib/index.js')).href);
 for (const name of ['dsh-api-gateway', 'dsh-user-approval', 'dsh-user-questions', 'dsh-session']) {
   assert.equal(JSON.parse(await fs.readFile(path.join(runtime, 'node_modules/@deepseek-ai', name, 'package.json'), 'utf8')).version, version);
@@ -65,17 +65,19 @@ try {
   }
   await next(() => true);
   const input = snapshot => ({ controlToken: snapshot.control.token, clientMessageId: randomUUID() });
-  const asked = ctx.userQuestions.ask({ agent, questions: [{ id: 'plan', question: '确认计划？', detail: '完整计划\n最后一步', options: [{ label: '执行' }, { label: '修改' }], intent: { kind: 'plan-review', approve: '执行' } }] });
+  const asked = ctx.userQuestions.ask({ agent, questions: [{ id: 'plan', question: '确认计划？', detail: '完整计划\n最后一步', options: [{ label: '执行' }, { label: '修改' }], intent: { kind: 'plan-review', approve: '执行', callId: 'exit-plan-mode' } }] });
   const q = await next(value => value.questions.length);
   assert.ok(q.questions[0].questions[0].question.endsWith('最后一步'));
   assert.equal((await json(`/sessions/${id}/questions/${q.questions[0].id}/respond`, { ...input(q), answers: [['执行']] })).body.delivery, 'confirmed');
   assert.deepEqual(await asked, { answers: [{ id: 'plan', selected: ['执行'] }] }); checks.officialQuestionAndPlan = true;
 
-  session.append('tool/call', { turn: 1, step: 1, callId: 'native-tool', name: 'bash', arguments: '{"command":"printf fixture"}' });
+  const nativeArguments = '{\n  "command": "printf fixture",\n  "timeout": 1000,\n  "env": { "FIXTURE": "完整参数" }\n}';
+  session.append('tool/call', { turn: 1, step: 1, callId: 'native-tool', name: 'bash', arguments: nativeArguments });
   const approval = ctx.approval.request({ agent, toolName: 'bash', callId: 'native-tool', reason: 'fixture', displayReason: { en: 'Synthetic read', zh: '合成读取权限' } });
   const p = await next(value => value.permissions.length);
   assert.deepEqual(p.permissions[0].decisions, ['once', 'reject']);
   assert.ok(p.permissions[0].detail.includes('Synthetic read')); assert.ok(p.permissions[0].detail.includes('合成读取权限'));
+  assert.ok(p.permissions[0].detail.endsWith(`工具输入（原始 JSON）：\n${nativeArguments}`)); checks.officialCompleteToolArguments = true;
   await json(`/sessions/${id}/permissions/${p.permissions[0].id}/respond`, { ...input(p), decision: 'once' });
   assert.equal(await approval, 'allowed-once'); checks.officialApprovalAndAudit = true;
 
@@ -90,12 +92,60 @@ try {
   assert.equal(await cancelled, 'cancelled');
   assert.equal((await json(`/sessions/${id}/permissions/${c.permissions[0].id}/respond`, { ...input(c), decision: 'once' })).status, 409); checks.officialCancellation = true;
 
+  const ptcArguments = { command: 'printf ptc-fixture', timeout: 2000, env: { FIXTURE: '完整子调用参数' } };
+  session.append('tool/ptc-dispatch-start', { rootCallId: 'ptc-root', parentCallId: 'ptc-root', subCallId: 'ptc-child', name: 'bash', arguments: ptcArguments });
+  const ptcApproval = ctx.approval.request({ agent, toolName: 'bash', callId: 'ptc-child' });
+  const ptc = await next(value => value.permissions.length && value.permissions[0].id !== c.permissions[0].id);
+  assert.deepEqual(ptc.permissions[0].decisions, ['once', 'reject']);
+  assert.ok(ptc.permissions[0].detail.endsWith(`工具输入（原始 JSON）：\n${JSON.stringify(ptcArguments)}`));
+  assert.equal((await json(`/sessions/${id}/permissions/${ptc.permissions[0].id}/respond`, { ...input(ptc), decision: 'once' })).body.delivery, 'confirmed');
+  assert.equal(await ptcApproval, 'allowed-once'); checks.officialPtcApproval = true;
+
+  const unsupportedAbort = new AbortController();
+  const unsupported = ctx.userQuestions.ask({ agent, signal: unsupportedAbort.signal, questions: [{
+    id: 'approval-intent', question: '是否允许？', detail: '完整权限范围', options: [{ label: '允许一次' }, { label: '拒绝' }, { label: '始终允许' }],
+    intent: { kind: 'approval', approve: '允许一次', reject: '拒绝', always: '始终允许', subject: { name: 'Synthetic tool' }, display: { question: { en: 'Allow?', zh: '是否允许？' } } },
+  }] }).then(value => ({ value }), error => ({ error }));
+  const unsupportedCard = await next(value => value.questions.some(item => item.unavailableReason));
+  const unavailable = unsupportedCard.questions.find(item => item.unavailableReason);
+  assert.deepEqual(unavailable.questions[0].options, []); assert.equal(unavailable.questions[0].custom, false);
+  const unsupportedPending = [...host.pendingRemoteEvents.values()].find(item => item.source.request.questions?.[0].id === 'approval-intent');
+  assert.ok(unsupportedPending);
+  for (const answer of ['允许一次', '拒绝', '始终允许']) {
+    assert.equal((await json(`/sessions/${id}/questions/${unavailable.id}/respond`, { ...input(unsupportedCard), answers: [[answer]] })).status, 400);
+    assert.equal(host.pendingRemoteEvents.get(unsupportedPending.id), unsupportedPending);
+  }
+  unsupportedAbort.abort(); assert.equal((await unsupported).error?.code, 'ASK_ABORTED');
+  await next(value => value.questions.length === 0); checks.officialApprovalIntentUnavailable = true;
+
   const desktop = ctx.userQuestions.ask({ agent, questions: [{ id: 'desktop', question: '桌面先答' }] });
   const d = await next(value => value.questions.length);
   const pending = [...host.pendingRemoteEvents.values()].find(item => item.source.event === 'user-questions/request');
   host.settleRemoteEvent(pending, { kind: 'result', value: { answers: [{ id: 'desktop', selected: [], custom: '桌面答案' }] } });
   await desktop;
   assert.equal((await json(`/sessions/${id}/questions/${d.questions[0].id}/respond`, { ...input(d), answers: [['手机迟到']] })).status, 409); checks.officialDesktopFirst = true;
+
+  const fingerprintAsk = ctx.userQuestions.ask({ agent, questions: [{ id: 'fingerprint', question: '指纹替换复核' }] });
+  const fingerprint = await next(value => value.questions.some(item => item.questions[0].question === '指纹替换复核'));
+  const fingerprintCard = fingerprint.questions.find(item => item.questions[0].question === '指纹替换复核');
+  const fingerprintPending = [...host.pendingRemoteEvents.values()].find(item => item.source.request.questions?.[0].id === 'fingerprint');
+  assert.ok(fingerprintPending);
+  for (const name of ['settleRemoteEvent', 'finishRemoteEvent']) {
+    const descriptor = Object.getOwnPropertyDescriptor(host, name);
+    Object.defineProperty(host, name, { configurable: true, value() { assert.fail('unvetted gateway method must not execute'); } });
+    try {
+      assert.equal((await json('/info')).body.interactions, false);
+      assert.equal((await json(`/sessions/${id}/questions/${fingerprintCard.id}/respond`, { ...input(fingerprint), answers: [['迟到答案']] })).status, 409);
+      assert.equal(host.pendingRemoteEvents.get(fingerprintPending.id), fingerprintPending);
+    } finally {
+      if (descriptor) Object.defineProperty(host, name, descriptor);
+      else delete host[name];
+    }
+    assert.equal((await json('/info')).body.interactions, true);
+  }
+  host.settleRemoteEvent(fingerprintPending, { kind: 'result', value: { answers: [{ id: 'fingerprint', selected: [], custom: '合成桌面答案' }] } });
+  assert.deepEqual(await fingerprintAsk, { answers: [{ id: 'fingerprint', selected: [], custom: '合成桌面答案' }] });
+  await next(value => value.questions.length === 0); checks.officialFingerprintReplacement = true;
 
   session.append('request/header', { turn: 1, step: 1, header: { tools: [{ name: 'ask_user_question', parameters: { type: 'object', properties: { timeout: { type: 'number' } } } }] } });
   session.append('tool/call', { turn: 1, step: 1, callId: 'timed-a', name: 'ask_user_question', arguments: JSON.stringify({ questions: [{ id: 'later', question: '稍后回答？', options: [{ label: '继续' }] }] }) });
@@ -111,7 +161,7 @@ try {
   await next(value => value.questions.length === 0); checks.officialContinuedQuestion = true;
 
   const events = await ctx.sessionQuery.observeSession(agent.id, { projectionMode: 'none' });
-  try { assert.deepEqual(events.events.filter(event => event.type === 'approval/decided').map(event => event.data.outcome), ['allowed-once', 'rejected', 'cancelled']); }
+  try { assert.deepEqual(events.events.filter(event => event.type === 'approval/decided').map(event => event.data.outcome), ['allowed-once', 'rejected', 'cancelled', 'allowed-once']); }
   finally { events[Symbol.dispose](); }
   assert.equal(host.pendingRemoteEvents.size, 0); checks.noPendingLeak = true;
   console.log(JSON.stringify({ version, checks, externalModelRequests: 0, userProfilesChanged: false, actualUserApprovalPerformed: false }, null, 2));

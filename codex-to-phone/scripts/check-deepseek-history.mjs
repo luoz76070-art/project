@@ -10,21 +10,23 @@ const runtime = process.argv[2];
 if (!runtime || !path.isAbsolute(runtime) || process.argv.length !== 3) throw new Error('Usage: node scripts/check-deepseek-history.mjs <absolute-isolated-runtime-directory>');
 const packages = path.join(runtime, 'node_modules/@deepseek-ai');
 const version = JSON.parse(await fs.readFile(path.join(runtime, 'node_modules/@deepseek-ai/dsh-llm/package.json'), 'utf8')).version;
-assert.ok(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5'].includes(version), 'Unsupported isolated runtime');
+assert.ok(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1'].includes(version), 'Unsupported isolated runtime');
 const load = name => import(pathToFileURL(path.join(packages, name, 'lib/index.js')).href);
 const official = path.join(packages, 'dsh-api-session-controller/lib/index.js');
 assert.equal(JSON.parse(await fs.readFile(path.join(packages, 'dsh-api-session-controller/package.json'), 'utf8')).version, version);
+const splitHistory = version === '0.2.2-rc.1';
 const copy = path.join(path.dirname(official), `mobile-history-check-${randomUUID()}.mjs`);
-await fs.writeFile(copy, (await fs.readFile(official, 'utf8')) + '\nexport { ApiSessionList, SessionHistoryController, SessionCommandController };\n');
+// Export the actual bundled algorithms; 0.2.2 separates passive history from Web activation.
+await fs.writeFile(copy, (await fs.readFile(official, 'utf8')) + `\nexport { ApiSessionList, ${splitHistory ? 'HistoryController' : 'SessionHistoryController'} as OfficialHistoryController, SessionCommandController };\n`);
 let ctx, bridge, reader, stream;
 const checks = {};
 try {
-  const [{ Context }, { SessionStore }, { AgentRegistry }, { default: Query }, { default: Projections }, { titleProjectionDefinition }, { SessionPersistence }, { createUserMessage }, { SessionController, ApiSessionList, SessionHistoryController, SessionCommandController }] = await Promise.all([
+  const [{ Context }, { Session, SessionStore }, { AgentRegistry }, { default: Query }, { default: Projections }, { titleProjectionDefinition }, { SessionPersistence }, { createUserMessage }, { SessionController, ApiSessionList, OfficialHistoryController, SessionCommandController }] = await Promise.all([
     load('cordis'), load('dsh-session'), load('dsh-agent'), load('dsh-session-query'), load('dsh-session-projection'), load('dsh-session-title'), load('dsh-session-persistence'), load('dsh-llm'), import(pathToFileURL(copy).href),
   ]);
   ctx = new Context();
   await Promise.all([SessionStore, AgentRegistry, Query, Projections].map(plugin => ctx.plugin(plugin).await()));
-  ctx.sessionProjections.register(titleProjectionDefinition);
+  await ctx.sessionProjections.register(titleProjectionDefinition);
   const directory = path.join(runtime, 'synthetic-workspace'), persisted = new Map();
   let reads = 0, readHandles = 0, resumes = 0, admissions = 0;
   class MemoryPersistence extends SessionPersistence {
@@ -40,11 +42,14 @@ try {
   }
   await ctx.plugin(MemoryPersistence).await();
   for (let n = 0; n < 72; n++) {
-    const session = ctx.sessions.prepare(`official-cold-${n}`, { meta: { cwd: n % 2 ? directory : path.join(runtime, 'other-workspace') } });
+    const prepared = ctx.sessions.prepare(`official-cold-${n}`, { meta: { cwd: n % 2 ? directory : path.join(runtime, 'other-workspace') } });
+    // New store-owned preparations are read-only; build synthetic logs with the official independent Session API.
+    const session = Session.create(prepared.id, undefined, prepared.header);
     for (let i = 0; i < (n === 0 ? 95 : 0); i++) session.append('user/message', createUserMessage({ content: [{ type: 'text', text: `官方分页消息 ${i}` }], source: { kind: 'user' } }), { surfaceOp: 'append' });
     persisted.set(session.id, { header: session.header, events: session.snapshotEvents() });
   }
-  const list = new ApiSessionList(ctx, 8), history = new SessionHistoryController(ctx, () => assert.fail('viewing must never promote'));
+  const list = new ApiSessionList(ctx, 8), history = new OfficialHistoryController(ctx, () => assert.fail('viewing must never promote'));
+  if (splitHistory) await list.initialize();
   const resolver = { async resolveAgent(id) {
     resumes++; const seed = persisted.get(id), session = ctx.sessions.create(id, { meta: seed.header, seed: structuredClone(seed.events) });
     const agent = { id, session, ctx, status: 'idle', inbox: { nextTurn: [], nextStep: [] }, followup(message) {
@@ -54,7 +59,8 @@ try {
   } };
   const commands = new SessionCommandController({ agents: ctx.agents, attachments: { admitPromptContent: async content => content }, fileUploads: { bindPrompt: () => ({ commit() {}, [Symbol.dispose]() {} }) } }, resolver, directory);
   const service = Object.create(SessionController.prototype);
-  service.ctx = { invocation: undefined, remoteAccess: { allows: () => true } }; service.listState = list; service.history = history; service.commands = commands;
+  service.ctx = { invocation: undefined, remoteAccess: { allows: () => true } }; service.listState = list; service.commands = commands;
+  service[splitHistory ? 'historyController' : 'history'] = history;
   // Use public official list/page/prompt methods with their actual inner algorithms.
   ctx.reflect.provide('sessionController', service);
   const token = randomBytes(32).toString('base64url');

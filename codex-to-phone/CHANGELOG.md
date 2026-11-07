@@ -1,5 +1,11 @@
 # 更新说明
 
+## DeepSeek桥接0.2.7 · 2026-11-07（电脑兼容补充，沿用code9）
+
+- 精确支持 Harness 0.2.2-rc.1，保留既有版本与未知拒绝；修复 plan-review 可选 callId 及普通工具结果省略 isError 时的漏显。原审批方法指纹保持，新 approval intent 仍在电脑处理。
+- 官方原 desktop 桥接与配套固定网关已恢复，配置/设备/原宿主进程保持。后端419、新旧官方各30及本地/公网77项通过；用户确认已升级code9、原会话与正文正常，其余手机交互待验。
+- [兼容补充包](releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/)独立交付网关、桥接及对应源码补丁；原code9 APK、源码归档和标签保留。证据见[运行审计](docs/audits/2026-11-07/agent-parity-runtime.md)。
+
 ## 0.1.7-native-preview · 2026-11-07（Kelivo 整合 code9）
 
 - Codex、DeepSeek Harness、Claude Code、OpenCode 共用输入、工具动态摘要、说明/终稿、图片、大图、附件及语音；未来 SessionAdapter 通道复用相同界面。

@@ -1,6 +1,6 @@
 # Mobile Codex for DeepSeek Harness
 
-DeepSeek **官方** `dsh` 原进程 Cordis bundle，插件0.2.5精确支持 `0.2.1-rc.2`、`0.2.1-rc.3` 与 `0.2.1-rc.5`。rc.3/rc.5已用本机桌面实际打包的运行时完成隔离复核，rc.2另用官方发布运行时复核；不因版本号相同就假定内部接口一致。官方安装器/profile使用engines版本门，不通过SDK或新CLI代替原线程。
+DeepSeek **官方** `dsh` 原进程 Cordis bundle，插件0.2.7精确支持 `0.2.1-rc.2`、`0.2.1-rc.3`、`0.2.1-rc.5` 与 `0.2.2-rc.1`。rc.3/rc.5已用本机桌面实际打包的运行时完成隔离复核，rc.2另用官方发布运行时复核；不因版本号相同就假定内部接口一致。官方安装器/profile使用engines版本门，不通过SDK或新CLI代替原线程。
 
 插件0.2.3将原生失败轮次显示为“DeepSeek Harness 运行提示”，包括模型暂不可用、请求被拒绝、网络连接失败等固定说明。实时与历史共用投影，重开不重复，不输出原始服务端错误或凭证；失败不标记为成功终稿，也不自动重发。沿用APK36现有消息协议，手机已送达的输入继续保留在会话中。
 
@@ -83,7 +83,7 @@ GUI进程通常不会继承终端export。先备份`~/.dsh/profiles/desktop/cord
 
 `corepack pnpm test:deepseek` 使用合成Cordis上下文和随机端口，不运行真实模型。`node scripts/check-deepseek-history.mjs /absolute/isolated-runtime`另以当前安装包官方list/page/prompt算法、真实SessionStore/Query与合成持久化/resolver检查冷历史；不读取用户profile，不调用模型，也不能代替用户真实继续验收。
 
-另可显式运行 `node scripts/check-deepseek-runtime.mjs /absolute/isolated-runtime`；目录需已包含同版的官方`@deepseek-ai/dsh`、`@deepseek-ai/dsh-agent-loop-testkit`及其依赖（精确rc.2/rc.3/rc.5），Cordis固定4.0.5。检查器不安装依赖，使用临时profile验证bundle解析/版本门/CLI配置、Loader与内存Session/事件总线、依赖卸载/恢复和端口释放；再以官方生产AgentLoop及本地确定性adapter验证排队、追加、流与权威文本去重、中断保留Inbox和旧任务令牌拒绝。2026-10-21此13项及隔离回归22/22通过，3次本地响应、外部模型请求0次。最后清理自己的Context/profile；不读取用户配置或原会话。
+另可显式运行 `node scripts/check-deepseek-runtime.mjs /absolute/isolated-runtime`；目录需已包含同版的官方`@deepseek-ai/dsh`、`@deepseek-ai/dsh-agent-loop-testkit`及其依赖（精确0.2.1-rc.2/rc.3/rc.5配Cordis4.0.5，或0.2.2-rc.1配Cordis4.1.0）。新版官方运行时须用Node >=24.9.0执行检查。检查器不安装依赖，使用临时profile验证bundle解析/版本门/CLI配置、Loader与内存Session/事件总线、依赖卸载/恢复和端口释放；再以官方生产AgentLoop及本地确定性adapter验证排队、追加、流与权威文本去重、中断保留Inbox和旧任务令牌拒绝。2026-10-21此13项及隔离回归22/22通过，3次本地响应、外部模型请求0次。最后清理自己的Context/profile；不读取用户配置或原会话。
 
 插件0.1.1修复官方流的revision逐帧递增校验，拒绝旧revision、错attempt和错index，避免正文被全部过滤。APK21和网关无需更换；宿主需要显式加载此修复插件。安装、加载和原会话控制须分别验收，隔离检查不代表Android真实控制已经通过。
 

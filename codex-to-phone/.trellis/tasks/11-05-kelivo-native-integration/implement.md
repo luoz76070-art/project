@@ -208,6 +208,17 @@ App内更新本轮交付核验通过：见 `docs/audits/2026-11-06/kelivo-update
 - [x] 共用composer/附件/语音/图片及独立草稿、未知保护；图片SSE权威目录/所有权/撤销/配额回归。
 - [x] 完整verify、官方隔离、实际浏览器窄屏/深色/150%及输入操作；code9签名/原生lint/340测试/成品核验。
 - [x] GitHub与App更新源双交付最终核验：code9/previous8；10份GitHub文件及公网APK/源码完整回下载一致，5921源码与提交匹配。
-- [ ] 在线网关/原宿主插件独立切换，以及code9手机真实联动；旧桥接离线不冒充通过。
+- [x] 在线网关与原DeepSeek桥接0.2.7独立切换；用户确认code9升级、原会话与正文正常。其他手机交互另列接续计划，不扩大为完整控制验收。
 
 证据：docs/audits/2026-11-07/agent-parity.md；总任务继续in_progress。
+
+## 2026-11-07 在线恢复执行
+
+- [x] 对照安装包与新官方testkit，最小兼容修复并递增插件0.2.7；新旧版本与未知拒绝回归。
+- [x] 官方runtime/history/interactions共60、Relay419及类型/lint/构建通过，独立包逐文件检查。
+- [x] 原生IPC未决输入/问题/审批及队列预检，私有备份与固定候选逐文件核验。
+- [x] 官方原desktop profile加载桥接，正常停止并切换网关；原宿主PID/配置/设备保持。
+- [x] 本地/公网/重连/能力/图片77项通过；用户确认code9与原会话/正文，手机其他交互另验。
+- [ ] 新电脑包、审计与Git交付，保留旧code9手机产物和标签；最终远端结果见独立回执。
+
+证据：`docs/audits/2026-11-07/agent-parity-runtime.md`；手机后续计划为`docs/plans/2026-11-07-agent-phone-acceptance.md`，待用户启动。总体in_progress、59组完整验收不变。

@@ -1,6 +1,6 @@
 # DeepSeek 官方 Harness 原进程契约
 
-固定主源/版本见当前task的research-deepseek.md。插件 `plugins/mobile-deepseek` 通过官方Cordis bundle加载，插件0.2.4的engines.dsh与peer dsh-llm精确允许0.2.1-rc.2、0.2.1-rc.3或0.2.1-rc.5；安装/profile启动拒绝未知版本。不得用Claude wrapper/SDK resume/新CLI代替原Session。
+固定主源/版本见当前task的research-deepseek.md。插件 `plugins/mobile-deepseek` 通过官方Cordis bundle加载，插件0.2.7的engines.dsh与peer dsh-llm精确允许0.2.1-rc.2、0.2.1-rc.3、0.2.1-rc.5或0.2.2-rc.1；安装/profile启动拒绝未知版本。不得用Claude wrapper/SDK resume/新CLI代替原Session。
 
 官方macOS桌面版的runtime/cli/bin/dsh允许plugin命令管理保留desktop配置，但普通启动与dump-config拒绝该profile。GUI配置须使用profile patch的mobile-codex.configFile，不能假设继承shell export。新插件可经官方HMR监视manifest/patch动态加载；须核对原进程、插件启用状态和真实鉴权bridge响应，安装成功不等于加载成功。需要重启时不强停用户运行中任务。离线链接无运行依赖的固定插件包，保留autoInstallPeers:false；peer由官方profile runtime resolution共享，不能为消除pnpm提示安装重复宿主依赖。
 
@@ -138,3 +138,9 @@ POST /api/agents/:agentId/sessions/:sessionId/queue/:clientMessageId/cancel采�
 ## 原生与PTC工具显示（插件0.2.6）
 
 messages.mjs/messageOf 同时拥有实时 bridge 与只读历史投影。仅官方 tool/call、tool/result、tool/ptc-dispatch-start、tool/ptc-dispatch 产生 role=tool 的 function_call/function_call_output；身份用原 seq 的 tool-call-N / tool-result-N，原调用/结果各一条，已知原 turnId/step 保留。PTC缺原turn字段时不伪造。只序列化官方调用参数及结果文本block，不传 reasoning/meta 或内部 error.reason；32768字符上限明确标注截断。工具发生时清 final candidate，只有原成功 turn/end 提升终稿。显示截断不得缩短独立审批参数索引或放宽决定。/info 的 toolMessages:1 可核验实际加载插件；旧插件缺字段不假称已升级。隔离回归需覆盖实时/历史同ID、冷历史不激活、PTC与脱敏/上限。
+
+## 0.2.2-rc.1宿主兼容（插件0.2.7）
+
+固定新增版本配Cordis4.1.0/Node>=24.9.0；旧三个固定版本仍配Cordis4.0.5，未知版本继续拒绝。原followup/steer/cancel、inbox.remove、SessionQuery及审批结算指纹保持。官方隔离Loader需挂载sessionProjections后AgentRegistry才可用；历史探针按新版实际拆分模块加载并等待ApiSessionList.initialize，生产仍调用原宿主公共list/page/prompt，不能用探针构造替代原服务。
+
+计划review允许官方可选callId（非空有界字符串），仍拒绝未知intent字段；新approval intent未适配，保留不可手机处理说明和原待答项。普通tool/result的isError可缺省，非法类型仍拒绝；PTC必填保持。必须以新旧官方隔离及合成负例核验，审批方法指纹不得跳过。ELECTRON_RUN_AS_NODE执行官方检查时，子CLI dump需继承该标志，避免意外启动第二桌面实例。

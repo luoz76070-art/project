@@ -37,12 +37,27 @@ test('durable native and PTC tool projection uses bounded display text without p
   assert.ok(long.text.length <= 32768); assert.match(long.text, /内容已截断/);
 });
 
+test('native tool results allow omitted isError while PTC and supplied flags remain strict', () => {
+  const result = (type, output) => messageOf({ type, seq: 7, time: 1000, data: type === 'tool/result' ? { message: output } : output });
+  const content = [{ type: 'text', text: 'successful output' }];
+  for (const output of [{ content }, { content, isError: undefined }, { content, isError: false }]) {
+    const visible = result('tool/result', output);
+    assert.equal(visible.kind, 'function_call_output'); assert.equal(visible.text, 'successful output');
+  }
+  assert.match(result('tool/result', { content: [], isError: true }).text, /Status: failed/);
+  assert.match(result('tool/result', { content: [] }).text, /无文本输出/);
+  assert.equal(result('tool/ptc-dispatch', { content }), null);
+  for (const isError of [null, 0, 1, 'false', 'true', {}]) {
+    for (const type of ['tool/result', 'tool/ptc-dispatch']) assert.equal(result(type, { content, isError }), null);
+  }
+});
+
 test('live DeepSeek tool records retain identity through reconnect alongside execution notes and final answer', async t => {
   const f = await fixture(t, { running: true }); let close = await f.watch();
   const note = text => ({ turn: 1, step: 1, message: { id: text, role: 'assistant', content: [{ type: 'text', text }] } });
   f.event('assistant/message', note('execution note'));
   f.event('tool/call', { turn: 1, step: 1, callId: 'tool-a', name: 'bash', arguments: '{"command":"printf safe"}' });
-  f.event('tool/result', { turn: 1, step: 1, message: { callId: 'tool-a', isError: false, content: [{ type: 'text', text: 'safe output' }] } });
+  f.event('tool/result', { turn: 1, step: 1, message: { callId: 'tool-a', content: [{ type: 'text', text: 'safe output' }] } });
   f.event('step/start', { turn: 1, step: 2 });
   f.event('assistant/message', { ...note('final answer'), step: 2 }); f.event('turn/end', { turn: 1, reason: { kind: 'completed' } });
   await until(() => f.values.at(-1)?.messages.at(-1)?.phase === 'final_answer');
@@ -278,7 +293,7 @@ test('dsh accepted input followed by model failure remains delivered and shows o
   close();
 });
 
-for (const harnessVersion of ['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5']) test(`dsh ${harnessVersion} reports the loaded runtime and passes the gateway handshake`, async t => {
+for (const harnessVersion of ['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1']) test(`dsh ${harnessVersion} reports the loaded runtime and passes the gateway handshake`, async t => {
   const f = await fixture(t, { harnessVersion, initial: true });
   const info = await f.client.json('/info', deepSeekInfo);
   assert.equal(info.harnessVersion, harnessVersion);
@@ -291,7 +306,7 @@ for (const harnessVersion of ['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5']) test(`d
 });
 
 test('dsh missing or unverified runtime cannot start a bridge or pass the gateway handshake', () => {
-  for (const version of [undefined, '', '0.2.1-rc.1', '0.2.1-rc.4', '0.2.1-rc.6', '0.2.1', '0.2.2']) {
+  for (const version of [undefined, '', '0.2.1-rc.1', '0.2.1-rc.4', '0.2.1-rc.6', '0.2.1', '0.2.2', '0.2.2-rc.2']) {
     assert.throws(() => createDeepSeekBridge({}, { port: 0, token, directory }, user, version), /DEEPSEEK_VERSION_UNSUPPORTED/u);
     assert.equal(deepSeekInfo.safeParse({ protocol: 1, harnessVersion: version }).success, false);
   }
@@ -557,6 +572,57 @@ test('dsh pre-existing native questions retain plan detail and exact answer ids/
   assert.equal((await f.adapter.respondQuestion(f.id, card.id, { ...operation(current(f)), answers: [['继续'], ['继续', '自己的补充'], ['自由回答']] })).delivery, 'confirmed');
   assert.deepEqual(pending.result.value, { answers: [ { id: 'direction', selected: ['继续'] }, { id: 'many', selected: ['继续'], custom: '自己的补充' }, { id: 'text', selected: [], custom: '自由回答' } ] });
   await until(() => current(f).questions.length === 0); assert.equal(f.calls.length, 1);
+});
+
+test('dsh plan-review accepts bounded optional call ids without losing plan detail or answer identity', async t => {
+  const f = await fixture(t, { running: true });
+  const questions = ['exit-plan-mode', 'c'.repeat(512)].map((callId, i) => ({ ...question(`plan-${i}`), detail: '完整计划\n最后一步', intent: { kind: 'plan-review', approve: '继续', callId } }));
+  const pending = f.addPending('user-questions/request', { questions });
+  await f.watch(); const card = current(f).questions[0];
+  assert.equal(card.unavailableReason, undefined);
+  assert.ok(card.questions.every(item => item.question.endsWith('最后一步')));
+  assert.equal((await f.adapter.respondQuestion(f.id, card.id, { ...operation(current(f)), answers: [['继续'], ['继续']] })).delivery, 'confirmed');
+  assert.deepEqual(pending.result.value, { answers: questions.map(item => ({ id: item.id, selected: ['继续'] })) });
+  assert.equal(f.calls.length, 1);
+});
+
+test('dsh plan-review rejects invalid call ids and unknown intent fields before settlement', async t => {
+  const f = await fixture(t, { running: true });
+  const extras = ['', null, 7, true, {}, [], 'c'.repeat(513)].map(callId => ({ callId }));
+  extras.push({ callId: 'valid', futureConstraint: true }, { futureConstraint: true });
+  const pending = extras.map(extra => f.addPending('user-questions/request', { questions: [{ ...question(), detail: '完整计划', intent: { kind: 'plan-review', approve: '继续', ...extra } }] }));
+  await f.watch(); assert.equal(current(f).questions.length, pending.length);
+  for (const card of current(f).questions) {
+    assert.ok(card.unavailableReason); assert.equal(card.questions[0].custom, false);
+    const res = await fetch(`${f.config.url}sessions/${f.id}/questions/${card.id}/respond`, {
+      method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...operation(current(f)), answers: [['继续']] }),
+    });
+    assert.equal(res.status, 400);
+  }
+  assert.ok(pending.every(item => f.pendingRemoteEvents.get(item.id) === item && item.result === undefined));
+  assert.equal(f.calls.length, 0);
+});
+
+test('dsh approval question intents including always stay unavailable without settling the original request', async t => {
+  const f = await fixture(t, { running: true });
+  const pending = [false, true].map(always => f.addPending('user-questions/request', { questions: [{
+    ...question(), detail: '完整权限范围',
+    options: [...question().options, ...(always ? [{ label: '始终允许' }] : [])],
+    intent: { kind: 'approval', approve: '继续', reject: '暂停', ...(always ? { always: '始终允许' } : {}),
+      subject: { name: 'Synthetic tool' }, display: { question: { en: 'Allow?', zh: '是否允许？' } } },
+  }] }));
+  await f.watch(); assert.equal(current(f).questions.length, 2);
+  for (const card of current(f).questions) {
+    assert.ok(card.unavailableReason); assert.deepEqual(card.questions[0].options, []); assert.equal(card.questions[0].custom, false);
+    for (const answer of ['继续', '暂停', '始终允许']) {
+      const res = await fetch(`${f.config.url}sessions/${f.id}/questions/${card.id}/respond`, {
+        method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...operation(current(f)), answers: [[answer]] }),
+      });
+      assert.equal(res.status, 400);
+    }
+  }
+  assert.ok(pending.every(item => f.pendingRemoteEvents.get(item.id) === item && item.result === undefined));
+  assert.equal(f.calls.length, 0);
 });
 
 test('dsh approval exposes complete original input and only one-time allow or reject', async t => {

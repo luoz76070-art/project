@@ -98,3 +98,9 @@ Kelivo SettingsProvider 继续拥有聊天字号与工具卡片/结果摘要偏�
 ## 2026-11-07 code7真机与网关联动
 
 复用既有固定版本目录、私有备份、管理stop/start与公网只读复核。部署输入为0.1.5网关归档及gateway-package.json逐文件SHA；不重新构建、不改用户配置、设备、上游宿主或Broker。分别核对旧PID退出/端口释放/新PID身份/Tunnel；停止失败保留证据，不自动强退。图像验证只访问当前会话项目已有公开图片，比较本地/公网鉴权结果并检查越界/缺失拒绝，不代发模型任务。
+
+## 2026-11-07 原宿主0.2.2-rc.1兼容边界
+
+缺口位于插件manifest/bridge与Relay协议的精确版本门，另需复核Cordis4.1.0、原SessionController及内部pending审批方法；以安装包真实源码和隔离官方算法验证，不仅放宽版本号。最小候选为DeepSeek插件0.2.7及配套网关，修改scripts/check-deepseek-*覆盖新运行时与既有工具能力；如发现真实语义变化，只在对应所有者模块修复。手机code9协议与UI无需修改或机械重打APK，旧0.1.7归档保持。新电脑包单独归档。切换保留私有配置，官方profile离线link/HMR恢复；不新建profile、不重启原Agent、不改审批策略。
+
+已实施：plan-review可选callId与普通tool/result缺省isError按新官方契约修正，未知字段/PTC严格性及两个审批方法指纹保留；新approval intent保持不可手机处理。原插件通过官方命令与桥接组件重载恢复，网关正常退出后切换固定SHA目录；实际安装文件单独归档至`0.1.7/desktop-0.2.7-preview`，11文件源码补丁以独立索引校验，code9十份既有产物不覆盖。

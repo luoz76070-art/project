@@ -1,0 +1,160 @@
+{
+  "kind": "code9-desktop-compatibility-preview",
+  "date": "2026-11-07",
+  "androidVersionName": "0.1.7-native-preview",
+  "androidVersionCode": 9,
+  "deepseekPluginVersion": "0.2.7",
+  "supportedHarnessVersions": [
+    "0.2.1-rc.2",
+    "0.2.1-rc.3",
+    "0.2.1-rc.5",
+    "0.2.2-rc.1"
+  ],
+  "gatewayBundleSha256": "08bff6fea5f4b56bde294b780f7b15db58f0ee4b477ab01cdc912e61bea379ca",
+  "sourceBaselineCommit": "6e52efe95de92a72c8eef79dea55a992c5378c14",
+  "sourcePatchSha256": "5b3fa1afeb633bf3b8c3b3c133ff32922373303830da431a0b603b7f7060b171",
+  "sourceFiles": [
+    {
+      "file": ".trellis/spec/relay/backend/deepseek-contract.md",
+      "sha256": "9956b91ddfe839586fd84109d21a42c1296c5ec700cc76ec0a638431b1ceffa3",
+      "gitBlob": "d8779417e93ab5b9341fd2cb2b45dda2aa9d2752"
+    },
+    {
+      "file": "apps/relay/src/agents/deepSeekProtocol.ts",
+      "sha256": "09848520a209c20f4be9cdb69b370165973a1578ac1684ad9ebc85a72b151df4",
+      "gitBlob": "a2f2d36f60bba43fbf80d8504eb63f07fbfaf28c"
+    },
+    {
+      "file": "apps/relay/tests/deepSeek.test.mjs",
+      "sha256": "b60e705f7a73d8975857fa79f904dc2b981430503cd350d0738aa4d9ccd013d0",
+      "gitBlob": "110f7e82b1b1088f2e4459c1764cf51d5d75d1ba"
+    },
+    {
+      "file": "plugins/mobile-deepseek/README.md",
+      "sha256": "efd299a9babc3b6b45f7217a71e44f8d219783b29bcaa5d648ea0d4237b39fbf",
+      "gitBlob": "4c30236e4d854596b4a2e3adf9fdca30d80976b6"
+    },
+    {
+      "file": "plugins/mobile-deepseek/bridge.mjs",
+      "sha256": "f30b9092a8ce4e1115dea3555e196ba452ef8b196d4ba78def15bba2117f2b7b",
+      "gitBlob": "ddd4a531beebc1512cafb4d7a55c53d93c326787"
+    },
+    {
+      "file": "plugins/mobile-deepseek/interactions.mjs",
+      "sha256": "51b12ae783a235e5a0b0ac0aabf3fc47f06acc2fc7e1735d69827ea7afb65b31",
+      "gitBlob": "a0a243cd6ee22e06f4cc6b387b5ec2fb7a535edf"
+    },
+    {
+      "file": "plugins/mobile-deepseek/messages.mjs",
+      "sha256": "8e2dc768e3e9e385f68fddbbf353792df57e382c566b7c4d5cfd56761c0a7f07",
+      "gitBlob": "f65e271c5d15ae51a90e21e2c4b8363e07526306"
+    },
+    {
+      "file": "plugins/mobile-deepseek/package.json",
+      "sha256": "3f39ea6c775283ebd185cbc2c8b46d3fe718c2c79d8f7be339887dd760e0d29f",
+      "gitBlob": "bc2c1d0a190d6a35a9f0ff6faf23c25cc7ee5f5c"
+    },
+    {
+      "file": "scripts/check-deepseek-history.mjs",
+      "sha256": "a24dbd77be75feea71fbd705222895de84836cb6fc808b3c0935324cf310c802",
+      "gitBlob": "e0cbb64a5ce571c8608dd49ccf1ef8d73cebb805"
+    },
+    {
+      "file": "scripts/check-deepseek-interactions.mjs",
+      "sha256": "f7eb1fb4d6c921fb395380bd578e510b447b7570892039b72739d44a62f8c993",
+      "gitBlob": "d22a6c8bfb6e3577e7b55fd3b1836ee7d23a6c05"
+    },
+    {
+      "file": "scripts/check-deepseek-runtime.mjs",
+      "sha256": "77b3176fd0554adc86bded7c01f37eb9e8cd3f4d6ba5bb1a4459baa9274441d0",
+      "gitBlob": "4f73f81597d0f65f89f97cfc5bcfc3abac5206d0"
+    }
+  ],
+  "packages": [
+    {
+      "package": "mobile-codex",
+      "archive": "mobile-codex-gateway-deepseek-0.2.7-preview.tar.gz",
+      "bytes": 333933,
+      "sha256": "52eb709485dce92dc5da0b9de3694f1a0f217efbd4ff96d45e54e27f9da19997",
+      "files": [
+        {
+          "file": "lib/gateway.mjs",
+          "sha256": "08bff6fea5f4b56bde294b780f7b15db58f0ee4b477ab01cdc912e61bea379ca"
+        },
+        {
+          "file": "LICENSE",
+          "sha256": "2772c31a36d374710eba71f94e771ab1368cc39902d0160987aece6d89741efd"
+        },
+        {
+          "file": "plugin.json",
+          "sha256": "a2f001b96505136cdf27d1ce611a965037f044948fb767cb075c92fc7bdd6bb4"
+        },
+        {
+          "file": "README.md",
+          "sha256": "cc7cd7ca98061ad46d8b1a512991762702969aa7126c5a5a3e51243405e32ac6"
+        },
+        {
+          "file": "scripts/mobile-codex.mjs",
+          "sha256": "07f3f1c040411b4b56b4253f54607cc207ff3f2f9b0fba6b6045febf6f1ce996"
+        },
+        {
+          "file": "skills/mobile-codex/SKILL.md",
+          "sha256": "e7c93c164b718a1030cecd7e895f480c14ce068d1d3ae978df954a8f05c6fcd6"
+        }
+      ]
+    },
+    {
+      "package": "mobile-deepseek",
+      "archive": "mobile-deepseek-0.2.7.tar.gz",
+      "bytes": 21334,
+      "sha256": "487288a5f22a15fb62582313ad20b8c64cdf68bf5de31d518d32b7652a9b024c",
+      "files": [
+        {
+          "file": "bridge.mjs",
+          "sha256": "f30b9092a8ce4e1115dea3555e196ba452ef8b196d4ba78def15bba2117f2b7b"
+        },
+        {
+          "file": "catalog.mjs",
+          "sha256": "f33ed1987f8efa938762685df7ab7f249b2b6d6eb373c47433554fc803d0e73f"
+        },
+        {
+          "file": "cordis.patch.yml",
+          "sha256": "005d065d3a3ed6d82ab057a7026ad2bddadbf5dd0db776ad69a9a7c282ed7092"
+        },
+        {
+          "file": "index.mjs",
+          "sha256": "5d94dc8487325f0398221c29483f1f2b6285b244f058c2ec1296768959b53e45"
+        },
+        {
+          "file": "interactions.mjs",
+          "sha256": "51b12ae783a235e5a0b0ac0aabf3fc47f06acc2fc7e1735d69827ea7afb65b31"
+        },
+        {
+          "file": "LICENSE",
+          "sha256": "2772c31a36d374710eba71f94e771ab1368cc39902d0160987aece6d89741efd"
+        },
+        {
+          "file": "messages.mjs",
+          "sha256": "8e2dc768e3e9e385f68fddbbf353792df57e382c566b7c4d5cfd56761c0a7f07"
+        },
+        {
+          "file": "package.json",
+          "sha256": "3f39ea6c775283ebd185cbc2c8b46d3fe718c2c79d8f7be339887dd760e0d29f"
+        },
+        {
+          "file": "queue.mjs",
+          "sha256": "614f384fa41cad67f5fe9c0849cb65cdecb943fef4d465588da2489ad5112787"
+        },
+        {
+          "file": "README.md",
+          "sha256": "efd299a9babc3b6b45f7217a71e44f8d219783b29bcaa5d648ea0d4237b39fbf"
+        }
+      ]
+    }
+  ],
+  "privateCredentialScanMatches": 0,
+  "allArchiveBytesVerified": true,
+  "sourcePatchAppliedInIsolatedIndex": true,
+  "sourcePatchArchive": "source.patch.gz",
+  "sourcePatchArchiveSha256": "c694ba11b1baf79980dfc05d987e326e2476eb71773e37e68d0b3ecc17e33574"
+}

@@ -1,0 +1,541 @@
+{
+  "date": "2026-11-07",
+  "scope": "code9 desktop compatibility deployment and read-only phone acceptance",
+  "android": {
+    "versionName": "0.1.7-native-preview",
+    "versionCode": 9,
+    "rebuilt": false,
+    "originalReleaseFilesUnchanged": 10
+  },
+  "plugin": {
+    "version": "0.2.7",
+    "harnessVersion": "0.2.2-rc.1",
+    "info": {
+      "protocol": 1,
+      "harnessVersion": "0.2.2-rc.1",
+      "messagePhases": true,
+      "toolMessages": 1,
+      "interactions": true,
+      "scope": "all",
+      "history": true
+    },
+    "installMethod": "official plugin --profile desktop add --offline --ignore-scripts; official UI reload"
+  },
+  "checks": {
+    "backend": {
+      "passed": 419,
+      "failed": 0,
+      "skipped": 0
+    },
+    "typecheck": "passed",
+    "lint": "passed-zero-warnings",
+    "relayBuild": "passed",
+    "pluginBuild": "passed",
+    "officialIsolated": [
+      {
+        "version": "0.2.2-rc.1",
+        "passed": 30,
+        "suites": [
+          {
+            "category": "runtime",
+            "passed": 14,
+            "checks": {
+              "officialVersionGate": true,
+              "bundleComposition": true,
+              "officialCliDump": true,
+              "waitsForServices": true,
+              "officialLoaderActive": true,
+              "officialSessionQueryAndEventBus": true,
+              "officialScopedStreamAndStatus": true,
+              "dependencyLossClosesListener": true,
+              "reloadAndAsyncUnload": true,
+              "realAgentLoopQueue": true,
+              "realAgentLoopCancelsOnlyMobileQueuedInput": true,
+              "realAgentLoopSteerAndCanonicalText": true,
+              "realAgentLoopInterruptKeepsInbox": true,
+              "realAgentLoopRejectsOldTurnControl": true
+            }
+          },
+          {
+            "category": "history",
+            "passed": 4,
+            "checks": {
+              "officialMetadataNoLogRead": true,
+              "officialPreparedPagesNoActivation": true,
+              "officialPromptRpcConfirmation": true,
+              "officialRequestDeduplication": true
+            }
+          },
+          {
+            "category": "interactions",
+            "passed": 12,
+            "checks": {
+              "officialGatewayFingerprint": true,
+              "officialQuestionAndPlan": true,
+              "officialCompleteToolArguments": true,
+              "officialApprovalAndAudit": true,
+              "officialReject": true,
+              "officialCancellation": true,
+              "officialPtcApproval": true,
+              "officialApprovalIntentUnavailable": true,
+              "officialDesktopFirst": true,
+              "officialFingerprintReplacement": true,
+              "officialContinuedQuestion": true,
+              "noPendingLeak": true
+            }
+          }
+        ],
+        "externalModelRequests": 0
+      },
+      {
+        "version": "0.2.1-rc.5",
+        "passed": 30,
+        "suites": [
+          {
+            "category": "runtime",
+            "passed": 14,
+            "checks": {
+              "officialVersionGate": true,
+              "bundleComposition": true,
+              "officialCliDump": true,
+              "waitsForServices": true,
+              "officialLoaderActive": true,
+              "officialSessionQueryAndEventBus": true,
+              "officialScopedStreamAndStatus": true,
+              "dependencyLossClosesListener": true,
+              "reloadAndAsyncUnload": true,
+              "realAgentLoopQueue": true,
+              "realAgentLoopCancelsOnlyMobileQueuedInput": true,
+              "realAgentLoopSteerAndCanonicalText": true,
+              "realAgentLoopInterruptKeepsInbox": true,
+              "realAgentLoopRejectsOldTurnControl": true
+            }
+          },
+          {
+            "category": "history",
+            "passed": 4,
+            "checks": {
+              "officialMetadataNoLogRead": true,
+              "officialPreparedPagesNoActivation": true,
+              "officialPromptRpcConfirmation": true,
+              "officialRequestDeduplication": true
+            }
+          },
+          {
+            "category": "interactions",
+            "passed": 12,
+            "checks": {
+              "officialGatewayFingerprint": true,
+              "officialQuestionAndPlan": true,
+              "officialCompleteToolArguments": true,
+              "officialApprovalAndAudit": true,
+              "officialReject": true,
+              "officialCancellation": true,
+              "officialPtcApproval": true,
+              "officialApprovalIntentUnavailable": true,
+              "officialDesktopFirst": true,
+              "officialFingerprintReplacement": true,
+              "officialContinuedQuestion": true,
+              "noPendingLeak": true
+            }
+          }
+        ],
+        "externalModelRequests": 0
+      }
+    ],
+    "localAndPublic": {
+      "passed": 77,
+      "checks": [
+        {
+          "name": "/api/gateway-200",
+          "passed": true
+        },
+        {
+          "name": "candidate-instance",
+          "passed": true
+        },
+        {
+          "name": "candidate-bundle",
+          "passed": true
+        },
+        {
+          "name": "/api/gateway-200",
+          "passed": true
+        },
+        {
+          "name": "local-same-instance-tunnel",
+          "passed": true
+        },
+        {
+          "name": "/api/connection-200",
+          "passed": true
+        },
+        {
+          "name": "local-authenticated",
+          "passed": true
+        },
+        {
+          "name": "/api/agents/deepseek/probe-200",
+          "passed": true
+        },
+        {
+          "name": "local-agent-ready",
+          "passed": true
+        },
+        {
+          "name": "local-agent-shared-ui-capabilities",
+          "passed": true
+        },
+        {
+          "name": "/api/agents-200",
+          "passed": true
+        },
+        {
+          "name": "local-shared-session-api",
+          "passed": true
+        },
+        {
+          "name": "/api/agents/deepseek/sessions?range=all-200",
+          "passed": true
+        },
+        {
+          "name": "local-original-session-in-list",
+          "passed": true
+        },
+        {
+          "name": "local-image-noauth",
+          "passed": true
+        },
+        {
+          "name": "local-image-requires-owned-subscription",
+          "passed": true
+        },
+        {
+          "name": "/api/agents/deepseek/sessions/<original-session>/stream-token-200",
+          "passed": true
+        },
+        {
+          "name": "agent-session-stream-200",
+          "passed": true
+        },
+        {
+          "name": "local-original-session-identity",
+          "passed": true
+        },
+        {
+          "name": "local-original-idle-send-ready",
+          "passed": true
+        },
+        {
+          "name": "local-agent-image-200",
+          "passed": true
+        },
+        {
+          "name": "local-agent-image-bytes",
+          "passed": true,
+          "bytes": 24806,
+          "sha256": "0bb56c9ff4b9e8c0f1ec12d69a829521e42ee0e5105ae86c7783c06ae960a53c"
+        },
+        {
+          "name": "local-agent-image-headers",
+          "passed": true
+        },
+        {
+          "name": "local-agent-image-outside",
+          "passed": true
+        },
+        {
+          "name": "local-agent-image-missing",
+          "passed": true
+        },
+        {
+          "name": "local-agent-image-invalid",
+          "passed": true
+        },
+        {
+          "name": "local-agent-image-subscription-released",
+          "passed": true
+        },
+        {
+          "name": "/api/agents/deepseek/sessions/<original-session>/stream-token-200",
+          "passed": true
+        },
+        {
+          "name": "agent-session-stream-200",
+          "passed": true
+        },
+        {
+          "name": "local-reconnect-stable-message-identities",
+          "passed": true
+        },
+        {
+          "name": "/api/desktop/threads/<current-thread>/stream-token-200",
+          "passed": true
+        },
+        {
+          "name": "desktop-stream-200",
+          "passed": true
+        },
+        {
+          "name": "local-codex-native-current-stream",
+          "passed": true
+        },
+        {
+          "name": "local-codex-image-200",
+          "passed": true
+        },
+        {
+          "name": "local-codex-image-bytes",
+          "passed": true
+        },
+        {
+          "name": "local-android-cors-preflight",
+          "passed": true
+        },
+        {
+          "name": "/api/gateway-200",
+          "passed": true
+        },
+        {
+          "name": "public-same-instance-tunnel",
+          "passed": true
+        },
+        {
+          "name": "/api/connection-200",
+          "passed": true
+        },
+        {
+          "name": "public-authenticated",
+          "passed": true
+        },
+        {
+          "name": "/api/agents/deepseek/probe-200",
+          "passed": true
+        },
+        {
+          "name": "public-agent-ready",
+          "passed": true
+        },
+        {
+          "name": "public-agent-shared-ui-capabilities",
+          "passed": true
+        },
+        {
+          "name": "/api/agents-200",
+          "passed": true
+        },
+        {
+          "name": "public-shared-session-api",
+          "passed": true
+        },
+        {
+          "name": "/api/agents/deepseek/sessions?range=all-200",
+          "passed": true
+        },
+        {
+          "name": "public-original-session-in-list",
+          "passed": true
+        },
+        {
+          "name": "public-image-noauth",
+          "passed": true
+        },
+        {
+          "name": "public-image-requires-owned-subscription",
+          "passed": true
+        },
+        {
+          "name": "/api/agents/deepseek/sessions/<original-session>/stream-token-200",
+          "passed": true
+        },
+        {
+          "name": "agent-session-stream-200",
+          "passed": true
+        },
+        {
+          "name": "public-original-session-identity",
+          "passed": true
+        },
+        {
+          "name": "public-original-idle-send-ready",
+          "passed": true
+        },
+        {
+          "name": "public-agent-image-200",
+          "passed": true
+        },
+        {
+          "name": "public-agent-image-bytes",
+          "passed": true,
+          "bytes": 24806,
+          "sha256": "0bb56c9ff4b9e8c0f1ec12d69a829521e42ee0e5105ae86c7783c06ae960a53c"
+        },
+        {
+          "name": "public-agent-image-headers",
+          "passed": true
+        },
+        {
+          "name": "public-agent-image-outside",
+          "passed": true
+        },
+        {
+          "name": "public-agent-image-missing",
+          "passed": true
+        },
+        {
+          "name": "public-agent-image-invalid",
+          "passed": true
+        },
+        {
+          "name": "public-agent-image-subscription-released",
+          "passed": true
+        },
+        {
+          "name": "/api/agents/deepseek/sessions/<original-session>/stream-token-200",
+          "passed": true
+        },
+        {
+          "name": "agent-session-stream-200",
+          "passed": true
+        },
+        {
+          "name": "public-reconnect-stable-message-identities",
+          "passed": true
+        },
+        {
+          "name": "/api/desktop/threads/<current-thread>/stream-token-200",
+          "passed": true
+        },
+        {
+          "name": "desktop-stream-200",
+          "passed": true
+        },
+        {
+          "name": "public-codex-native-current-stream",
+          "passed": true
+        },
+        {
+          "name": "public-codex-image-200",
+          "passed": true
+        },
+        {
+          "name": "public-codex-image-bytes",
+          "passed": true
+        },
+        {
+          "name": "public-android-cors-preflight",
+          "passed": true
+        },
+        {
+          "name": "preserved-gateway.json",
+          "passed": true
+        },
+        {
+          "name": "preserved-bridge.json",
+          "passed": true
+        },
+        {
+          "name": "preserved-devices.json",
+          "passed": true
+        },
+        {
+          "name": "preserved-desktop-queue.json",
+          "passed": true
+        },
+        {
+          "name": "preserved-voice-credentials.json",
+          "passed": true
+        },
+        {
+          "name": "original-host-pids-preserved",
+          "passed": true
+        },
+        {
+          "name": "loaded-plugin-link",
+          "passed": true
+        },
+        {
+          "name": "single-new-gateway-listener",
+          "passed": true
+        }
+      ],
+      "sessions": [
+        {
+          "source": "local",
+          "status": "idle",
+          "messages": 40,
+          "tools": 14,
+          "questions": 0,
+          "permissions": 0,
+          "queue": 0
+        },
+        {
+          "source": "public",
+          "status": "idle",
+          "messages": 40,
+          "tools": 14,
+          "questions": 0,
+          "permissions": 0,
+          "queue": 0
+        }
+      ],
+      "fixtureRemoved": true,
+      "agentImageUsesTemporaryPublicFixture": true
+    }
+  },
+  "deployment": {
+    "startedAt": "2026-11-07T03:32:26.785Z",
+    "finishedAt": "2026-11-07T03:32:31.018Z",
+    "before": {
+      "pid": 45270,
+      "instanceId": "c0ff4578-3e91-4cc0-ac25-7f4917d31a24"
+    },
+    "after": {
+      "pid": 89511,
+      "instanceId": "d0a7fb98-f342-4b31-a64f-21cb9eab3df3"
+    },
+    "oldProcessNaturalExitMs": 2280,
+    "gatewayBundleSha256": "08bff6fea5f4b56bde294b780f7b15db58f0ee4b477ab01cdc912e61bea379ca",
+    "success": true,
+    "originalHostsAndStatePreserved": true,
+    "originalProfilePatchUnchanged": true,
+    "privateConfigurationAndDeviceBytesPreserved": true,
+    "forcedTermination": false,
+    "harnessRestarted": false,
+    "modelOrPermissionPolicyChanged": false
+  },
+  "phone": {
+    "appUpgrade": "passed-user-confirmed",
+    "originalDeepSeekSessionsAndBody": "passed-user-confirmed",
+    "userQuote": "已升级 code9，原会话和正文正常",
+    "installedApkHashIndependentlyVerified": false,
+    "remaining": [
+      "new input and single response without duplication",
+      "tool disclosure and rendering preferences",
+      "image rendering and viewer on DeepSeek phone page",
+      "attachments and voice",
+      "questions, one-time approval, reject and stop",
+      "background and network reconnection"
+    ]
+  },
+  "compatibility": {
+    "supportedVersions": [
+      "0.2.1-rc.2",
+      "0.2.1-rc.3",
+      "0.2.1-rc.5",
+      "0.2.2-rc.1"
+    ],
+    "unknownVersions": "rejected",
+    "newApprovalIntent": "unavailable-on-phone; handle-on-desktop",
+    "settleRemoteEventSha256": "6b117ca6e967c8aa24f2b291e5506acf7b6230a1e061ce0201483d8f3ec94a0f",
+    "finishRemoteEventSha256": "87a6d8569f34a7fd0f6f68fb840b9af40099808c92fc118b11a9065961bdbd2d"
+  },
+  "delivery": {
+    "directory": "releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview",
+    "originalAndroidAndUpdateSourceKeptAtCode9": true,
+    "githubVerification": "pending"
+  },
+  "externalModelRequests": 0,
+  "actualUserApprovals": 0,
+  "fullKelivoParity": "in-progress"
+}
