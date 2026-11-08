@@ -3,7 +3,7 @@
   "name": "claude-mobicodex-integration",
   "title": "Claude Code 原接口接入 MobiCodex",
   "description": "沿用用户指定的本机旧接口，通过已有 Claude Mods/Agent 通道接入 MobiCodex；保留现有 Codex/DeepSeek、凭证与手机配置，区分隔离校验和真机联动。",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": "relay",
@@ -11,7 +11,7 @@
   "creator": "rorance",
   "assignee": "rorance",
   "createdAt": "2026-11-08",
-  "completedAt": null,
+  "completedAt": "2026-11-08",
   "branch": "main",
   "base_branch": "main",
   "worktree_path": null,
@@ -26,6 +26,6 @@
     "apps/relay/src/agents/claudeAdapter.ts",
     "scripts/check-claude-runtime.mjs"
   ],
-  "notes": "2026-11-08 cc1原完整配置保持，13:33 Haiku和13:38基础Sonnet流式均200，Desktop警告消失、当前Medium模型404已改为基础Sonnet。最小真实探测累计9次，未重发原会话消息。Code/Desktop均选cc1，native权限/Hooks/非接口字段保持；固定2.1.287/0.1.2、严格validate/官方8/项目32隔离通过。当前状态已私有备份、独立Claude字段候选与本地公网/native/DeepSeek预检通过，用户批准现在启用并验证。正常网关切换、兼容原进程登记和手机联动继续，code10/原CLI保持。 用户批准后首次stop旧网关残留失败已保留，14会话空闲无待决，官方手机桥接组件重载后旧PID自然退出；独立Claude配置已应用，同固定网关恢复。本地/公网61项通过，固定Code 2.1.287/插件0.1.2原进程登记1条新空白会话，未恢复Desktop旧会话、未发prompt。手机打开/短消息收发待用户验收。",
+  "notes": "2026-11-08 桌面同会话收发目标已闭环。完整私有备份后安装官方Claude Desktop4.23118.0/Code2.1.317，官方SHA/签名/严格validate退出0/8项无模型测试通过，原0.1.2插件由桌面原进程加载。用户真机确认手机与桌面均显示消息与回复；最终本地/公网36项只读断言通过。cc1、权限/Hooks、Codex/DeepSeek及原固定网关保持；旧独立CLI确认idle后正常退出并归档，默认入口改为桌面，5项只读检查通过。手机0.1.8/code10无需更新。独立CLI不同步、首次网关stop残留及Opus502的历史失败保留；原生问答/审批/停止/图片与总59组未扩验，默认PATH旧CLI未替换。",
   "meta": {}
 }

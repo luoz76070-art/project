@@ -1,6 +1,6 @@
 {
   "date": "2026-11-08",
-  "phase": "claude-code-live-bridge-preview",
+  "phase": "claude-desktop-original-session-accepted",
   "provider": {
     "source": "cc1",
     "desktopAndCodeSelected": true,
@@ -8,17 +8,25 @@
     "minimalHealthRequests": 9,
     "latestHaikuStatus": 200,
     "latestSonnetStreamStatus": 200,
-    "obsoleteMediumStatus": 404
+    "obsoleteMediumStatus": 404,
+    "modelAvailabilityScope": "Sonnet real response verified; desktop Opus test ended with 502"
   },
   "runtime": {
-    "fixedVersion": "2.1.287",
+    "fixedVersion": "2.1.317",
     "defaultCliReplaced": false,
     "pluginVersion": "0.1.2",
     "officialIsolatedChecks": 8,
     "projectIsolatedChecks": 32,
     "liveRegisteredSessions": 1,
-    "newEmptyCodeSession": true,
-    "desktopOldSessionTakenOver": false
+    "newEmptyCodeSession": false,
+    "desktopOldSessionTakenOver": true,
+    "desktopVersion": "4.23118.0",
+    "defaultCliVersion": "2.1.220",
+    "sessionOrigin": "existing Claude Desktop Code process; original session resumed by desktop",
+    "defaultLauncher": "Claude Desktop",
+    "legacyCliExitedNormally": true,
+    "legacyCliEntryArchived": true,
+    "launcherReadOnlyChecks": 5
   },
   "gateway": {
     "userApproved": true,
@@ -28,15 +36,63 @@
     "recovery": "official idle DeepSeek mobile bridge component reload; previous daemon exited naturally",
     "originalHostsPreserved": true,
     "onlineVerificationChecks": 61,
-    "onlineVerificationModelRequests": 0
+    "onlineVerificationModelRequests": 0,
+    "desktopReinstallRequiredGatewayRestart": false,
+    "desktopReadOnlyChecks": 32,
+    "finalReadOnlyChecks": 36,
+    "finalReadOnlyModelPrompts": 0
   },
   "mobile": {
     "apkVersion": "0.1.8-native-preview",
     "versionCode": 10,
     "updateNeeded": false,
-    "actualSendReceiveVerified": false
+    "actualSendReceiveVerified": true,
+    "sameDesktopSessionVerified": true,
+    "verificationSource": "user-reported phone and desktop both show messages and replies",
+    "userReplyDate": "2026-11-08",
+    "acceptancePrompt": "只回复：手机桌面同步正常",
+    "acceptancePromptAndAnswerInAuthoritativeTranscript": true,
+    "installedApkHashIndependentlyPulled": false
   },
-  "remaining": [
-    "phone-open-and-real-send-receive"
+  "remaining": [],
+  "status": "completed",
+  "installation": {
+    "officialReleasePublishedAt": "2026-11-05T07:15:47.547Z",
+    "appSha256": "5b8feee3da048e26bbb29a5d601e97034f674ac3b76f7d0237751c46d6034b23",
+    "enginePackageSha256": "91184d3d9ba3abb060a7c46a1f6fbaa80af1c3e6f2e94539a90fa68790772661",
+    "signaturesVerified": true,
+    "privateFullBackupVerifiedFiles": 113,
+    "cacheDirectoriesArchived": 5,
+    "officialPluginInstallerUsed": true,
+    "installedPluginFilesVerified": 11,
+    "nativePermissionsAndHooksPreserved": true,
+    "nativeOriginalEnvPreserved": true,
+    "desktopCredentialStorageMigrated": true,
+    "credentialsMigrationFormatParsed": false,
+    "pluginCatalogMetadataWarnings": [
+      "license missing for catalog submission",
+      "icon missing for catalog submission"
+    ]
+  },
+  "liveDesktopTests": {
+    "explicitAgentInitiatedPrompts": 2,
+    "recordedApiAttemptsByModel": {
+      "claude-opus-5.5": 11,
+      "claude-sonnet-5-5": 1
+    },
+    "recordedApiErrorsByStatus": {
+      "502": 10
+    },
+    "toolUseBlocks": 0,
+    "opusTaskEndedNaturally": true,
+    "interruptActuallyPerformed": false,
+    "sonnetOriginalSessionAnswerVerified": true,
+    "phoneUserInitiatedAcceptanceSeparate": true
+  },
+  "outsideAcceptedScope": [
+    "native question/approval/stop/image interactions not separately accepted",
+    "full Kelivo integration 59-group acceptance unchanged",
+    "default PATH CLI upgrade and legacy CLI plugin compatibility",
+    "desktop software update API still returned 403; official CDN installation used"
   ]
 }

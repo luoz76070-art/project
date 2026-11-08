@@ -2,7 +2,7 @@
 
 本插件在加载它的 Claude Code 原进程中执行。复用 Mobile Codex 的一个 Relay/Broker 和手机 Agent 页面，无额外 Node/MCP 子进程，不启动模型、不恢复或复制会话，不使用 macOS 辅助功能。
 
-已完成源码、合成宿主/HTTP测试、手机浏览器验收，以及官方2.1.287严格校验和7项无模型沙箱测试；**用户 Claude 原会话和 Android 仍待验收**。协议依据 `anthropics/claude-code` 的 `bf2323b3021c9d3db7a31e1e7d61068c3f704497` 中 `mods/types/claude-code.d.ts`（2.1.277），插件入口依据2026-10-21官方 Mods create 文档的 `hooks/hooks.json.modules`。该API仍可能变化，版本门不代替真实兼容性验证。
+2026-11-08已在官方Claude Desktop 4.23118.0的Code引擎2.1.317中加载0.1.2插件；官方8项无模型测试及最终36项本地/公网只读检查通过，用户真机确认手机和桌面同一原会话均显示消息与回复。原生问答/审批/停止/图片尚未另验，详见[接入审计](../../docs/audits/2026-11-08/claude-integration.md)。协议依据 `anthropics/claude-code` 的 `bf2323b3021c9d3db7a31e1e7d61068c3f704497` 中 `mods/types/claude-code.d.ts`（2.1.277），插件入口依据2026-10-21官方 Mods create 文档的 `hooks/hooks.json.modules`。该API仍可能变化，版本门不代替真实兼容性验证。
 
 ## 能力
 
@@ -41,6 +41,8 @@
 3. 官方Mods入门文档要求2.1.287或以后；模块及网关当前只接受2.1.x且patch>=287。固定API类型文件生成于2.1.277，与宿主最低版本分别记录。2026-10-21用户安装的CLI仍为**2.1.220**，没有升级或加载模块；旧校验器拒绝modules入口。另在临时目录核对官方2.1.287发布包完整性后，严格校验发现helper与局部变量同名导致静态分析失败；插件0.1.1将HTTP helper改名为唯一的bridgeRequest后，`plugin validate --strict`及官方7项无模型测试通过。该临时校验器没有安装到用户PATH，不解决用户旧宿主本身的版本限制。使用前仍需在兼容宿主的原测试会话验收，不能用空hooks伪装兼容或把隔离通过称为用户原会话验收。
 
 4. 用 Claude 官方的插件安装/加载方式，在原进程启动时加载目录；也可人工使用 `claude --plugin-dir <plugin-directory>`。仅加载了插件的原进程可登记；未加载插件的正在运行会话、热重载中的既有活动任务和已退出历史不保证可接管。
+
+   需要手机与桌面同步时，须让桌面自己的兼容Code引擎加载插件。另开CLI只能控制那个CLI会话，不能作为桌面同步的替代。本次采用私有本地marketplace及官方用户级安装器启用插件，桥接env保存于私有native settings；默认入口正常打开Claude Desktop，不自动创建CLI会话。手机保持0.1.8/code10。
 
 `corepack pnpm build:plugin` 生成 `dist-plugin/mobile-claude/`，源模块保持未压缩以供宿主静态校验；网关仍由 `dist-plugin/mobile-codex/` 提供。没有第二套Relay。
 

@@ -1,6 +1,6 @@
 # Claude Code 沿用原接口接入 MobiCodex
 
-日期：2026-11-08。用户已确认范围为「电脑页接入 Claude Code，沿用原接口」，后明确要求清理旧配置并采用 CC Switch 当前的 `cc`。任务：[接入计划](../../../.trellis/tasks/11-08-claude-mobicodex-integration/prd.md)。用户随后指定 `cc1`。最新复测已恢复：Haiku 与 Sonnet 5.5 均 200，基础 Sonnet 流式完整结束；Desktop 连接警告消失，当前会话已从不可用的 Medium 改为基础 Sonnet。Claude Code 与 Desktop 的 CC Switch 选择均已同步为 cc1；在线桥接与手机联动继续验收。下文 502 为恢复前的历史证据。
+日期：2026-11-08。用户确认电脑页接入 Claude Code，最终采用 CC Switch 的 `cc1`，并要求手机与桌面同会话同步。官方桌面4.23118.0/Code2.1.317已安装并加载原0.1.2桥接；用户真机确认「手机和桌面都显示消息与回复」，本轮收发目标完成。最终36项本地/公网只读检查通过，手机0.1.8/code10无需更新。任务：[接入计划](../../../.trellis/tasks/11-08-claude-mobicodex-integration/prd.md)，机器可读结果：[验收回执](claude-integration-verification.json)。下文按历史保留接口502、独立CLI不同步及恢复证据；不将Sonnet成功扩大为所有模型或交互均已验收。
 
 ## 初期核实与准备（历史）
 
@@ -87,8 +87,48 @@
 
 首轮检查器对 204 无 body 响应调用 cancel 失败，保留 `live-verification-attempt1.json`；修正检查器为可空 body 后完整 61 项通过，产品代码未变。61 项及启用/恢复阶段外部模型请求为 0，单独健康探测累计 9 次保持原记录。
 
-手机继续 0.1.8/code10，无 APK/热更新改动。启动入口为私有应用支持目录 `Mobile Codex Gateway/claude/start-claude.command`，本次会话须保持运行；以后正常退出后可从该入口启动，未安装登录项或自动发消息。该入口使用固定 runtime/plugin 和原 settings，独立桥接密钥不在 argv。
+当时手机继续0.1.8/code10，无APK/热更新改动。私有 `Mobile Codex Gateway/claude/start-claude.command` 当时启动固定独立CLI，未安装登录项或自动发消息；该入口现已由下述桌面入口替换。独立桥接密钥不在argv。
 
-## 未完成项
+## 手机首轮反馈（历史）
 
-已请用户在 MobiCodex「电脑」页切换 Claude Code，打开「Claude Code 会话」并发送短验收消息。手机实际打开/发送、原进程接收及回复显示仍待用户操作与真实回执，不能以接口健康或 61 项只读验证代替。未单独验收原生问答、审批、停止和附件图片，后续按产品既有验收边界执行；总整合59组状态保持。
+用户确认手机能收到独立CLI回复，同时指出桌面Claude收不到消息。当时桌面同会话同步未通过，61项只读验证不能代替桌面验收；之后按下文完成重装与真实同步。原生问答、审批、停止和附件图片未单独验收，总整合59组状态保持。
+
+## 桌面同步缺口与重装准备
+
+2026-11-08 用户允许清理重装最新版。只读检查确认安装的官方签名 Claude 为 1.46388.4，桌面另行启动自己的 Code 2.1.219，未加载手机所连独立 CLI 的 Mods。桌面日志明确记录目标引擎 2.1.260 下载连接关闭后退回 2.1.219；两者都低于现有插件的 2.1.287 下限。正常软件更新检查返回无效 JSON，更新 API 复核为 403，尚未修改安装包或放宽 TLS。
+
+通过 Homebrew cask 定位官方 CDN 的 RELEASES.json，实际返回200并指定 currentRelease=4.23118.0、发布时间2026-11-05T07:15:47.547Z。该来源与官方签名安装包分别核验；不能沿用旧版本号称为最新版。当前应用、完整Claude/Claude-3p数据、native设置、MobiCodex Claude运行配置及一致性CC Switch数据库已存至私有备份 `Mobile Codex Gateway/backups/2026-11-08-claude-desktop-reinstall-192959`，113份JSON/Info.plist逐字节SHA核对通过。此时重装及桌面桥接仍待完成，不删除用户历史或覆盖cc1。
+
+## 官方桌面与引擎重装
+
+- `/Applications/Claude.app` 已安装官方4.23118.0，下载包391,510,579字节，SHA256 `5b8feee3da048e26bbb29a5d601e97034f674ac3b76f7d0237751c46d6034b23`，与官方清单/Homebrew记录一致；严格签名验证通过，Team ID为Q6L2SF6YDW。原应用移入上述备份的 `replaced-application/`。
+- 桌面manifest指定Code2.1.317，官方包107,815,075字节，SHA256 `91184d3d9ba3abb060a7c46a1f6fbaa80af1c3e6f2e94539a90fa68790772661`。大小、SHA、解包后签名/版本均通过，安装在桌面真实缓存目录，`.verified`采用真实SHA和官方安装器格式。未修改app.asar、关闭TLS或替换默认PATH的2.1.220。
+- 原 `Cache`、`Code Cache`、`GPUCache`、`DawnGraphiteCache`、`DawnWebGPUCache` 移入私有 `replaced-caches/`，保留完整历史、CC Switch、Claude-3p及Cowork VM；没有永久删除用户数据。
+- 用官方317进行隔离严格validate（退出0）和8项无模型plugin test，通过。新版校验器另提示插件目录上架的license/icon元数据问题，未阻止本地加载；本轮没有扩展商店发布。原始完整输出保留。
+
+## 桌面原进程加载与真实收发
+
+通过私有本地marketplace及官方用户级安装器启用 `mobile-codex-bridge@mobicodex-local`，安装后11份文件与固定0.1.2副本一致。native settings仅新增 `MOBILE_CODEX_CLAUDE_BRIDGE_URL` 与独立桥接TOKEN两项env；原模型接口、非桥接env、权限和Hooks已核对保持。新版桌面迁移了两份configLibrary的凭证存储字符串，未解析其内部格式，不声称这些文件逐字节不变，也不以旧明文覆盖。
+
+桌面原「你好」/「自媒体」会话由Claude Desktop正常启动的Code2.1.317加载插件，真实CLI会话ID为 `835c4c66-8bea-40fd-8a82-acc20d1870d5`。桌面日志、进程父子关系、网关登记及同一原始消息流交叉确认；不是将独立CLI输出复制到桌面，也不新建会话代替原历史。原草稿「你好」保留，未重发。
+
+桌面链路的两条显式真实验收prompt单独留证：
+
+| 模型 | 实际结果 |
+| --- | --- |
+| `claude-opus-5.5` | 原进程接收后自动重试，日志记录11次API尝试及10条502，最终Server error；停止探测时原任务已经自然结束，未实际中断 |
+| `claude-sonnet-5-5` | 通过桌面UI选择，1次API尝试成功；原会话输入及含「MobiCodex Sonnet 双端同步成功 20261108」的回复在桌面及本地/公网权威快照一致 |
+
+两条prompt均无工具调用；API尝试包含宿主自动重试，不能把两条prompt称为两次计费请求。此前9次最小接口健康探测独立计数。插件消息在桌面出现官方 `The mobile-codex-bridge plugin sent a message` 包装，符合原生提交行为。
+
+随后用户在手机「电脑 → Claude Code」打开上述原会话发送「只回复：手机桌面同步正常」，明确确认「手机和桌面都显示消息与回复」。这是实际手机回执；只读脚本另确认同一原会话中用户输入与助手回复均存在，不将脚本断言当作独立观察手机UI。
+
+## 默认入口与最终收尾
+
+旧独立CLI确认idle、无待决提问/审批后，经本轮自有PTY发送 `/exit` 正常退出，exitCode=0。旧启动器、prepared和active-session三份文件保存在同一私有备份的 `legacy-cli-entry/`，未删除旧会话历史。现有 `start-claude.command` 正常打开/聚焦Claude Desktop，`--check` 不启动模型，语法及5项配置检查通过；active-session指向真实桌面原会话，不再保留旧PTY作为主入口。
+
+最终 `desktop-final-verification.json` 的36项本地/公网只读断言通过：原网关实例与Tunnel、Codex native和DeepSeek保持；桌面原会话在线/idle、无待决、权威文本完整，手机验收输入与回复均存在，旧独立CLI已不在在线列表。该检查没有提交模型任务。共享网关没有因桌面重装再次切换，手机不需重装或热更新。
+
+上述证据位于ignored的 `output/audit/2026-11-08/claude-integration/desktop-inspect/`：官方清单、installation-result、engine-installation、official-2.1.317-check、desktop-plugin-installation、preservation-check、desktop-message-test/desktop-message-sonnet-test、live-acceptance-summary、desktop-live-verification、desktop-final-verification及desktop-sync-success.png。两次真实prompt成功/失败与只读验证分别保留。收尾JSON/文档路径/启动器检查通过，回执为closeout-verification.json；产品源码未改，不重复运行全量产品测试。
+
+本轮仅确认桌面同会话收发闭环；原生问答/审批/停止/附件图片及整体59组未扩验，当前默认PATH旧CLI与软件更新API403未另修复。
