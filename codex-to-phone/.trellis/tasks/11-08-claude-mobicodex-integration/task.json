@@ -1,0 +1,31 @@
+{
+  "id": "claude-mobicodex-integration",
+  "name": "claude-mobicodex-integration",
+  "title": "Claude Code 原接口接入 MobiCodex",
+  "description": "沿用用户指定的本机旧接口，通过已有 Claude Mods/Agent 通道接入 MobiCodex；保留现有 Codex/DeepSeek、凭证与手机配置，区分隔离校验和真机联动。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": "relay",
+  "priority": "P2",
+  "creator": "rorance",
+  "assignee": "rorance",
+  "createdAt": "2026-11-08",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "11-05-kelivo-native-integration",
+  "relatedFiles": [
+    "docs/audits/2026-11-08/claude-integration.md",
+    "plugins/mobile-claude/hooks/register.mjs",
+    "apps/relay/src/agents/claudeAdapter.ts",
+    "scripts/check-claude-runtime.mjs"
+  ],
+  "notes": "2026-11-08 cc1原完整配置保持，13:33 Haiku和13:38基础Sonnet流式均200，Desktop警告消失、当前Medium模型404已改为基础Sonnet。最小真实探测累计9次，未重发原会话消息。Code/Desktop均选cc1，native权限/Hooks/非接口字段保持；固定2.1.287/0.1.2、严格validate/官方8/项目32隔离通过。当前状态已私有备份、独立Claude字段候选与本地公网/native/DeepSeek预检通过，用户批准现在启用并验证。正常网关切换、兼容原进程登记和手机联动继续，code10/原CLI保持。 用户批准后首次stop旧网关残留失败已保留，14会话空闲无待决，官方手机桥接组件重载后旧PID自然退出；独立Claude配置已应用，同固定网关恢复。本地/公网61项通过，固定Code 2.1.287/插件0.1.2原进程登记1条新空白会话，未恢复Desktop旧会话、未发prompt。手机打开/短消息收发待用户验收。",
+  "meta": {}
+}

@@ -1,6 +1,6 @@
 # MobiCodex 工程档案入口
 
-更新时间：2026-11-07
+更新时间：2026-11-08
 
 ## 作用
 
@@ -25,6 +25,8 @@ Kelivo 整合候选（2026-11-04，现有远控视觉试迁移已实施）：用
 - 协议类型：`generated-protocol`
 
 ## Trellis 与当前优化
+
+最新[Claude Code 原接口接入](audits/2026-11-08/claude-integration.md)：cc1最新Haiku及基础Sonnet5.5流式均200，Desktop警告消失、不可用Medium已改基础Sonnet，Code/Desktop均选cc1且权限/Hooks保持。固定2.1.287/0.1.2完整性/严格validate/官方8项及项目32项隔离通过。用户批准后Claude独立桥接上线，新空白Code原进程登记，本地/公网61项检查通过，原Codex/DeepSeek及私有状态保持；首次stop残留失败及官方桥接组件恢复分别留证。手机code10无需更新，已请用户打开Claude及真实发送验收，不能称为接管Desktop旧历史或手机已通过。
 
 最新[MobiCodex 品牌与更新](audits/2026-11-07/mobicodex-branding.md)：code10 / 0.1.8-native-preview 使用选定电脑/手机图标，用户可见名称统一为 MobiCodex；保留应用 ID、签名与数据协议。通过 App 内 APK 覆盖更新交付，2026-11-07用户已确认「已升级，图标名称与原配置都正常」，本轮闭环；安装APK/SHA未独立回拉，完整59组验收保持原状态，在线网关未改变。
 

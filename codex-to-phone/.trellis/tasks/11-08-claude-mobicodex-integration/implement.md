@@ -1,0 +1,23 @@
+# Claude Code 接入执行
+
+- [x] 核对工程/契约、用户确认电脑页Claude Code、原网关/CLI及接口候选；读取信息脱敏。
+- [x] 用户要求采用CC Switch当前cc配置；数据库及真实UI确认Claude Desktop的cc为来源，GET /v1/models 200/8模型，无模型生成请求。凭证不写仓库、日志或argv。
+- [x] 私有备份后将cc接口同步native settings，保留权限/Hooks，将旧settings.json.bak归档。CC Switch Code侧选择仍待同步。
+- [x] 用户报错后复现Desktop超时，单独进行真实消息健康诊断：三种模型/直连与代理/流式均上游502。最小消息探测与无模型隔离测试分别记录。
+- [x] 官方2.1.287核对SHA512，严格validate、8项官方无模型测试及32项Claude隔离回归通过。
+- [x] 准备固定插件/兼容运行时及私有start-claude.command，保留原CLI；语法和未就绪门禁通过，未创建会话，真实启动待验。
+- [x] cc1 最新真实 Haiku 及基础 Sonnet 流式200；不可用Medium返回404，Desktop当前会话已改基础Sonnet。CC Switch Code/Desktop均选cc1，native字段/默认模型与权限Hooks一致性通过。
+- [x] 用户批准后启用Claude；首次stop旧进程残留失败保留，原14会话无活动/待决后仅官方桥接组件重载，旧PID自然退出，再启动原固定网关。
+- [x] 固定兼容Claude Code原进程+插件已登记1条空白会话，本地/公网61项检查通过，Codex/DeepSeek/配置及原宿主保持。未恢复Desktop历史或发prompt。
+- [ ] 用户手机打开Claude及真实收发验收；未覆盖能力明确待验。
+- [ ] 审计、工程入口和相关文档按范围更新；按项目Git流程提交交付。
+
+验证：node scripts/check-claude-runtime.mjs <独立2.1.287>；先Relay/插件build，再node --test --test-timeout=12000 apps/relay/tests/claude.test.mjs。纯配置/文档检查JSON、路径、权限、git diff；产品代码改变后才扩至typecheck/lint和相邻回归。
+
+回退：从私有备份恢复gateway.json，仅管理本项目网关。保留原固定bundle与设备文件；不强退生产进程、不覆盖原CLI或切换其他Agent。
+
+2026-11-08准备回执：兼容运行时及0.1.2插件固定副本已放私有应用支持目录，版本与5份插件文件核验通过。来源已确认并同步native配置，原权限/Hooks保留；Desktop错误的实际阻塞是选定接口的消息请求上游502。启动入口、CC Switch Code侧选择一致性、网关/原进程登记及联动待续；在线网关和默认CLI保持。证据见docs/audits/2026-11-08/claude-integration.md，不继续使用旧的「等待选择接口」叙述。
+
+2026-11-08 13:58：cc1恢复，累计9次最小真实健康探测与隔离检查分开。原固定网关/双端Tunnel/native/DeepSeek预检通过，私有备份及唯一新增Claude字段候选完成；用户明确批准现在启用并验证，在线切换/原进程登记/手机验收继续。
+
+2026-11-08 14:12：独立桥接已在线，启动器7项通过，实际空闲原进程/两端并发权威快照和鉴权共61项通过（无模型）；手机真实打开/短消息收发已询问待回执。原生问答/审批/停止/附件图片未扩为已验，总整合59组保持。

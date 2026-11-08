@@ -18,7 +18,9 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [],
+  "children": [
+    "11-08-claude-mobicodex-integration"
+  ],
   "parent": null,
   "relatedFiles": [
     "docs/audits/2026-11-05/kelivo-native.md",

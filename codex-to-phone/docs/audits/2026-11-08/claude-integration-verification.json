@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-08",
+  "phase": "claude-code-live-bridge-preview",
+  "provider": {
+    "source": "cc1",
+    "desktopAndCodeSelected": true,
+    "model": "claude-sonnet-5-5",
+    "minimalHealthRequests": 9,
+    "latestHaikuStatus": 200,
+    "latestSonnetStreamStatus": 200,
+    "obsoleteMediumStatus": 404
+  },
+  "runtime": {
+    "fixedVersion": "2.1.287",
+    "defaultCliReplaced": false,
+    "pluginVersion": "0.1.2",
+    "officialIsolatedChecks": 8,
+    "projectIsolatedChecks": 32,
+    "liveRegisteredSessions": 1,
+    "newEmptyCodeSession": true,
+    "desktopOldSessionTakenOver": false
+  },
+  "gateway": {
+    "userApproved": true,
+    "fixedBundleUnchanged": true,
+    "independentClaudeBridgeKey": true,
+    "firstStopNaturalExitFailed": true,
+    "recovery": "official idle DeepSeek mobile bridge component reload; previous daemon exited naturally",
+    "originalHostsPreserved": true,
+    "onlineVerificationChecks": 61,
+    "onlineVerificationModelRequests": 0
+  },
+  "mobile": {
+    "apkVersion": "0.1.8-native-preview",
+    "versionCode": 10,
+    "updateNeeded": false,
+    "actualSendReceiveVerified": false
+  },
+  "remaining": [
+    "phone-open-and-real-send-receive"
+  ]
+}
