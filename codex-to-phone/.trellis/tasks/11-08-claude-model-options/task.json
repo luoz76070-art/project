@@ -1,0 +1,16 @@
+{
+  "id": "claude-model-options",
+  "name": "claude-model-options",
+  "title": "Claude模型清单与可用性修正",
+  "status": "completed",
+  "creator": "rorance",
+  "assignee": "rorance",
+  "createdAt": "2026-11-08",
+  "completedAt": "2026-11-08",
+  "package": "relay",
+  "parent": "11-08-claude-mobicodex-integration",
+  "relatedFiles": [
+    "docs/audits/2026-11-08/claude-model-options.md"
+  ],
+  "notes": "已确认14项来自cc1接口清单；3次极短真实探测，规范Opus200、点号Sonnet与Haiku502。官方配置关闭发现并仅保留规范Sonnet默认/Opus，正常重启恢复原会话；菜单两项与重启前后各36项只读检查通过。凭证存储和native设置保持，官方编辑器另规范化默认bearer字段已核对。Opus完整Code验收另有待启动计划，不扩展本轮范围。"
+}

@@ -4,6 +4,8 @@
 
 2026-11-08已在官方Claude Desktop 4.23118.0的Code引擎2.1.317中加载0.1.2插件；官方8项无模型测试及最终36项本地/公网只读检查通过，用户真机确认手机和桌面同一原会话均显示消息与回复。原生问答/审批/停止/图片尚未另验，详见[接入审计](../../docs/audits/2026-11-08/claude-integration.md)。协议依据 `anthropics/claude-code` 的 `bf2323b3021c9d3db7a31e1e7d61068c3f704497` 中 `mods/types/claude-code.d.ts`（2.1.277），插件入口依据2026-10-21官方 Mods create 文档的 `hooks/hooks.json.modules`。该API仍可能变化，版本门不代替真实兼容性验证。
 
+桌面模型菜单由第三方推理配置/接口模型发现提供，桥接不生成或保证这些模型可用。当前cc1已[关闭自动发现并限制到规范Sonnet/Opus](../../docs/audits/2026-11-08/claude-model-options.md)；只有默认Sonnet已完成双端收发验收，规范Opus仅短请求200，不据此称全部Code能力可用。
+
 ## 能力
 
 - 已登记的在线原会话、按手机订阅获取最近文本。
