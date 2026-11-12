@@ -89,8 +89,6 @@ jobs:
       run:
         working-directory: codex-to-phone
     env:
-      VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL: ${{ vars.MOBILE_CODEX_UPDATE_MANIFEST_URL }}
-      VITE_MOBILE_CODEX_HOT_MANIFEST_URL: ${{ vars.MOBILE_CODEX_HOT_MANIFEST_URL }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -180,14 +178,24 @@ jobs:
           printf 'version_code=%s\n' "$version_code" >> "$GITHUB_OUTPUT"
           printf 'release_tag=%s\n' "$release_tag" >> "$GITHUB_OUTPUT"
           printf 'prerelease=%s\n' "$prerelease" >> "$GITHUB_OUTPUT"
+          printf 'update_manifest_url=https://github.com/%s/releases/download/%s/android-latest.json\n' \
+            "$GITHUB_REPOSITORY" "$release_tag" >> "$GITHUB_OUTPUT"
+          printf 'hot_manifest_url=https://github.com/%s/releases/download/%s/hot-latest.json\n' \
+            "$GITHUB_REPOSITORY" "$release_tag" >> "$GITHUB_OUTPUT"
 
       - name: Prepare release workspace
         run: mkdir -p ci-artifacts/release
 
       - name: Validate GitHub update sources
+        env:
+          VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL: ${{ steps.metadata.outputs.update_manifest_url }}
+          VITE_MOBILE_CODEX_HOT_MANIFEST_URL: ${{ steps.metadata.outputs.hot_manifest_url }}
         run: pnpm --filter @mobile-codex/mobile exec node scripts/check-update-sources.mjs
 
       - name: Build mobile web assets
+        env:
+          VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL: ${{ steps.metadata.outputs.update_manifest_url }}
+          VITE_MOBILE_CODEX_HOT_MANIFEST_URL: ${{ steps.metadata.outputs.hot_manifest_url }}
         run: |
           set -o pipefail
           pnpm --filter @mobile-codex/mobile build 2>&1 | tee ci-artifacts/release/mobile-build.log
@@ -246,6 +254,9 @@ jobs:
         id: apk
 
       - name: Build self-contained hot update bundle
+        env:
+          VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL: ${{ steps.metadata.outputs.update_manifest_url }}
+          VITE_MOBILE_CODEX_HOT_MANIFEST_URL: ${{ steps.metadata.outputs.hot_manifest_url }}
         run: |
           set -o pipefail
           hot_version="${{ steps.metadata.outputs.version_name }}-hot.${{ steps.metadata.outputs.version_code }}"

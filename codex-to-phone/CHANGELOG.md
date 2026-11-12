@@ -1,5 +1,11 @@
 # 更新说明
 
+## 1.3.18-update-source-preview · 2026-11-12（APK 39，更新通道修复预览）
+
+- 修复共享 GitHub 仓库使用全局 `releases/latest` 导致 MobiCodex App 内更新读取其他项目或旧版本的问题。
+- 发布工作流根据当前 MobiCodex Release tag 编译 Android 与热更新清单地址，并拒绝共享仓库的全局 `latest` 地址。
+- 保留 1.3.17 DeepSeek 队列、图片、执行记录及多 Agent 统一界面功能；本版本用于覆盖安装后恢复正确的 MobiCodex 更新通道。
+
 ## 0.1.8-native-preview · 2026-11-07（MobiCodex code10）
 
 - 采用用户选定的黑白电脑/手机图标，普通、自适应、主题图标与浅深启动图一致。

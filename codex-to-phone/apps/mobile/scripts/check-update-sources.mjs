@@ -15,6 +15,9 @@ export function validateUpdateSources(env, allowEmpty = false) {
     if ((url.protocol !== "https:" && !(url.protocol === "http:" && local)) || url.username || url.password) {
       throw new Error(`${key} requires HTTPS (HTTP is allowed only for localhost fixtures).`);
     }
+    if (url.hostname === "github.com" && /^\/[^/]+\/[^/]+\/releases\/latest\/download\//.test(url.pathname)) {
+      throw new Error(`${key} must use a product-specific GitHub Release tag, not the shared repository latest URL.`);
+    }
   }
   return sources;
 }

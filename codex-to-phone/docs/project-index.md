@@ -17,7 +17,7 @@ Kelivo 整合候选（2026-11-04，现有远控视觉试迁移已实施）：用
 当前主入口：
 
 - Android APK：`dist-apk/mobile-codex-1.2.2-update-restore-debug.apk`（versionCode 18，已恢复原手机更新通道并发布，待真机验收）
-- Android独立预览：`dist-apk/mobile-codex-1.3.17-deepseek-queue-preview-debug.apk`（versionCode38，preview38/previous37已发布。DeepSeek待发查看/定向取消、紧凑控制区与禁用引导入口，配套插件0.2.5及网关已上线。用户已确认升级、原连接和正文正常；运行中引导、排队顺序、取消待发及权限允许一次通过，拒绝/权限恢复/停止待验，见[APK38记录](audits/2026-10-31/deepseek-queue.md)；APK37两条指定旧输入无重复已由用户确认）。
+- Android独立预览：`dist-apk/mobile-codex-1.3.18-update-source-preview-debug.apk`（versionCode39，准备修复 GitHub 共享仓库全局 `latest` 导致 App 内更新读取旧项目的问题；工作流现按 MobiCodex Release tag 编译固定清单地址。1.3.17/versionCode38 的 DeepSeek 待发查看/定向取消、紧凑控制区和禁用引导入口保持，配套插件0.2.5及网关已上线。39待发布及手机覆盖安装验收，见[APK38记录](audits/2026-10-31/deepseek-queue.md)）。
 - Mac 原生网关：`~/Library/Application Support/Mobile Codex Gateway/releases/<固定版本>/mobile-codex/lib/gateway.mjs`，当前单Node进程、native IPC；[插件管理入口](../plugins/mobile-codex/README.md)。
 - 旧 Mac Relay/Input App：生成App已压缩归档并移除，源码与构建入口保留；[清理及恢复记录](audits/2026-10-21/legacy-mac-app-cleanup.md)。
 - Relay/Broker：`apps/relay`

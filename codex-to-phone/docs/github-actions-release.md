@@ -4,13 +4,13 @@
 
 ## 首次配置
 
-在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中配置以下变量。
+在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中配置以下签名 secrets。
 
-Repository variables：
+更新清单不再使用共享仓库的 `releases/latest` 地址。仓库同时承载多个项目，GitHub 的全局 `latest` 可能指向其他项目，或者跳过 MobiCodex 的 prerelease。工作流会根据本次 MobiCodex Release tag 自动生成并编译固定地址：
 
 ```text
-MOBILE_CODEX_UPDATE_MANIFEST_URL=https://github.com/OWNER/REPOSITORY/releases/latest/download/android-latest.json
-MOBILE_CODEX_HOT_MANIFEST_URL=https://github.com/OWNER/REPOSITORY/releases/latest/download/hot-latest.json
+https://github.com/OWNER/REPOSITORY/releases/download/mobicodex-v<version>/android-latest.json
+https://github.com/OWNER/REPOSITORY/releases/download/mobicodex-v<version>/hot-latest.json
 ```
 
 Repository secrets：
@@ -49,7 +49,7 @@ Release 资产包括：
 - `hot-latest.json`
 - `SHA256SUMS`
 
-GitHub Actions 页面还会保留一个同名 artifact，方便在正式 Release 前下载检查。Release 资产下载位置是仓库的 **Releases** 页面；App 使用上面的 `latest/download` 清单地址。
+GitHub Actions 页面还会保留一个同名 artifact，方便在正式 Release 前下载检查。Release 资产下载位置是仓库的 **Releases** 页面；App 使用当前 MobiCodex tag 下的固定清单地址，不会读取共享仓库的全局 `latest`。
 
 ## 增量更新与回滚边界
 

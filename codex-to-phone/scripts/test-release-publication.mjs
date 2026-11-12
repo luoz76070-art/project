@@ -27,6 +27,14 @@ test('update channel validation accepts persistent production URLs and rejects m
   assert.equal(validateUpdateSources({ ...updateSources, VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL: 'http://127.0.0.1:1234/latest.json' }).VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL, 'http://127.0.0.1:1234/latest.json');
 });
 
+test('update channel validation rejects shared GitHub latest URLs', () => {
+  assert.throws(() => validateUpdateSources({
+    ...updateSources,
+    VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL: 'https://github.com/luoz76070-art/project/releases/latest/download/android-latest.json',
+    VITE_MOBILE_CODEX_HOT_MANIFEST_URL: 'https://github.com/luoz76070-art/project/releases/latest/download/hot-latest.json',
+  }), /product-specific GitHub Release tag/);
+});
+
 test('GitHub Android and hot manifests carry artifact integrity and immutable release URLs', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'github-update-manifest-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
