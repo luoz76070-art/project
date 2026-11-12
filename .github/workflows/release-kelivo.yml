@@ -176,12 +176,21 @@ jobs:
           print(json.dumps({"versionName": expected_name, "versionCode": expected_code, "apk": str(apk), "sha256": digest}, indent=2))
           PY
 
-      - name: Install Flutter dependencies with lock enforcement
+      - name: Install Flutter dependencies for Ubuntu platform
         working-directory: codex-to-phone/apps/kelivo
         run: |
           set -euo pipefail
-          flutter pub get --enforce-lockfile
-          (cd dependencies/markstream && flutter pub get --enforce-lockfile)
+          lock_backup="$RUNNER_TEMP/mobicodex-kelivo-locks"
+          mkdir -p "$lock_backup/dependencies/markstream"
+          cp pubspec.lock "$lock_backup/pubspec.lock"
+          cp dependencies/markstream/pubspec.lock "$lock_backup/dependencies/markstream/pubspec.lock"
+          restore_locks() {
+            cp "$lock_backup/pubspec.lock" pubspec.lock
+            cp "$lock_backup/dependencies/markstream/pubspec.lock" dependencies/markstream/pubspec.lock
+          }
+          trap restore_locks EXIT
+          flutter pub get
+          (cd dependencies/markstream && flutter pub get)
 
       - name: Run Flutter analysis and tests
         working-directory: codex-to-phone/apps/kelivo
@@ -206,7 +215,7 @@ jobs:
         run: |
           set -o pipefail
           export KELIVO_FLUTTER="$(command -v flutter)"
-          node scripts/verify-kelivo.mjs --preview --repeat-tests 2>&1 | tee ci-artifacts/kelivo/android-verify.log
+          node scripts/verify-kelivo.mjs --preview --repeat-tests --platform-lock 2>&1 | tee ci-artifacts/kelivo/android-verify.log
           generated="$(find apps/kelivo/build/app/outputs/apk/release -type f -name '*arm64-v8a-release.apk' -print -quit)"
           [[ -n "$generated" && -f "$generated" ]] || { echo "Flutter arm64 APK was not produced." >&2; exit 1; }
           cp "$generated" ci-artifacts/kelivo/mobicodex-kelivo-ci-arm64.apk
