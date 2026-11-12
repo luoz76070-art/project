@@ -175,7 +175,7 @@ jobs:
           JAVA_HOME: ${{ steps.jdk21.outputs.path }}
         run: |
           set -o pipefail
-          gradle :app:clean :app:assembleDebug --no-daemon 2>&1 | tee ci-artifacts/android/assemble-debug.log
+          gradle --project-dir apps/mobile/android :app:clean :app:assembleDebug --no-daemon 2>&1 | tee ci-artifacts/android/assemble-debug.log
           cp apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk ci-artifacts/android/mobile-codex-debug.apk
 
       - name: Upload Android APK, reports, and logs
