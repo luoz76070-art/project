@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+jobs:
+  quality:
+    name: Lint, typecheck, build, and isolated checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm 10.20.0
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare CI artifacts directory
+        run: mkdir -p ci-artifacts/quality
+
+      - name: Lint
+        run: |
+          set -o pipefail
+          pnpm lint 2>&1 | tee ci-artifacts/quality/lint.log
+
+      - name: Typecheck
+        run: |
+          set -o pipefail
+          pnpm typecheck 2>&1 | tee ci-artifacts/quality/typecheck.log
+
+      - name: Build web and relay packages
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee ci-artifacts/quality/build.log
+
+      - name: Run isolated verification regression
+        run: |
+          set -o pipefail
+          pnpm test:verification 2>&1 | tee ci-artifacts/quality/test-verification.log
+
+      - name: Upload quality logs and build outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-quality-outputs
+          if-no-files-found: warn
+          path: |
+            ci-artifacts/quality/
+            apps/mobile/dist/
+            apps/relay/dist/
+
+  android:
+    name: Android debug APK and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm 10.20.0
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up JDK 17 for Android lint
+        id: jdk17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up JDK 21 for Android compilation
+        id: jdk21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.11.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare CI artifacts directory
+        run: mkdir -p ci-artifacts/android
+
+      - name: Build mobile web assets
+        run: |
+          set -o pipefail
+          pnpm --filter @mobile-codex/mobile build 2>&1 | tee ci-artifacts/android/mobile-build.log
+
+      - name: Sync Capacitor Android project
+        run: |
+          set -o pipefail
+          pnpm --filter @mobile-codex/mobile exec cap sync android 2>&1 | tee ci-artifacts/android/cap-sync.log
+          node scripts/normalize-capacitor-config.mjs
+
+      - name: Run Android Java compile and lint
+        env:
+          JAVA_HOME: ${{ steps.jdk21.outputs.path }}
+          MOBILE_CODEX_LINT_JAVA_HOME: ${{ steps.jdk17.outputs.path }}
+          MOBILE_CODEX_COMPILE_JAVA_HOME: ${{ steps.jdk21.outputs.path }}
+        run: |
+          set -o pipefail
+          pnpm verify:android 2>&1 | tee ci-artifacts/android/verify-android.log
+
+      - name: Assemble Android debug APK
+        env:
+          JAVA_HOME: ${{ steps.jdk21.outputs.path }}
+        run: |
+          set -o pipefail
+          gradle :app:clean :app:assembleDebug --no-daemon 2>&1 | tee ci-artifacts/android/assemble-debug.log
+          cp apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk ci-artifacts/android/mobile-codex-debug.apk
+
+      - name: Upload Android APK, reports, and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-android-debug
+          if-no-files-found: warn
+          path: |
+            ci-artifacts/android/
+            apps/mobile/android/app/build/reports/
+            apps/mobile/android/app/build/outputs/apk/debug/*.apk
