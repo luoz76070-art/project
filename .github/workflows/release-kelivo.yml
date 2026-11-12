@@ -11,6 +11,11 @@ on:
         required: true
         default: "mobicodex-kelivo-v0.1.8-native-preview"
         type: string
+      source_ref:
+        description: "Branch or commit containing the workflow fix and release files"
+        required: true
+        default: "main"
+        type: string
 
 permissions:
   contents: write
@@ -35,10 +40,10 @@ jobs:
       RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
 
     steps:
-      - name: Check out repository and release tag
+      - name: Check out repository source revision
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_tag || github.ref }}
+          ref: ${{ inputs.source_ref || github.ref }}
           fetch-depth: 0
 
       - name: Set up pnpm 10.20.0
