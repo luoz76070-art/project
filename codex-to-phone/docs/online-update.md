@@ -18,6 +18,8 @@ APK24起的现有预览包实际检查preview清单，当前preview latest30、p
 
 ## 构建时配置
 
+如果希望后续通过 GitHub Actions 自动生成 GitHub Release，可先阅读[GitHub Actions 增量发布说明](github-actions-release.md)。该流程与现有自托管更新源并存；已安装包只有在构建时内置了 GitHub 清单地址后，才会从 GitHub Release 检查更新。
+
 将两个地址写入 `apps/mobile/.env.production.local`（被 Git 忽略），也支持同名环境变量覆盖。请替换示例域名；不要只复制根目录 `.env.example`，Vite 从 `apps/mobile` 加载生产配置。
 
 ```bash

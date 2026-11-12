@@ -1,0 +1,335 @@
+name: MobiCodex Android Release
+
+on:
+  push:
+    tags:
+      - "mobicodex-v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag, for example mobicodex-v1.3.18"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark the GitHub Release as a prerelease"
+        required: true
+        default: false
+        type: boolean
+      notes:
+        description: "Release notes"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mobicodex-android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CI: true
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+jobs:
+  quality:
+    name: Release quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: codex-to-phone
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm 10.20.0
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: codex-to-phone/pnpm-lock.yaml
+
+      - name: Set up JDK 21 for isolated Android update tests
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build web and relay packages
+        run: pnpm build
+
+      - name: Run isolated verification and update checks
+        run: |
+          pnpm test:verification
+          pnpm test:apk-update
+          node --test scripts/test-release-publication.mjs
+
+  android-release:
+    name: Sign APK, build hot bundle, and publish GitHub Release
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: codex-to-phone
+    env:
+      VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL: ${{ vars.MOBILE_CODEX_UPDATE_MANIFEST_URL }}
+      VITE_MOBILE_CODEX_HOT_MANIFEST_URL: ${{ vars.MOBILE_CODEX_HOT_MANIFEST_URL }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      RELEASE_NOTES_INPUT: ${{ inputs.notes }}
+      RELEASE_PRERELEASE_INPUT: ${{ inputs.prerelease }}
+      RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm 10.20.0
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: codex-to-phone/pnpm-lock.yaml
+
+      - name: Set up JDK 17 for Android lint
+        id: jdk17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up JDK 21 for Android compilation
+        id: jdk21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.11.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve release metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_name="$(awk -F'"' '/versionName[[:space:]]+"/ { print $2; exit }' apps/mobile/android/app/build.gradle)"
+          version_code="$(awk '/versionCode[[:space:]]+[0-9]+/ { print $2; exit }' apps/mobile/android/app/build.gradle)"
+          release_tag="${RELEASE_TAG_INPUT:-${GITHUB_REF_NAME}}"
+          prerelease="${RELEASE_PRERELEASE_INPUT:-false}"
+          if [[ -z "$version_name" || ! "$version_code" =~ ^[0-9]+$ ]]; then
+            echo "Could not resolve Android versionName/versionCode." >&2
+            exit 1
+          fi
+          if [[ ! "$release_tag" =~ ^mobicodex-v[A-Za-z0-9][A-Za-z0-9._-]{0,79}$ ]]; then
+            echo "Release tag must match mobicodex-v<version>." >&2
+            exit 1
+          fi
+          expected_tag="mobicodex-v${version_name}"
+          if [[ "$release_tag" != "$expected_tag" ]]; then
+            echo "Release tag $release_tag must match the Android versionName: $expected_tag" >&2
+            exit 1
+          fi
+          if [[ "$prerelease" != "true" && "$prerelease" != "false" ]]; then
+            echo "prerelease must be true or false." >&2
+            exit 1
+          fi
+          printf 'version_name=%s\n' "$version_name" >> "$GITHUB_OUTPUT"
+          printf 'version_code=%s\n' "$version_code" >> "$GITHUB_OUTPUT"
+          printf 'release_tag=%s\n' "$release_tag" >> "$GITHUB_OUTPUT"
+          printf 'prerelease=%s\n' "$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release workspace
+        run: mkdir -p ci-artifacts/release
+
+      - name: Validate GitHub update sources
+        run: pnpm --filter @mobile-codex/mobile exec node scripts/check-update-sources.mjs
+
+      - name: Build mobile web assets
+        run: |
+          set -o pipefail
+          pnpm --filter @mobile-codex/mobile build 2>&1 | tee ci-artifacts/release/mobile-build.log
+
+      - name: Sync Capacitor Android project
+        run: |
+          set -o pipefail
+          pnpm --filter @mobile-codex/mobile exec cap sync android 2>&1 | tee ci-artifacts/release/cap-sync.log
+          node scripts/normalize-capacitor-config.mjs
+
+      - name: Run Android compile and lint checks
+        env:
+          JAVA_HOME: ${{ steps.jdk21.outputs.path }}
+          MOBILE_CODEX_LINT_JAVA_HOME: ${{ steps.jdk17.outputs.path }}
+          MOBILE_CODEX_COMPILE_JAVA_HOME: ${{ steps.jdk21.outputs.path }}
+        run: |
+          set -o pipefail
+          pnpm verify:android 2>&1 | tee ci-artifacts/release/verify-android.log
+
+      - name: Assemble unsigned release APK
+        env:
+          JAVA_HOME: ${{ steps.jdk21.outputs.path }}
+        run: |
+          set -o pipefail
+          gradle --project-dir apps/mobile/android :app:clean :app:assembleRelease --no-daemon 2>&1 | tee ci-artifacts/release/assemble-release.log
+
+      - name: Sign and verify release APK
+        env:
+          JAVA_HOME: ${{ steps.jdk21.outputs.path }}
+        run: |
+          set -euo pipefail
+          : "${ANDROID_KEYSTORE_BASE64:?Set repository secret ANDROID_KEYSTORE_BASE64 to the existing app signing keystore.}"
+          : "${ANDROID_KEYSTORE_PASSWORD:?Set repository secret ANDROID_KEYSTORE_PASSWORD.}"
+          : "${ANDROID_KEY_ALIAS:?Set repository secret ANDROID_KEY_ALIAS.}"
+          : "${ANDROID_KEY_PASSWORD:?Set repository secret ANDROID_KEY_PASSWORD.}"
+          keystore="$RUNNER_TEMP/mobicodex-release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
+          unsigned_apk="$(find apps/mobile/android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | sort | head -1)"
+          [[ -n "$unsigned_apk" && -f "$unsigned_apk" ]] || { echo "Release APK was not produced." >&2; exit 1; }
+          apksigner="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -1)"
+          [[ -x "$apksigner" ]] || { echo "Android apksigner was not found." >&2; exit 1; }
+          signed_apk="$RUNNER_TEMP/mobicodex-release-signed.apk"
+          "$apksigner" sign \
+            --ks "$keystore" \
+            --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --key-pass env:ANDROID_KEY_PASSWORD \
+            --out "$signed_apk" \
+            "$unsigned_apk"
+          "$apksigner" verify --verbose --print-certs "$signed_apk" > ci-artifacts/release/apksigner-verify.txt
+          apk_sha="$(sha256sum "$signed_apk" | cut -d ' ' -f 1)"
+          apk_name="mobile-codex-${{ steps.metadata.outputs.version_name }}-${apk_sha:0:12}.apk"
+          cp "$signed_apk" "ci-artifacts/release/$apk_name"
+          printf 'apk_name=%s\n' "$apk_name" >> "$GITHUB_OUTPUT"
+        id: apk
+
+      - name: Build self-contained hot update bundle
+        run: |
+          set -o pipefail
+          hot_version="${{ steps.metadata.outputs.version_name }}-hot.${{ steps.metadata.outputs.version_code }}"
+          pnpm android:hot-bundle -- "$hot_version" 2>&1 | tee ci-artifacts/release/hot-bundle.log
+          bundle="dist-hot/mobile-codex-${hot_version}.html"
+          [[ -f "$bundle" ]] || { echo "Hot update bundle was not produced." >&2; exit 1; }
+          bundle_sha="$(sha256sum "$bundle" | cut -d ' ' -f 1)"
+          bundle_name="mobile-codex-${hot_version}-${bundle_sha:0:12}.html"
+          cp "$bundle" "ci-artifacts/release/$bundle_name"
+          printf 'hot_version=%s\n' "$hot_version" >> "$GITHUB_OUTPUT"
+          printf 'bundle_name=%s\n' "$bundle_name" >> "$GITHUB_OUTPUT"
+        id: hot
+
+      - name: Create GitHub update manifests
+        env:
+          RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
+          VERSION_NAME: ${{ steps.metadata.outputs.version_name }}
+          VERSION_CODE: ${{ steps.metadata.outputs.version_code }}
+          HOT_VERSION: ${{ steps.hot.outputs.hot_version }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          notes_file="$RUNNER_TEMP/mobicodex-release-notes.txt"
+          printf '%s\n' "${RELEASE_NOTES_INPUT:-Automated MobiCodex Android release.}" > "$notes_file"
+          node scripts/create-github-update-manifest.mjs android \
+            --artifact "ci-artifacts/release/${{ steps.apk.outputs.apk_name }}" \
+            --output ci-artifacts/release/android-latest.json \
+            --repository "$REPOSITORY" \
+            --release-tag "$RELEASE_TAG" \
+            --version-name "$VERSION_NAME" \
+            --version-code "$VERSION_CODE" \
+            --notes-file "$notes_file"
+          node scripts/create-github-update-manifest.mjs hot \
+            --artifact "ci-artifacts/release/${{ steps.hot.outputs.bundle_name }}" \
+            --output ci-artifacts/release/hot-latest.json \
+            --repository "$REPOSITORY" \
+            --release-tag "$RELEASE_TAG" \
+            --version "$HOT_VERSION" \
+            --min-native-version-code "$VERSION_CODE" \
+            --max-native-version-code "$VERSION_CODE" \
+            --notes-file "$notes_file"
+          (cd ci-artifacts/release && sha256sum *.apk *.html *.json > SHA256SUMS)
+
+      - name: Upload release artifacts for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobicodex-android-release-${{ steps.metadata.outputs.version_code }}
+          if-no-files-found: warn
+          path: |
+            codex-to-phone/ci-artifacts/release/
+            codex-to-phone/apps/mobile/android/app/build/reports/
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
+          RELEASE_PRERELEASE: ${{ steps.metadata.outputs.prerelease }}
+          VERSION_NAME: ${{ steps.metadata.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          notes_file="$RUNNER_TEMP/mobicodex-release-notes.txt"
+          printf '%s\n\nMobiCodex version: %s\nAndroid versionCode: %s\n' \
+            "${RELEASE_NOTES_INPUT:-Automated MobiCodex Android release.}" \
+            "$VERSION_NAME" \
+            "${{ steps.metadata.outputs.version_code }}" > "$notes_file"
+          assets=(
+            ci-artifacts/release/${{ steps.apk.outputs.apk_name }}
+            ci-artifacts/release/${{ steps.hot.outputs.bundle_name }}
+            ci-artifacts/release/android-latest.json
+            ci-artifacts/release/hot-latest.json
+            ci-artifacts/release/SHA256SUMS
+          )
+          if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "MobiCodex $VERSION_NAME" \
+              --notes-file "$notes_file" \
+              --prerelease
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "MobiCodex $VERSION_NAME" \
+              --notes-file "$notes_file"
+          fi
