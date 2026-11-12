@@ -29,7 +29,7 @@ code10 使用用户选定的黑白电脑/手机图标，并将应用名、启动
 
 | 文件 | 用途 |
 | --- | --- |
-| [Android APK：0.1.8 预览版](https://github.com/luoz76070-art/project/raw/refs/heads/main/codex-to-phone/releases/android/kelivo-preview/0.1.8/mobile-codex-kelivo-0.1.8-preview-arm64.apk) | Android 7.0+、arm64-v8a；同包名预览覆盖安装 |
+| [Android APK：0.1.8 预览版](https://github.com/luoz76070-art/project/releases/download/mobicodex-kelivo-v0.1.8-native-preview/mobile-codex-kelivo-0.1.8-preview-arm64.apk) | Android 7.0+、arm64-v8a；同包名预览覆盖安装 |
 | [对应源码归档](releases/android/kelivo-preview/0.1.8/mobile-codex-kelivo-0.1.8-preview-source.tar.gz) | 与本 APK 对应的源码、依赖锁、构建入口和逐文件 SHA256 |
 | [电脑网关图片修复预览](releases/android/kelivo-preview/0.1.7/desktop-image-reference-preview/) | 支持原会话明确引用的隔离副本图片，沿用 code9 与 DeepSeek 0.2.7；[检查与部署状态](docs/audits/2026-11-07/image-reference-fix.md) |
 | [最新电脑兼容补充：DeepSeek 0.2.7](releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/) | 配套网关、原 profile 桥接、源码补丁；新增 Harness 0.2.2-rc.1 兼容，无个人配置 |

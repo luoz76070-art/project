@@ -1,0 +1,290 @@
+name: MobiCodex Kelivo Android Release
+
+on:
+  push:
+    tags:
+      - "mobicodex-kelivo-v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing tag to validate and publish, for example mobicodex-kelivo-v0.1.8-native-preview"
+        required: true
+        default: "mobicodex-kelivo-v0.1.8-native-preview"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mobicodex-kelivo-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CI: true
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+jobs:
+  build-verify-publish:
+    name: Build, verify, and publish Kelivo preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: codex-to-phone
+    env:
+      RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+
+    steps:
+      - name: Check out repository and release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up pnpm 10.20.0
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: codex-to-phone/pnpm-lock.yaml
+
+      - name: Set up JDK 17 for Android lint
+        id: jdk17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up JDK 21 for Android compilation and tests
+        id: jdk21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Flutter 3.47.6
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.6"
+          channel: stable
+          cache: true
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Kelivo Android SDK packages
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;28.2.13676358" \
+            "cmake;3.22.1"
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve and validate Kelivo release metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_line="$(sed -n 's/^version: //p' apps/kelivo/pubspec.yaml | head -1)"
+          version_name="${version_line%%+*}"
+          version_code="${version_line##*+}"
+          version_dir="${version_name%-native-preview}"
+          release_tag="${RELEASE_TAG_INPUT:-${GITHUB_REF_NAME}}"
+          expected_tag="mobicodex-kelivo-v${version_name}"
+
+          [[ "$version_name" =~ ^[0-9]+\.[0-9]+\.[0-9]+-native-preview$ ]]
+          [[ "$version_code" =~ ^[0-9]+$ ]]
+          [[ "$release_tag" == "$expected_tag" ]] || {
+            echo "Release tag $release_tag must match $expected_tag." >&2
+            exit 1
+          }
+          git rev-parse --verify "refs/tags/$release_tag" >/dev/null || {
+            echo "Release tag $release_tag is not present in the checked-out repository." >&2
+            exit 1
+          }
+
+          release_dir="releases/android/kelivo-preview/$version_dir"
+          apk="$release_dir/mobile-codex-kelivo-${version_dir}-preview-arm64.apk"
+          source_archive="$release_dir/mobile-codex-kelivo-${version_dir}-preview-source.tar.gz"
+          for file in \
+            "$release_dir/README.md" \
+            "$release_dir/SHA256SUMS" \
+            "$release_dir/mobile-codex-kelivo-${version_dir}-preview-arm64.apk.json" \
+            "$source_archive" \
+            "$release_dir/source-package.json" \
+            "$apk"; do
+            [[ -f "$file" ]] || { echo "Missing release file: $file" >&2; exit 1; }
+          done
+
+          printf 'version_name=%s\n' "$version_name" >> "$GITHUB_OUTPUT"
+          printf 'version_code=%s\n' "$version_code" >> "$GITHUB_OUTPUT"
+          printf 'version_dir=%s\n' "$version_dir" >> "$GITHUB_OUTPUT"
+          printf 'release_tag=%s\n' "$release_tag" >> "$GITHUB_OUTPUT"
+          printf 'release_dir=%s\n' "$release_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Validate committed Kelivo APK and source archive
+        env:
+          VERSION_NAME: ${{ steps.metadata.outputs.version_name }}
+          VERSION_CODE: ${{ steps.metadata.outputs.version_code }}
+          RELEASE_DIR: ${{ steps.metadata.outputs.release_dir }}
+        run: |
+          set -euo pipefail
+          (cd "$RELEASE_DIR" && sha256sum -c SHA256SUMS)
+          python3 - "$RELEASE_DIR" "$VERSION_NAME" "$VERSION_CODE" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+          import tarfile
+
+          release_dir = pathlib.Path(sys.argv[1])
+          expected_name = sys.argv[2]
+          expected_code = int(sys.argv[3])
+          apk = next(release_dir.glob("*.apk"))
+          metadata = json.loads(next(release_dir.glob("*.apk.json")).read_text())
+          source = json.loads((release_dir / "source-package.json").read_text())
+          digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+
+          assert metadata["applicationId"] == "com.mobilecodex.kelivo.preview"
+          assert metadata["versionName"] == expected_name
+          assert metadata["versionCode"] == expected_code
+          assert metadata["bytes"] == apk.stat().st_size
+          assert metadata["sha256"] == digest
+          assert source["apkSha256"] == digest
+          assert source["allArchiveBytesVerified"] is True
+          assert source["unreviewedSecretPatternFindings"] == 0
+
+          archive = next(release_dir.glob("*-source.tar.gz"))
+          with tarfile.open(archive, "r:gz") as tar:
+              names = set(tar.getnames())
+          assert any(name.endswith("/apps/kelivo/pubspec.yaml") for name in names)
+          assert any(name.endswith("/SOURCE-MANIFEST.json") for name in names)
+          print(json.dumps({"versionName": expected_name, "versionCode": expected_code, "apk": str(apk), "sha256": digest}, indent=2))
+          PY
+
+      - name: Install Flutter dependencies with lock enforcement
+        working-directory: codex-to-phone/apps/kelivo
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile
+          (cd dependencies/markstream && flutter pub get --enforce-lockfile)
+
+      - name: Run Flutter analysis and tests
+        working-directory: codex-to-phone/apps/kelivo
+        run: |
+          set -o pipefail
+          mkdir -p ../../ci-artifacts/kelivo
+          dart analyze --fatal-infos lib test integration_test 2>&1 | tee ../../ci-artifacts/kelivo/dart-analyze.log
+          flutter test --reporter expanded 2>&1 | tee ../../ci-artifacts/kelivo/flutter-test.log
+          (cd dependencies/markstream && flutter test --reporter expanded) 2>&1 | tee ../../ci-artifacts/kelivo/markstream-test.log
+
+      - name: Build isolated remote Web bundle
+        run: |
+          set -o pipefail
+          node scripts/build-kelivo-remote.mjs 2>&1 | tee ci-artifacts/kelivo/remote-web-build.log
+
+      - name: Run Android lint, unit tests, and arm64 preview build
+        env:
+          JAVA_HOME: ${{ steps.jdk17.outputs.path }}
+          MOBILE_CODEX_LINT_JAVA_HOME: ${{ steps.jdk17.outputs.path }}
+          MOBILE_CODEX_COMPILE_JAVA_HOME: ${{ steps.jdk21.outputs.path }}
+          MOBILE_CODEX_TEST_JAVA_HOME: ${{ steps.jdk21.outputs.path }}
+        run: |
+          set -o pipefail
+          export KELIVO_FLUTTER="$(command -v flutter)"
+          node scripts/verify-kelivo.mjs --preview --repeat-tests 2>&1 | tee ci-artifacts/kelivo/android-verify.log
+          generated="$(find apps/kelivo/build/app/outputs/apk/release -type f -name '*arm64-v8a-release.apk' -print -quit)"
+          [[ -n "$generated" && -f "$generated" ]] || { echo "Flutter arm64 APK was not produced." >&2; exit 1; }
+          cp "$generated" ci-artifacts/kelivo/mobicodex-kelivo-ci-arm64.apk
+          sha256sum ci-artifacts/kelivo/mobicodex-kelivo-ci-arm64.apk > ci-artifacts/kelivo/mobicodex-kelivo-ci-arm64.apk.sha256
+
+      - name: Upload build reports and CI APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobicodex-kelivo-${{ steps.metadata.outputs.version_code }}-ci
+          if-no-files-found: warn
+          path: |
+            codex-to-phone/ci-artifacts/kelivo/
+            codex-to-phone/apps/kelivo/build/app/outputs/apk/release/*.json
+            codex-to-phone/apps/kelivo/build/app/outputs/apk/release/*.txt
+            codex-to-phone/apps/kelivo/build/app/outputs/apk/release/*.apk
+            codex-to-phone/apps/kelivo/build/app/reports/
+            codex-to-phone/apps/kelivo/build/mobile-codex-remote/reports/
+
+      - name: Publish the matching signed preview assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ steps.metadata.outputs.version_name }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
+          RELEASE_DIR: ${{ steps.metadata.outputs.release_dir }}
+        run: |
+          set -euo pipefail
+          notes_file="$RUNNER_TEMP/mobicodex-kelivo-release-notes.md"
+          {
+            echo "# MobiCodex Kelivo ${VERSION_NAME}"
+            echo
+            echo "Kelivo AI chat and MobiCodex computer workspace integration preview."
+            echo
+            cat "$RELEASE_DIR/README.md"
+          } > "$notes_file"
+          assets=(
+            "$RELEASE_DIR/mobile-codex-kelivo-${VERSION_NAME%-native-preview}-preview-arm64.apk"
+            "$RELEASE_DIR/mobile-codex-kelivo-${VERSION_NAME%-native-preview}-preview-arm64.apk.json"
+            "$RELEASE_DIR/mobile-codex-kelivo-${VERSION_NAME%-native-preview}-preview-source.tar.gz"
+            "$RELEASE_DIR/source-package.json"
+            "$RELEASE_DIR/SHA256SUMS"
+            "$RELEASE_DIR/README.md"
+          )
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "MobiCodex Kelivo ${VERSION_NAME}" --notes-file "$notes_file" --prerelease
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
+              --verify-tag --title "MobiCodex Kelivo ${VERSION_NAME}" \
+              --notes-file "$notes_file" --prerelease
+          fi
+
+      - name: Verify published GitHub Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
+          RELEASE_DIR: ${{ steps.metadata.outputs.release_dir }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease,tagName,assets \
+            | tee ci-artifacts/kelivo/github-release.json
+          python3 - "$RELEASE_DIR" ci-artifacts/kelivo/github-release.json <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          release_dir = pathlib.Path(sys.argv[1])
+          published = json.loads(pathlib.Path(sys.argv[2]).read_text())
+          names = {asset["name"] for asset in published["assets"]}
+          expected = {path.name for path in release_dir.iterdir() if path.name in {
+              "README.md", "SHA256SUMS", "source-package.json",
+              next(release_dir.glob("*.apk")).name,
+              next(release_dir.glob("*.apk.json")).name,
+              next(release_dir.glob("*-source.tar.gz")).name,
+          }}
+          missing = expected - names
+          assert not missing, f"GitHub Release is missing assets: {sorted(missing)}"
+          assert published["isPrerelease"] is True
+          print(f"Verified {len(expected)} Kelivo Release assets.")
+          PY

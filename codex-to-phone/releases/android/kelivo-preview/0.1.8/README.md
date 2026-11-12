@@ -5,6 +5,7 @@
 | 文件 | 内容 |
 | --- | --- |
 | [APK](mobile-codex-kelivo-0.1.8-preview-arm64.apk?raw=true) | 60,752,427字节，同包名同证书覆盖更新 |
+| [GitHub Release APK](https://github.com/luoz76070-art/project/releases/download/mobicodex-kelivo-v0.1.8-native-preview/mobile-codex-kelivo-0.1.8-preview-arm64.apk) | 与上方 APK 相同的 GitHub Release 下载入口 |
 | [对应源码](mobile-codex-kelivo-0.1.8-preview-source.tar.gz?raw=true) | 21,287,624字节，5934源码文件，5052固定上游文件全部包含 |
 | [APK元数据](mobile-codex-kelivo-0.1.8-preview-arm64.apk.json) / [源码元数据](source-package.json) | 版本、证书、来源与逐文件核验 |
 | [SHA256SUMS](SHA256SUMS) | 本目录文件的完整校验值 |
