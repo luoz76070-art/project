@@ -26,6 +26,10 @@ subprojects {
                 useVersion("1.5.2")
                 because("pin past dynamic 1.2+ metadata fetch")
             }
+            if (requested.group == "org.bouncycastle" && requested.name == "bcprov-jdk18on") {
+                useVersion("1.78.1")
+                because("Jetifier cannot transform the Java 25 classes shipped in 1.85 on the Java 21 Android build")
+            }
         }
     }
 }
