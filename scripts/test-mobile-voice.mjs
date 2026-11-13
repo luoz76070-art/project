@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import ts from 'typescript';
+import { build } from 'esbuild';
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-voice-tests-'));
 test.after(() => fs.rm(root, { recursive: true, force: true }));
@@ -16,6 +17,25 @@ const httpSource = await fs.readFile(new URL('../apps/mobile/src/features/connec
 const httpJs = ts.transpileModule(httpSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText.replace(/import[^;]+from "@capacitor\/core";/, 'const Capacitor = { isNativePlatform: () => false }; const CapacitorHttp = {};');
 await fs.writeFile(path.join(root, 'http.mjs'), httpJs);
 const { ensureHttpOk } = await import(path.join(root, 'http.mjs'));
+
+const recoverySource = await fs.readFile(new URL('../apps/mobile/src/features/voice/recovery.ts', import.meta.url), 'utf8');
+await fs.writeFile(path.join(root, 'recovery.mjs'), ts.transpileModule(recoverySource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText.replace('"./model"', '"./model.mjs"'));
+const { createVoiceRecovery, voiceDraftHash, recoveredVoiceDraft, loadVoicePending, voiceRecoveryTtl } = await import(path.join(root, 'recovery.mjs'));
+const { parseVoiceResult } = await import(path.join(root, 'model.mjs'));
+const tick = () => new Promise(resolve => setImmediate(resolve));
+function storage() { const data = new Map(); return { data, getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: k => data.delete(k) }; }
+async function pending(overrides = {}) { return { requestId: crypto.randomUUID(), stage: 'asr', scope: 'connection-one', thread: 'codex:original-thread', createdAt: Date.now(), draftHash: await voiceDraftHash('原草稿'), ...overrides }; }
+function seed(store, record) { store.setItem(`mobileCodexVoicePendingV1:${record.scope}`, JSON.stringify([record])); }
+function completed(record, text = '取回原文') { return { status: 'completed', outcome: 'succeeded', requestId: record.requestId, text, expiresAt: Date.now() + voiceRecoveryTtl }; }
+function coordinator(t, store, overrides = {}) {
+  const manager = createVoiceRecovery({ scope: 'connection-one', storage: store, query: async () => ({ status: 'not_found' }), restore: async () => assert.fail('unexpected restore'), ...overrides });
+  t.after(() => manager.stop()); return manager;
+}
+
+
+const adapterBundle = path.join(root, 'adapters.mjs');
+await build({ stdin: { contents: `export * from './apps/mobile/src/features/voice/draftRecovery'; export { saveAgentDrafts, loadAgentDrafts } from './apps/mobile/src/features/agents/runtime'; export { saveThreadRuntimeCache, loadThreadRuntimeCache, defaultRuntime } from './apps/mobile/src/features/chat/runtime';`, resolveDir: process.cwd() }, outfile: adapterBundle, bundle: true, platform: 'node', format: 'esm' });
+const adapters = await import(adapterBundle);
 
 test('voice adoption appends to the captured draft and rejects changed or excessive drafts', () => {
   assert.equal(mergeVoiceDraft('已有约束：不要发布', '已有约束：不要发布', '只分析 APK26'), '已有约束：不要发布\n\n只分析 APK26');
@@ -48,4 +68,140 @@ test('voice HTTP errors identify stage, cause and required endpoint credential w
   }
   assert.throws(() => ensureHttpOk(409, { error: 'voice_qwen_key_required_for_url' }), /百炼地址/);
   assert.throws(() => ensureHttpOk(409, { error: 'voice_audio_upgrade_required' }), /APK29/);
+});
+
+test('recovery decoder validates request identity, terminal outcomes and payload limits', async () => {
+  const record = await pending();
+  assert.equal(parseVoiceResult(completed(record), record.requestId).text, '取回原文');
+  assert.deepEqual(parseVoiceResult({ status: 'not_found' }, record.requestId), { status: 'not_found' });
+  for (const value of [{ ...completed(record), requestId: 'other' }, { ...completed(record), text: '' }, { ...completed(record), text: 'x'.repeat(20001) }, { status: 'completed' }, { ...completed(record), outcome: 'failed', errorCode: 'provider secret' }]) assert.throws(() => parseVoiceResult(value, record.requestId));
+});
+
+test('lost POST response queries the same id and never reuploads either stage', async t => {
+  for (const stage of ['asr', 'refine']) {
+    const record = await pending({ stage }), store = storage(); let posts = 0, gets = 0;
+    const manager = coordinator(t, store, { query: async id => { gets++; assert.equal(id, record.requestId); return completed(record); } });
+    manager.setVisible(true);
+    const text = await manager.submit(record, async () => { posts++; throw new Error('connection lost'); });
+    assert.equal(text, '取回原文'); assert.equal(posts, 1); assert.equal(gets, 1); assert.equal(store.data.size, 0);
+  }
+});
+
+test('background pauses GET; foreground result wins against a late native POST exactly once', async t => {
+  const record = await pending(), store = storage(); let finishPost, gets = 0, adopted = 0;
+  const manager = coordinator(t, store, { query: async () => { gets++; return completed(record); } });
+  const result = manager.submit(record, () => new Promise(resolve => { finishPost = resolve; }));
+  result.then(() => { adopted++; });
+  manager.setVisible(false); await manager.poll(); assert.equal(gets, 0);
+  manager.setVisible(true); assert.equal(await result, '取回原文');
+  finishPost('late duplicate'); await tick();
+  assert.equal(adopted, 1); assert.equal(gets, 1); assert.equal(store.data.size, 0);
+});
+
+test('process restart restores only persisted metadata with GET and original thread identity', async t => {
+  const record = await pending(), store = storage(); let posts = 0;
+  const first = coordinator(t, store);
+  const waiting = first.submit(record, async () => { posts++; return new Promise(() => {}); });
+  const rejected = assert.rejects(waiting, { name: 'AbortError' });
+  const raw = [...store.data.values()][0];
+  assert.deepEqual(Object.keys(JSON.parse(raw)[0]).sort(), ['createdAt', 'draftHash', 'requestId', 'scope', 'stage', 'thread']);
+  assert.doesNotMatch(raw, /原草稿|取回原文|dataBase64|token|text/);
+  first.stop(); await rejected;
+  // Fresh coordinator, no in-memory request/session carried over.
+  const drafts = { 'codex:original-thread': '原草稿', 'codex:currently-open': '不要覆盖' }; let gets = 0;
+  const second = coordinator(t, store, { query: async id => { gets++; assert.equal(id, record.requestId); return completed(record); }, restore: async (r, text) => { drafts[r.thread] = await recoveredVoiceDraft(r, drafts[r.thread], text); } });
+  second.setVisible(true); await second.poll();
+  assert.equal(drafts[record.thread], '原草稿\n\n取回原文'); assert.equal(drafts['codex:currently-open'], '不要覆盖');
+  assert.equal(posts, 1); assert.ok(gets >= 1); assert.equal(store.data.size, 0);
+});
+
+test('restarted refine recovery never starts ASR or another refinement; changed draft is protected', async t => {
+  const record = await pending({ stage: 'refine' }), store = storage(); seed(store, record);
+  let current = '编辑后的新草稿', preview;
+  const manager = coordinator(t, store, { query: async () => completed(record, '整理结果'), restore: async (r, text) => {
+    try { current = await recoveredVoiceDraft(r, current, text); } catch { preview = text; }
+  } });
+  manager.setVisible(true); await manager.poll();
+  assert.equal(current, '编辑后的新草稿'); assert.equal(preview, '整理结果'); assert.equal(store.data.size, 0);
+});
+
+test('unknown, failed, cancelled and expired records clear without restore or upload', async t => {
+  for (const outcome of ['not_found', 'failed', 'cancelled', 'expired']) {
+    const record = await pending(), store = storage(); seed(store, record); let gets = 0;
+    const manager = coordinator(t, store, { now: () => record.createdAt + (outcome === 'expired' ? voiceRecoveryTtl : 0), query: async () => { gets++; return outcome === 'not_found' ? { status: 'not_found' } : { status: 'completed', outcome, requestId: record.requestId, errorCode: 'voice_cancelled', expiresAt: Date.now() + voiceRecoveryTtl }; } });
+    manager.setVisible(true); await manager.poll();
+    assert.equal(store.data.size, 0); if (outcome === 'expired') assert.equal(gets, 0);
+  }
+});
+
+test('persistent records isolate connection scopes, prune invalid/oversized data and expire at 15 minutes', async () => {
+  const record = await pending(), store = storage(); seed(store, record);
+  assert.deepEqual(loadVoicePending(store, 'different-scope'), []);
+  assert.equal(loadVoicePending(store, record.scope, record.createdAt + voiceRecoveryTtl - 1).length, 1);
+  assert.equal(loadVoicePending(store, record.scope, record.createdAt + voiceRecoveryTtl).length, 0);
+  seed(store, { ...record, text: 'forbidden', dataBase64: 'forbidden' });
+  loadVoicePending(store, record.scope, record.createdAt);
+  assert.doesNotMatch([...store.data.values()][0], /forbidden/);
+  store.setItem(`mobileCodexVoicePendingV1:${record.scope}`, '{bad');
+  assert.deepEqual(loadVoicePending(store, record.scope), []);
+});
+
+test('storage failure prevents the initial upload', async t => {
+  const store = storage(); store.setItem = () => { throw new Error('quota'); };
+  const manager = coordinator(t, store);
+  await assert.rejects(manager.submit(await pending(), async () => assert.fail('must not POST without recovery metadata')), /quota/);
+});
+
+test('explicit cancel discards late GET/POST while detach preserves metadata for original-session recovery', async t => {
+  const record = await pending(), store = storage(); let finishPost, finishQuery;
+  const manager = coordinator(t, store, { query: () => new Promise(resolve => { finishQuery = resolve; }) });
+  const result = manager.submit(record, () => new Promise(resolve => { finishPost = resolve; }));
+  const rejected = assert.rejects(result, { name: 'AbortError' });
+  manager.setVisible(true); manager.cancel(record.requestId); await rejected;
+  finishQuery(completed(record)); finishPost('late'); await tick(); assert.equal(store.data.size, 0);
+  const other = await pending();
+  const detached = manager.submit(other, () => new Promise(() => {})); const detachment = assert.rejects(detached, { name: 'AbortError' });
+  manager.detach(other.requestId); await detachment; assert.equal(loadVoicePending(store, other.scope).length, 1);
+});
+
+test('not_found during an in-flight upload must not discard a future successful response', async t => {
+  const record = await pending(), store = storage(); let finishPost;
+  const manager = coordinator(t, store);
+  const result = manager.submit(record, () => new Promise(resolve => { finishPost = resolve; }));
+  manager.setVisible(true); await manager.poll(); assert.equal(loadVoicePending(store, record.scope).length, 1);
+  finishPost('最终收到'); assert.equal(await result, '最终收到'); assert.equal(store.data.size, 0);
+});
+
+test('pending query uses capped backoff and stale query cannot affect a new visibility generation', async t => {
+  const record = await pending(), store = storage(); seed(store, record);
+  const delays = []; let release;
+  const manager = coordinator(t, store, { schedule: (_cb, ms) => { delays.push(ms); return 0; }, query: async () => ({ status: 'processing', requestId: record.requestId }) });
+  manager.setVisible(true); await tick();
+  for (let i = 0; i < 5; i++) await manager.poll();
+  assert.deepEqual(delays, [1000, 2000, 4000, 8000, 8000, 8000]); manager.stop();
+  const stale = coordinator(t, store, { query: () => new Promise(resolve => { release = resolve; }) });
+  stale.setVisible(true); stale.setVisible(false); release(completed(record)); await tick();
+  assert.equal(loadVoicePending(store, record.scope).length, 1);
+});
+
+test('production draft adapters restore original Codex/Agent drafts, preserve other sessions and compare before writing', async t => {
+  const original = globalThis.localStorage; globalThis.localStorage = storage();
+  t.after(() => { globalThis.localStorage = original; });
+  const scope = 'connection-one';
+  adapters.saveThreadRuntimeCache({ original: { ...adapters.defaultRuntime(), draft: '原草稿' }, other: { ...adapters.defaultRuntime(), draft: 'other' } }, scope);
+  assert.equal(adapters.readVoiceCodexDraft(scope, 'original'), '原草稿');
+  assert.equal(adapters.writeVoiceCodexDraft(scope, 'original', 'changed', 'NO'), false);
+  assert.equal(adapters.writeVoiceCodexDraft(scope, 'original', '原草稿', '原草稿\n\n取回'), true);
+  assert.equal(adapters.loadThreadRuntimeCache(scope).original.draft, '原草稿\n\n取回');
+  assert.equal(adapters.loadThreadRuntimeCache(scope).other.draft, 'other');
+  adapters.saveAgentDrafts(scope, { 'deepseek:11111111-1111-4111-8111-111111111111': '原草稿', 'claude:22222222-2222-4222-8222-222222222222': 'other' });
+  assert.equal(adapters.writeVoiceAgentDraft(scope, 'deepseek:11111111-1111-4111-8111-111111111111', 'changed', 'NO'), false);
+  assert.equal(adapters.writeVoiceAgentDraft(scope, 'deepseek:11111111-1111-4111-8111-111111111111', '原草稿', '取回'), true);
+  assert.equal(adapters.loadAgentDrafts(scope)['claude:22222222-2222-4222-8222-222222222222'], 'other');
+  let live = { 'deepseek:11111111-1111-4111-8111-111111111111': 'live edit' };
+  const unregister = adapters.registerVoiceAgentDrafts(scope, { read: () => live, write: value => { live = value; return true; } }); t.after(unregister);
+  assert.equal(adapters.readVoiceAgentDraft(scope, 'deepseek:11111111-1111-4111-8111-111111111111'), 'live edit');
+  assert.equal(adapters.writeVoiceAgentDraft(scope, 'deepseek:11111111-1111-4111-8111-111111111111', '取回', 'NO'), false);
+  assert.equal(adapters.writeVoiceAgentDraft(scope, 'deepseek:11111111-1111-4111-8111-111111111111', 'live edit', 'appended'), true);
+  assert.equal(live['deepseek:11111111-1111-4111-8111-111111111111'], 'appended');
 });

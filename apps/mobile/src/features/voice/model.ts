@@ -34,3 +34,18 @@ export function voiceError(error: unknown) {
   if (message === "HTTP 404") return "当前电脑网关尚未支持语音，请先更新网关。";
   return nativeErrors[message] ?? (message.startsWith("HTTP") || message.startsWith("语音") || message.startsWith("未收到") || message.startsWith("输入框") || message.startsWith("合并后") ? message : "语音处理失败，请检查连接和配置后手动重试。");
 }
+
+export type VoiceResult = { status: "not_found" } | { status: "processing"; requestId: string } |
+  { status: "completed"; requestId: string; expiresAt: number } & (
+    { outcome: "succeeded"; text: string } | { outcome: "failed" | "cancelled"; errorCode: string });
+export function parseVoiceResult(raw: unknown, requestId: string): VoiceResult {
+  if (!raw || typeof raw !== "object") throw new Error("语音恢复响应无效");
+  const value = raw as Record<string, unknown>;
+  if (value.status === "not_found") return { status: "not_found" };
+  if (value.requestId !== requestId) throw new Error("语音恢复请求不匹配");
+  if (value.status === "processing") return { status: "processing", requestId };
+  if (value.status !== "completed" || typeof value.expiresAt !== "number" || !Number.isFinite(value.expiresAt)) throw new Error("语音恢复响应无效");
+  if (value.outcome === "succeeded") return { status: "completed", requestId, expiresAt: value.expiresAt, outcome: "succeeded", text: parseVoiceText(value) };
+  if (["failed", "cancelled"].includes(String(value.outcome)) && typeof value.errorCode === "string" && /^voice_[a-z_]{1,80}$/.test(value.errorCode)) return value as VoiceResult;
+  throw new Error("语音恢复响应无效");
+}

@@ -6,8 +6,11 @@ import { voiceApi } from "./api";
 import { mergeVoiceDraft, voiceError, type VoiceRecording } from "./model";
 import { writeClipboard } from "../../shared/clipboard";
 
+import { voiceDraftHash } from "./recovery";
+import type { VoiceRecoveryPort } from "./useVoiceRecovery";
+
 type Phase = "idle" | "starting" | "recording" | "transcribing" | "refining" | "preview";
-export function VoiceInput({ endpoint, token, draft, onDraft }: { endpoint: string; token: string; draft: string; onDraft: (value: string) => void }) {
+export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, recovery }: { endpoint: string; token: string; draft: string; onDraft: (value: string) => void; scope: string; thread: string; recovery: VoiceRecoveryPort }) {
   const [open, setOpen] = useState(false), [phase, setPhase] = useState<Phase>("idle");
   const [mode, setMode] = useState<"text" | "prompt">("prompt"), [seconds, setSeconds] = useState(0);
   const [original, setOriginal] = useState(""), [prompt, setPrompt] = useState(""), [error, setError] = useState("");
@@ -24,7 +27,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft }: { endpoint: stri
     if (active) {
       active.abort.abort();
       void VoiceRecorder.cancel({ sessionId: active.id }).catch(() => {});
-      if (active.requestId) void api.cancel(active.requestId).catch(() => {});
+      if (active.requestId) { recovery.cancel(active.requestId); void api.cancel(active.requestId).catch(() => {}); }
     }
   }
   useEffect(() => {
@@ -36,10 +39,15 @@ export function VoiceInput({ endpoint, token, draft, onDraft }: { endpoint: stri
   useEffect(() => {
     const hide = () => { if (document.hidden) {
       const active = session.current;
-      if (active && !active.finished) { cancel(); setPhase("idle"); setError("录音或处理已中断，请保持应用在前台后重试。"); }
+      if (active && !active.finished && !active.requestId) { cancel(); setPhase("idle"); setError("录音或处理已中断，请保持应用在前台后重试。"); }
     } };
     document.addEventListener("visibilitychange", hide);
-    return () => { cancel(); document.removeEventListener("visibilitychange", hide); };
+    return () => {
+      const active = session.current;
+      if (active?.requestId) { session.current = null; recovery.detach(active.requestId); active.abort.abort(); }
+      else cancel();
+      document.removeEventListener("visibilitychange", hide);
+    };
   }, [endpoint, token]);
   useEffect(() => {
     if (phase !== "recording") return;
@@ -48,12 +56,18 @@ export function VoiceInput({ endpoint, token, draft, onDraft }: { endpoint: stri
     return () => clearInterval(timer);
   }, [phase]);
 
+  async function submit(stage: "asr" | "refine", active: NonNullable<typeof session.current>, post: (id: string) => Promise<string | null>) {
+    const id = crypto.randomUUID(); active.requestId = id;
+    const draftHash = await voiceDraftHash(active.base);
+    if (session.current !== active || active.abort.signal.aborted) throw new DOMException("Cancelled", "AbortError");
+    return recovery.submit({ requestId: id, stage, scope, thread, draftHash, createdAt: Date.now() }, () => post(id));
+  }
+
   async function refine(text: string, active: NonNullable<typeof session.current>) {
     if (session.current !== active || active.abort.signal.aborted) return;
     setPhase("refining"); setError(""); setPrompt(""); active.finished = false;
-    const requestId = crypto.randomUUID(); active.requestId = requestId;
     try {
-      const result = await api.refine(requestId, text, active.abort.signal);
+      const result = await submit("refine", active, id => api.refine(id, text, active.abort.signal));
       if (session.current === active) setPrompt(result);
     } catch (caught) { if (session.current === active) setError(voiceError(caught)); }
     finally { if (session.current === active) { active.requestId = undefined; active.finished = true; setPhase("preview"); } }
@@ -64,9 +78,8 @@ export function VoiceInput({ endpoint, token, draft, onDraft }: { endpoint: stri
     active.recordingReceived = true; active.finished = true;
     if (recording.error || !recording.dataBase64 || !recording.durationMs) { setPhase("idle"); setError(voiceError(new Error(recording.error || "voice_recording_failed"))); return; }
     active.finished = false; setPhase("transcribing");
-    const requestId = crypto.randomUUID(); active.requestId = requestId;
     try {
-      const text = await api.transcribe(requestId, recording.dataBase64, recording.durationMs, active.abort.signal);
+      const text = await submit("asr", active, id => api.transcribe(id, recording.dataBase64!, recording.durationMs!, active.abort.signal));
       if (session.current !== active) return;
       active.requestId = undefined; setOriginal(text);
       if (active.mode === "prompt") await refine(text, active);
