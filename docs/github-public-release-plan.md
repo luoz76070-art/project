@@ -49,13 +49,14 @@ rg -n --hidden \
 
 ## APK 发布
 
-GitHub 源码仓库不直接跟踪 APK。需要分发 APK 时：
+GitHub 源码仓库不直接跟踪未来版本的 APK。历史 MobiCodex Kelivo 0.1.5–0.1.8 预览目录保留为已审计的回滚资料；后续版本由 `.github/workflows/release-kelivo.yml` 在 GitHub-hosted runner 中从源码构建并直接上传 GitHub Release。需要分发 APK 时：
 
 1. 从已审计的 commit 构建。
 2. 使用独立签名和发布环境。
-3. 将 APK 上传到 GitHub Release 或自托管下载目录。
-4. 发布 `latest.json`。
-5. 验证 APK 哈希、版本号和下载 URL。
+3. 在 runner 中生成 APK 元数据、源码归档和 SHA256 清单。
+4. 将 APK、源码归档、元数据和清单上传到 GitHub Release 或自托管下载目录。
+5. 发布 `latest.json`。
+6. 验证 APK 哈希、版本号和下载 URL。
 
 ## 回滚
 

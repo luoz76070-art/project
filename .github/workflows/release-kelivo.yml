@@ -123,63 +123,16 @@ jobs:
           }
 
           release_dir="releases/android/kelivo-preview/$version_dir"
-          apk="$release_dir/mobile-codex-kelivo-${version_dir}-preview-arm64.apk"
-          source_archive="$release_dir/mobile-codex-kelivo-${version_dir}-preview-source.tar.gz"
-          for file in \
-            "$release_dir/README.md" \
-            "$release_dir/SHA256SUMS" \
-            "$release_dir/mobile-codex-kelivo-${version_dir}-preview-arm64.apk.json" \
-            "$source_archive" \
-            "$release_dir/source-package.json" \
-            "$apk"; do
-            [[ -f "$file" ]] || { echo "Missing release file: $file" >&2; exit 1; }
-          done
+          [[ -f "$release_dir/README.md" ]] || {
+            echo "Missing release notes: $release_dir/README.md" >&2
+            exit 1
+          }
 
           printf 'version_name=%s\n' "$version_name" >> "$GITHUB_OUTPUT"
           printf 'version_code=%s\n' "$version_code" >> "$GITHUB_OUTPUT"
           printf 'version_dir=%s\n' "$version_dir" >> "$GITHUB_OUTPUT"
           printf 'release_tag=%s\n' "$release_tag" >> "$GITHUB_OUTPUT"
           printf 'release_dir=%s\n' "$release_dir" >> "$GITHUB_OUTPUT"
-
-      - name: Validate committed Kelivo APK and source archive
-        env:
-          VERSION_NAME: ${{ steps.metadata.outputs.version_name }}
-          VERSION_CODE: ${{ steps.metadata.outputs.version_code }}
-          RELEASE_DIR: ${{ steps.metadata.outputs.release_dir }}
-        run: |
-          set -euo pipefail
-          (cd "$RELEASE_DIR" && sha256sum -c SHA256SUMS)
-          python3 - "$RELEASE_DIR" "$VERSION_NAME" "$VERSION_CODE" <<'PY'
-          import hashlib
-          import json
-          import pathlib
-          import sys
-          import tarfile
-
-          release_dir = pathlib.Path(sys.argv[1])
-          expected_name = sys.argv[2]
-          expected_code = int(sys.argv[3])
-          apk = next(release_dir.glob("*.apk"))
-          metadata = json.loads(next(release_dir.glob("*.apk.json")).read_text())
-          source = json.loads((release_dir / "source-package.json").read_text())
-          digest = hashlib.sha256(apk.read_bytes()).hexdigest()
-
-          assert metadata["applicationId"] == "com.mobilecodex.kelivo.preview"
-          assert metadata["versionName"] == expected_name
-          assert metadata["versionCode"] == expected_code
-          assert metadata["bytes"] == apk.stat().st_size
-          assert metadata["sha256"] == digest
-          assert source["apkSha256"] == digest
-          assert source["allArchiveBytesVerified"] is True
-          assert source["unreviewedSecretPatternFindings"] == 0
-
-          archive = next(release_dir.glob("*-source.tar.gz"))
-          with tarfile.open(archive, "r:gz") as tar:
-              names = set(tar.getnames())
-          assert any(name.endswith("/apps/kelivo/pubspec.yaml") for name in names)
-          assert any(name.endswith("/SOURCE-MANIFEST.json") for name in names)
-          print(json.dumps({"versionName": expected_name, "versionCode": expected_code, "apk": str(apk), "sha256": digest}, indent=2))
-          PY
 
       - name: Install Flutter dependencies for Ubuntu platform
         working-directory: apps/kelivo
@@ -247,8 +200,70 @@ jobs:
           node scripts/verify-kelivo.mjs --preview --repeat-tests --platform-lock 2>&1 | tee ci-artifacts/kelivo/android-verify.log
           generated="$(find output/kelivo -maxdepth 1 -type f -name '*.apk' -print -quit)"
           [[ -n "$generated" && -f "$generated" ]] || { echo "Kelivo arm64 APK was not produced in output/kelivo." >&2; exit 1; }
-          cp "$generated" ci-artifacts/kelivo/mobicodex-kelivo-ci-arm64.apk
-          sha256sum ci-artifacts/kelivo/mobicodex-kelivo-ci-arm64.apk > ci-artifacts/kelivo/mobicodex-kelivo-ci-arm64.apk.sha256
+          [[ -f "${generated}.json" ]] || { echo "Kelivo APK metadata was not produced beside $generated." >&2; exit 1; }
+          cp "$generated" ci-artifacts/kelivo/
+          cp "${generated}.json" ci-artifacts/kelivo/
+
+      - name: Package Release assets from runner output
+        env:
+          RELEASE_DIR: ${{ steps.metadata.outputs.release_dir }}
+        run: |
+          set -euo pipefail
+          release_workspace="ci-artifacts/kelivo/release"
+          mkdir -p "$release_workspace"
+          apk="$(find ci-artifacts/kelivo -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          [[ -n "$apk" && -f "$apk" ]] || { echo "Built Kelivo APK is missing from CI artifacts." >&2; exit 1; }
+          [[ -f "${apk}.json" ]] || { echo "Built Kelivo APK metadata is missing from CI artifacts." >&2; exit 1; }
+          python3 scripts/package-kelivo-source.py --apk "$apk" --output ci-artifacts/kelivo/source-package
+          cp "$apk" "$release_workspace/"
+          cp "${apk}.json" "$release_workspace/"
+          cp ci-artifacts/kelivo/source-package/release/*-source.tar.gz "$release_workspace/"
+          cp ci-artifacts/kelivo/source-package/source-package.json "$release_workspace/"
+          cp "$RELEASE_DIR/README.md" "$release_workspace/"
+          (
+            cd "$release_workspace"
+            sha256sum *.apk *.apk.json *-source.tar.gz source-package.json README.md > SHA256SUMS
+          )
+
+      - name: Validate generated Release assets
+        env:
+          VERSION_NAME: ${{ steps.metadata.outputs.version_name }}
+          VERSION_CODE: ${{ steps.metadata.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          release_workspace="ci-artifacts/kelivo/release"
+          (cd "$release_workspace" && sha256sum -c SHA256SUMS)
+          python3 - "$release_workspace" "$VERSION_NAME" "$VERSION_CODE" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+          import tarfile
+
+          release_dir = pathlib.Path(sys.argv[1])
+          expected_name = sys.argv[2]
+          expected_code = int(sys.argv[3])
+          apk = next(release_dir.glob("*.apk"))
+          metadata = json.loads(next(release_dir.glob("*.apk.json")).read_text())
+          source = json.loads((release_dir / "source-package.json").read_text())
+          digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+
+          assert metadata["applicationId"] == "com.mobilecodex.kelivo.preview"
+          assert metadata["versionName"] == expected_name
+          assert metadata["versionCode"] == expected_code
+          assert metadata["bytes"] == apk.stat().st_size
+          assert metadata["sha256"] == digest
+          assert source["apkSha256"] == digest
+          assert source["allArchiveBytesVerified"] is True
+          assert source["unreviewedSecretPatternFindings"] == 0
+
+          archive = next(release_dir.glob("*-source.tar.gz"))
+          with tarfile.open(archive, "r:gz") as tar:
+              names = set(tar.getnames())
+          assert any(name.endswith("/apps/kelivo/pubspec.yaml") for name in names)
+          assert any(name.endswith("/SOURCE-MANIFEST.json") for name in names)
+          print(json.dumps({"versionName": expected_name, "versionCode": expected_code, "apk": str(apk), "sha256": digest}, indent=2))
+          PY
 
       - name: Upload build reports and CI APK
         if: always()
@@ -280,13 +295,17 @@ jobs:
             echo
             cat "$RELEASE_DIR/README.md"
           } > "$notes_file"
+          release_workspace="ci-artifacts/kelivo/release"
+          apk="$(find "$release_workspace" -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          apk_metadata="${apk}.json"
+          source_archive="$(find "$release_workspace" -maxdepth 1 -type f -name '*-source.tar.gz' -print -quit)"
           assets=(
-            "$RELEASE_DIR/mobile-codex-kelivo-${VERSION_NAME%-native-preview}-preview-arm64.apk"
-            "$RELEASE_DIR/mobile-codex-kelivo-${VERSION_NAME%-native-preview}-preview-arm64.apk.json"
-            "$RELEASE_DIR/mobile-codex-kelivo-${VERSION_NAME%-native-preview}-preview-source.tar.gz"
-            "$RELEASE_DIR/source-package.json"
-            "$RELEASE_DIR/SHA256SUMS"
-            "$RELEASE_DIR/README.md"
+            "$apk"
+            "$apk_metadata"
+            "$source_archive"
+            "$release_workspace/source-package.json"
+            "$release_workspace/SHA256SUMS"
+            "$release_workspace/README.md"
           )
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
@@ -302,12 +321,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
-          RELEASE_DIR: ${{ steps.metadata.outputs.release_dir }}
         run: |
           set -euo pipefail
+          release_workspace="ci-artifacts/kelivo/release"
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease,tagName,assets \
             | tee ci-artifacts/kelivo/github-release.json
-          python3 - "$RELEASE_DIR" ci-artifacts/kelivo/github-release.json <<'PY'
+          python3 - "$release_workspace" ci-artifacts/kelivo/github-release.json <<'PY'
           import json
           import pathlib
           import sys
