@@ -1,5 +1,6 @@
 import { AppServerClient } from "./appServerClient.js";
 import type { CodexMessage, CodexThreadSummary } from "../store/codexStore.js";
+import { codexLastTurn, LastTurnCache, type LastTurn } from "../store/lastTurn.js";
 
 type AppThread = {
   id: string;
@@ -17,6 +18,8 @@ type AppTurn = {
   items: AppThreadItem[];
   startedAt: number | null;
   completedAt: number | null;
+  status?: string;
+  error?: unknown;
 };
 
 type AppThreadItem = {
@@ -29,6 +32,7 @@ type AppThreadItem = {
 };
 
 export class LiveCodex {
+  private readonly results = new LastTurnCache();
   private readClient: AppServerClient | null = null;
   private readingClient: Promise<AppServerClient> | null = null;
   private generation = 0;
@@ -42,6 +46,7 @@ export class LiveCodex {
     this.readClient = null;
     this.initializing = null;
     this.readingClient = null;
+    this.results.clear();
     await Promise.all([...clients].map(client => client?.stop()));
   }
 
@@ -103,15 +108,18 @@ export class LiveCodex {
   }
 
 
-  async readThread(threadId: string): Promise<{ thread: CodexThreadSummary | null; messages: CodexMessage[] }> {
+  async readThread(threadId: string): Promise<{ thread: CodexThreadSummary | null; messages: CodexMessage[]; lastTurn: LastTurn | null }> {
     const client = await this.ensureReadClient();
     const response = await client.request<{ thread: AppThread }>("thread/read", {
       threadId,
       includeTurns: true,
     });
+    const latestEnded = [...(response.thread.turns ?? [])].reverse().find(turn => turn.status !== "inProgress" && turn.status !== "starting");
+    if (latestEnded) this.results.set(threadId, codexLastTurn(latestEnded, this.results.get(threadId)));
     return {
       thread: toSummary(response.thread),
       messages: threadToMessages(response.thread),
+      lastTurn: this.results.get(threadId),
     };
   }
 
@@ -120,7 +128,7 @@ export class LiveCodex {
     threadId?: string;
     message: string;
     cwd?: string | null;
-  }): Promise<{ threadId: string; assistantText: string; messages: CodexMessage[]; thread: CodexThreadSummary | null }> {
+  }): Promise<{ threadId: string; assistantText: string; messages: CodexMessage[]; thread: CodexThreadSummary | null; lastTurn: LastTurn | null }> {
     const client = new AppServerClient({ requestTimeoutMs: 120_000 });
     try {
       await client.start();
@@ -150,6 +158,7 @@ export class LiveCodex {
 
       let assistantText = "";
       let completed = false;
+      let lastTurn: LastTurn | null = null;
       let waitingOnApproval: unknown = null;
 
       client.on("notification", (event: { method: string; params?: any; id?: string | number }) => {
@@ -157,7 +166,10 @@ export class LiveCodex {
           assistantText += event.params.delta;
         }
         if (event.method === "turn/completed") {
-          completed = true;
+          if (event.params?.threadId !== threadId) return;
+          lastTurn = codexLastTurn(event.params?.turn);
+          completed = lastTurn !== null;
+          if (lastTurn) this.results.set(threadId!, lastTurn);
           const items = event.params?.turn?.items;
           if (Array.isArray(items)) {
             const message = items.find((item) => item?.type === "agentMessage" && typeof item.text === "string");
@@ -188,7 +200,7 @@ export class LiveCodex {
       }
 
       const read = await this.readThread(threadId);
-      return { threadId, assistantText, messages: read.messages, thread: read.thread ?? createdThread };
+      return { threadId, assistantText, messages: read.messages, thread: read.thread ?? createdThread, lastTurn: lastTurn ?? read.lastTurn };
     } finally {
       await client.stop();
     }

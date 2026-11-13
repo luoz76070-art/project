@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { interactionError, parseUserInputQuestions, validateQuestionAnswers, type UserInputRequest } from "../desktop/desktopQuestions.js";
 import type { CodexMessage, CodexThreadSummary } from "../store/codexStore.js";
+import { codexLastTurn, codexReason, isTurnStatus, LastTurnCache, makeLastTurn, type LastTurn } from "../store/lastTurn.js";
 
 type AppThread = {
   id: string;
@@ -100,9 +101,12 @@ export type LiveTurnSnapshot = {
   thread: CodexThreadSummary | null;
   error: string | null;
   updatedAt: string;
+  lastTurn?: LastTurn | null;
+  connected?: boolean;
 };
 
 type LiveTurnState = LiveTurnSnapshot & {
+  client?: AppServerClient;
   itemText: Map<string, string>;
   approvalParams: Map<string, Record<string, unknown>>;
   snapshotTimer: NodeJS.Timeout | null;
@@ -114,6 +118,8 @@ export class LiveTurnController extends EventEmitter {
   private client: AppServerClient | null = null;
   private readonly turns = new Map<string, LiveTurnState>();
   private readonly activeByThread = new Map<string, string>();
+  private readonly results = new LastTurnCache();
+  private readonly pendingStarts = new Map<string, RpcEvent[]>();
   private seq = 1;
   private reservedStarts = 0;
   private starting: Promise<AppServerClient> | null = null;
@@ -181,21 +187,31 @@ export class LiveTurnController extends EventEmitter {
         .catch(() => undefined);
     }
 
-    const response = await client.request<TurnStartResponse>("turn/start", {
+    if (this.pendingStarts.has(threadId)) throw Object.assign(new Error("Thread is starting a turn"), { statusCode: 409 });
+    const early: RpcEvent[] = [];
+    this.pendingStarts.set(threadId, early);
+    let response: TurnStartResponse;
+    try { response = await client.request<TurnStartResponse>("turn/start", {
       threadId,
       input: toInput(params.message),
       approvalPolicy,
-    });
+    }); } finally { this.pendingStarts.delete(threadId); }
 
     const state = this.createState({
       threadId,
       turnId: response.turn.id,
       thread,
       userText: params.message,
-      status: response.turn.status === "completed" ? "completed" : "inProgress",
+      status: getTurnStatus(response.turn) ?? "inProgress",
     });
+    state.client = client;
+    state.connected = client.isConnected();
+    state.lastTurn = this.results.get(threadId);
+    const result = codexLastTurn(response.turn, state.lastTurn);
+    if (result) this.settle(state, result);
     this.turns.set(response.turn.id, state);
     this.activeByThread.set(threadId, response.turn.id);
+    for (const event of early) this.handleNotification(event);
     this.pushEvent(state, "turn/start", `已启动 turn ${response.turn.id}`);
     this.emitSnapshot(state);
     return this.snapshot(state);
@@ -245,7 +261,7 @@ export class LiveTurnController extends EventEmitter {
       threadId: params.threadId,
       turnId: params.turnId,
     });
-    state.status = "interrupted";
+    // An interrupt ACK only acknowledges the request. The terminal event owns the result.
     state.updatedAt = new Date().toISOString();
     this.pushEvent(state, "turn/interrupt", "已发送打断请求");
     this.emitSnapshot(state);
@@ -320,7 +336,9 @@ export class LiveTurnController extends EventEmitter {
     this.client = null;
     this.initializingClient = null;
     this.starting = null;
+    for (const state of this.turns.values()) state.client = undefined;
     await Promise.all([...clients].map((client) => client?.stop()));
+    this.results.clear(); this.pendingStarts.clear();
     for (const state of this.turns.values()) {
       state.userInputs = []; state.userInputRequests.clear();
       if (state.snapshotTimer) clearTimeout(state.snapshotTimer);
@@ -336,16 +354,24 @@ export class LiveTurnController extends EventEmitter {
     client.on("notification", (event: RpcEvent) => {
       if (this.client === client) this.handleNotification(event);
     });
+    client.on("engine-exit", () => {
+      for (const state of this.turns.values()) {
+        if (state.client !== client || isTurnStatus(state.status)) continue;
+        const result = makeLastTurn(state.turnId, "failed", "engine_exited");
+        if (result) { this.settle(state, result); state.connected = false; this.emitSnapshot(state); }
+      }
+    });
     client.on("disconnect", () => {
       if (this.client !== client) return;
       this.client = null;
       for (const state of this.turns.values()) {
-        if (state.status !== "starting" && state.status !== "inProgress") continue;
-        state.status = "failed";
-        state.error = "app-server disconnected; submission was not replayed";
+        if (state.client !== client || isTurnStatus(state.status)) continue;
+        state.connected = false;
+        state.error = "与执行引擎的连接已断开，结果待确认。";
+        state.userInputs = []; state.userInputRequests.clear();
         state.updatedAt = new Date().toISOString();
         this.activeByThread.delete(state.threadId);
-        this.emitSnapshot(state);
+        this.emitSnapshotNow(state);
       }
       void client.stop();
     });
@@ -382,7 +408,15 @@ export class LiveTurnController extends EventEmitter {
     const threadId = typeof params.threadId === "string" ? params.threadId : null;
     const state = turnId ? this.turns.get(turnId) : threadId ? this.getStateByThread(threadId) : null;
 
-    if (!state || (threadId && threadId !== state.threadId)) return;
+    if (!state || (turnId && turnId !== state.turnId)) {
+      const pending = threadId ? this.pendingStarts.get(threadId) : null;
+      if (pending && ["turn/started", "turn/completed", "error"].includes(event.method)) {
+        pending.push(event);
+        if (pending.length > 32) pending.shift();
+      }
+      return;
+    }
+    if (threadId && threadId !== state.threadId) return;
 
     if (event.id !== undefined) {
       if (state.status !== "starting" && state.status !== "inProgress") return;
@@ -398,6 +432,7 @@ export class LiveTurnController extends EventEmitter {
     }
 
     if (event.method === "turn/started") {
+      if (isTurnStatus(state.status)) return;
       state.status = "inProgress";
       this.pushEvent(state, event.method, "turn started");
       this.emitSnapshot(state);
@@ -405,8 +440,9 @@ export class LiveTurnController extends EventEmitter {
     }
 
     if (event.method === "turn/completed") {
-      const status = getTurnStatus(params.turn);
-      state.status = status ?? "completed";
+      const result = codexLastTurn(params.turn, state.lastTurn);
+      if (!result) return;
+      this.settle(state, result);
       this.pushEvent(state, event.method, `turn ${state.status}`);
       void this.refreshThreadMessages(state.threadId, state.turnId);
       this.emitSnapshot(state);
@@ -436,9 +472,11 @@ export class LiveTurnController extends EventEmitter {
     }
 
     if (event.method === "error") {
-      state.status = "failed";
-      state.error = JSON.stringify(params);
-      this.pushEvent(state, event.method, state.error);
+      if (params.willRetry !== false || isTurnStatus(state.status)) return;
+      const result = makeLastTurn(state.turnId, "failed", codexReason(params.error), undefined, state.lastTurn);
+      if (!result) return;
+      this.settle(state, result);
+      this.pushEvent(state, event.method, result.reason.message);
       this.emitSnapshot(state);
       return;
     }
@@ -446,6 +484,15 @@ export class LiveTurnController extends EventEmitter {
     if (event.method.startsWith("turn/") || event.method.startsWith("item/")) {
       this.pushEvent(state, event.method, event.method);
     }
+  }
+
+  private settle(state: LiveTurnState, result: LastTurn) {
+    state.lastTurn = result; state.status = result.status;
+    state.error = result.status === "failed" ? result.reason.message : null;
+    state.updatedAt = new Date().toISOString();
+    // A late result for an older turn must not replace the session's latest result.
+    const active = this.activeByThread.get(state.threadId);
+    if (!active || active === state.turnId || !this.turns.has(state.turnId)) this.results.set(state.threadId, result);
   }
 
   private createState(params: {
@@ -477,6 +524,8 @@ export class LiveTurnController extends EventEmitter {
       userInputRequests: new Map(),
       thread: params.thread,
       error: null,
+      lastTurn: null,
+      connected: true,
       updatedAt: timestamp,
       itemText: new Map(),
       approvalParams: new Map(),
@@ -588,6 +637,8 @@ export class LiveTurnController extends EventEmitter {
       thread: state.thread,
       error: state.error,
       updatedAt: state.updatedAt,
+      lastTurn: state.lastTurn ?? null,
+      connected: state.connected,
     };
   }
 

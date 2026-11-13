@@ -1,6 +1,7 @@
 import { type ThreadRuntime, type CodexMessage, type DesktopControlCapability, type DesktopControlResponse, type LiveApproval, type PendingAttachment } from "../../app/types";
 import { composeMessageWithAttachments } from "./attachments";
 import { reconcileMessages } from "./messageReconciliation";
+import { mergeLastTurn, type LastTurn } from "./lastTurn";
 const threadRuntimeCacheKey = "mobileCodexThreadRuntimeCacheV2";
 const cachedMessagesPerThread = 120;
 const cachedThreadLimit = 24;
@@ -46,12 +47,13 @@ export function defaultRuntime(): ThreadRuntime {
 
 export function turnProgressPatch(
   runtime: ThreadRuntime,
-  progress: { turnStatus?: ThreadRuntime["turnStatus"]; activity?: ThreadRuntime["activity"] },
+  progress: { turnStatus?: ThreadRuntime["turnStatus"]; activity?: ThreadRuntime["activity"]; lastTurn?: LastTurn | null },
 ) {
   const turnStatus = progress.turnStatus ?? runtime.turnStatus;
   const active = turnStatus === "starting" || turnStatus === "inProgress";
   const ended = turnStatus === "completed" || turnStatus === "interrupted" || turnStatus === "failed";
   return {
+    lastTurn: mergeLastTurn(runtime.lastTurn, progress.lastTurn),
     turnStatus,
     activity: active ? progress.activity ?? runtime.activity : undefined,
     sending: ended ? false : active ? true : runtime.sending,

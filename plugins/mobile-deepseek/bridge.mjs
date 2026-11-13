@@ -2,6 +2,7 @@ import http from 'node:http';
 import { createDeepSeekInteractions } from './interactions.mjs';
 import { createDeepSeekCatalog } from './catalog.mjs';
 import { messageOf, finalMessageId } from './messages.mjs';
+import { turnResult } from './turnResult.mjs';
 import { mobileQueueSnapshot, queuedMobileInput } from './queue.mjs';
 import path from 'node:path';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
@@ -22,6 +23,16 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
   const directory = path.resolve(config.directory), aliases = new Map(), ids = new WeakMap(), entries = new Map(), disposers = [];
   const catalog = config.scope === 'all' ? createDeepSeekCatalog(ctx, config.token, id => Boolean(entries.get(id)?.clients.size || entries.get(id)?.submission)) : null;
   const requests = new Set();
+  // One small result per original session, including turns ending without phone subscribers.
+  const results = new Map();
+  function rememberResult(hostId, event) {
+    if (event.type !== 'turn/end' || !Number.isSafeInteger(event.seq) || event.seq < 0) return;
+    const previous = results.get(hostId);
+    if (previous && event.seq <= previous.seq) return;
+    results.delete(hostId);
+    results.set(hostId, { seq: event.seq, lastTurn: turnResult(event, previous?.lastTurn) });
+    while (results.size > 128) results.delete(results.keys().next().value);
+  }
   let stopped = false;
   const interactions = createDeepSeekInteractions(ctx);
   function allowed(agent) {
@@ -71,6 +82,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
     return {
       agentId: 'deepseek', session: catalog ? catalog.row(entry.id).session : session(agent), connected: true, updatedAt: iso(Date.now()),
       status: agent?.status ?? 'idle', activity: entry.stream?.text ? 'outputting' : entry.activity,
+      lastTurn: results.get(agent?.id ?? catalog?.row(entry.id).hostId)?.lastTurn ?? null,
       messages: entry.messages, ...(agent ? interactions.snapshot(entry) : { questions: [], permissions: [] }), historyCursor: entry.historyCursor ?? null, partialText: true,
       control: { token: entry.token, canSend: ready, canSteer: ready && Boolean(agent) && entry.turn !== null, canInterrupt: ready && agent?.status === 'running' && entry.turn !== null },
       submission: entry.submission ? { clientMessageId: entry.submission.clientMessageId, action: entry.submission.action, delivery: entry.submission.delivery } : null,
@@ -98,6 +110,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
     if (finalId) entry.messages = entry.messages.map(message => message.id === finalId ? { ...message, phase: 'final_answer' } : message);
     if (event.type === 'turn/start') { entry.toolCalls.clear(); entry.step = null; entry.turn = data.turn; entry.token = randomUUID(); entry.activity = 'thinking'; }
     if (event.type === 'turn/end') {
+      rememberResult(entry.agent?.id ?? catalog?.row(entry.id).hostId, event);
       entry.turn = null; entry.token = randomUUID(); entry.activity = 'working';
       if (entry.submission?.action === 'interrupt' && entry.submission.turn === data.turn) entry.submission.delivery = 'confirmed';
     }
@@ -251,12 +264,13 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
   on('session/event', (session, event) => {
     if (catalog && ['user/message', 'assistant/message', 'session/title'].includes(event.type)) catalog.invalidate();
     const agent = ctx.agents.get(session.id), entry = agent && entryFor(agent);
+    if (allowed(agent)) rememberResult(agent.id, event);
     if (!entry) return;
     if (entry.loading) {
       if (entry.buffered.length >= 4096) { for (const res of entry.clients) res.destroy(); return; }
       entry.buffered.push(event); return;
     }
-    project(entry, event); publish(entry);
+    project(entry, event); publish(entry, event.type === 'turn/end');
   });
   on('agent/status', ({ agent }) => {
     catalog?.invalidate();
@@ -347,7 +361,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
     stopped = true; for (const dispose of disposers) dispose?.();
     for (const entry of entries.values()) { clearTimeout(entry.timer); clearInterval(entry.poll); for (const res of entry.clients) res.destroy(); }
     for (const controller of requests) controller.abort(); requests.clear();
-    entries.clear(); aliases.clear(); catalog?.stop();
+    entries.clear(); aliases.clear(); results.clear(); catalog?.stop();
     await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); });
   } };
 }

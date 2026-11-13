@@ -3,8 +3,9 @@ import { capMessages, mergeMessages, mergeMessagesById, turnStatusText, nextSmoo
 import { turnProgressPatch, desktopApprovalsPatch, desktopControlPatch } from "./runtime";
 import { captureSyncRequest, isSyncRequestCurrent, isDesktopDeltaCurrent, type SyncRequest } from "./sync";
 import { toFriendlyFetchError } from "../connection/http";
+import { mergeLastTurn, type LastTurn } from "./lastTurn";
 
-export type DesktopDelta = { messages: CodexMessage[]; cursor: number; generation?: string; reset?: boolean; turnStatus?: ThreadRuntime["turnStatus"]; activity?: ThreadRuntime["activity"] };
+export type DesktopDelta = { messages: CodexMessage[]; cursor: number; generation?: string; reset?: boolean; turnStatus?: ThreadRuntime["turnStatus"]; activity?: ThreadRuntime["activity"]; lastTurn?: LastTurn | null };
 export type RuntimeSyncContext = {
   getRuntime: () => ThreadRuntime;
   getSignal: () => AbortSignal;
@@ -30,6 +31,7 @@ export function createRuntimeSync(context: RuntimeSyncContext) {
         status: turnStatusText(turn.status),
         activeTurnId: turn.status === "starting" || turn.status === "inProgress" ? turn.turnId : null,
         turnStatus: turn.status,
+        lastTurn: mergeLastTurn(runtime.lastTurn, turn.lastTurn),
         lastEventCount: turn.eventCount,
         lastTurnError: turn.error ?? "",
         approvals: turn.approvals ?? runtime.approvals,
@@ -48,6 +50,7 @@ export function createRuntimeSync(context: RuntimeSyncContext) {
         ...runtime,
         syncRevision: (runtime.syncRevision ?? 0) + 1,
         ...turnProgressPatch(runtime, { turnStatus: snapshot.status }),
+        lastTurn: mergeLastTurn(runtime.lastTurn, snapshot.lastTurn),
         messages,
         loaded: true,
         status: snapshotActive ? "桌面实时同步中" : turnStatusText(snapshot.status),
@@ -57,7 +60,7 @@ export function createRuntimeSync(context: RuntimeSyncContext) {
         userInputs: snapshot.interactionsAvailable ? snapshot.userInputs ?? [] : [],
         ...desktopApprovalsPatch(runtime, snapshot.approvals, snapshot.interactionsAvailable),
         ...desktopControlPatch(runtime, snapshot.control),
-        lastTurnError: "",
+        lastTurnError: snapshot.lastTurn?.status === "failed" ? snapshot.lastTurn.reason.message : "",
         smoothMessageId: nextSmoothMessageId(runtime, messages),
       };
     });
@@ -70,7 +73,7 @@ export function createRuntimeSync(context: RuntimeSyncContext) {
       return {
         ...runtime,
         syncRevision: (runtime.syncRevision ?? 0) + 1,
-        ...turnProgressPatch(data.reset ? { ...runtime, turnStatus: "idle", activity: undefined, sending: false, activeTurnId: null } : runtime, data),
+        ...turnProgressPatch(data.reset ? { ...runtime, lastTurn: null, turnStatus: "idle", activity: undefined, sending: false, activeTurnId: null } : runtime, data),
         cursor: data.cursor, generation: data.generation,
         messages: nextMessages, watching: true,
         historyBefore: data.reset ? 0 : runtime.historyBefore,
@@ -88,7 +91,7 @@ export function createRuntimeSync(context: RuntimeSyncContext) {
         `/api/desktop/threads/${encodeURIComponent(threadId)}/delta?cursor=${cursor}${generation ? `&generation=${encodeURIComponent(generation)}` : ""}`, signal,
       );
       if (!isSyncRequestCurrent(context.getRuntime(), request)) return;
-      if (data.cursor !== cursor || data.messages.length || data.reset || data.turnStatus || data.activity) applyDesktopDelta(threadId, data, request);
+      if (data.cursor !== cursor || data.messages.length || data.reset || data.turnStatus || data.activity || data.lastTurn !== undefined) applyDesktopDelta(threadId, data, request);
     } catch (error) {
       if (!isSyncRequestCurrent(context.getRuntime(), request)) return;
       updateRuntime(threadId, runtime => isSyncRequestCurrent(runtime, request) ? { ...runtime, watching: false, status: toFriendlyFetchError(error) } : runtime);

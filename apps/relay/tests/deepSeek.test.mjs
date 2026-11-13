@@ -10,9 +10,10 @@ import { z } from 'zod';
 import { createDeepSeekBridge } from '../../../plugins/mobile-deepseek/bridge.mjs';
 import { apply } from '../../../plugins/mobile-deepseek/index.mjs';
 import { messageOf } from '../../../plugins/mobile-deepseek/messages.mjs';
+import { turnResult } from '../../../plugins/mobile-deepseek/turnResult.mjs';
 import { DeepSeekClient } from '../dist/agents/deepSeekClient.js';
 import { DeepSeekAdapter } from '../dist/agents/deepSeekAdapter.js';
-import { deepSeekConfigSchema, deepSeekInfo } from '../dist/agents/deepSeekProtocol.js';
+import { deepSeekConfigSchema, deepSeekInfo, deepSeekSnapshot } from '../dist/agents/deepSeekProtocol.js';
 import { parseManagedConfig } from '../dist/gateway/config.js';
 import { AgentGateway } from '../dist/agents/agentGateway.js';
 import { createRelayServer } from '../dist/server/createRelayServer.js';
@@ -148,6 +149,46 @@ async function fixture(t, options = {}) {
 const operation = value => ({ clientMessageId: randomUUID(), controlToken: value.control.token });
 const current = f => f.values.at(-1);
 
+test('S1 DeepSeek end reasons map to safe results, including token limits and unknown endings', () => {
+  for (const [kind, status, code] of [['completed', 'completed', 'ok'], ['aborted', 'interrupted', 'cancelled'], ['error', 'failed', 'provider_error'], ['max-tokens', 'failed', 'token_limit'], ['blocked', 'failed', 'blocked']]) {
+    const event = { type: 'turn/end', seq: 4, time: 1000, data: { turn: 2, reason: { kind, error: { code: 'PRIVATE', message: 'PRIVATE_TOKEN' } } } };
+    const result = turnResult(event);
+    assert.deepEqual([result.status, result.reason.code, result.endedAt, result.timeSource], [status, code, '1970-01-01T00:00:01.000Z', 'provider']);
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE/);
+    assert.deepEqual(turnResult(event, result), result);
+    assert.equal(turnResult({ ...event, data: { turn: 2, reason: { kind: 'future-end' } } }), null);
+  }
+  assert.equal(turnResult({ type: 'turn/end', seq: 1, data: { reason: { kind: 'completed' } } }), null);
+});
+
+test('S1 DeepSeek stores terminal results without subscribers, survives reconnect and accepts legacy snapshots', async t => {
+  const f = await fixture(t, { running: true });
+  const first = f.event('turn/end', { turn: 1, reason: { kind: 'completed' } });
+  assert.equal(f.stats().reads, 0);
+  let close = await f.watch(); assert.deepEqual(current(f).lastTurn, turnResult(first));
+  const { lastTurn: _result, ...legacy } = current(f);
+  assert.equal(deepSeekSnapshot.parse(legacy).lastTurn, undefined);
+  for (const [turn, reason, status] of [[2, { kind: 'error', error: { code: 'TRANSPORT', message: 'PRIVATE' } }, 'failed'], [3, { kind: 'aborted' }, 'interrupted']]) {
+    f.event('turn/start', { turn });
+    const event = f.event('turn/end', { turn, reason });
+    await until(() => current(f).lastTurn?.turnId === String(turn));
+    assert.deepEqual(current(f).lastTurn, turnResult(event)); assert.equal(current(f).lastTurn.status, status);
+    f.emit('session/event', f.agent.session, first); close(); close = await f.watch();
+    assert.deepEqual(current(f).lastTurn, turnResult(event));
+  }
+  f.event('turn/start', { turn: 4 }); f.event('turn/end', { turn: 4, reason: { kind: 'future-end' } });
+  await until(() => current(f).lastTurn === null);
+  assert.equal(f.calls.length, 0); close();
+});
+
+test('S1 DeepSeek interrupt ACK and status change alone never claim interruption', async t => {
+  const f = await fixture(t, { running: true, pendingCancel: true }); await f.watch();
+  await f.adapter.interruptSession(f.id, operation(current(f)));
+  assert.equal(current(f).lastTurn, null);
+  f.agent.status = 'idle'; f.emit('agent/status', { agent: f.agent });
+  await until(() => current(f).status === 'idle'); assert.equal(current(f).lastTurn, null);
+});
+
 test('dsh queued mobile input is visible and cancel removes only its original native inbox item', async t => {
   const f = await fixture(t, { running: true, nativeQueue: true }); await f.watch();
   const desktop = user({ source: { kind: 'user' }, content: [{ type: 'text', text: 'desktop-owned queue' }] });
@@ -281,12 +322,14 @@ test('dsh accepted input followed by model failure remains delivered and shows o
   f.agent.status = 'idle'; f.emit('agent/status', { agent: f.agent });
   await until(() => current(f).messages.some(message => message.text.includes('模型服务暂不可用')));
   const live = current(f), notice = live.messages.find(message => message.text.includes('模型服务暂不可用'));
+  assert.equal(live.lastTurn.status, 'failed'); assert.equal(live.lastTurn.reason.code, 'model_unavailable');
   assert.equal(live.submission.delivery, 'confirmed');
   assert.equal(live.messages.filter(message => message.text === input.text).length, 1);
   assert.equal(live.messages.filter(message => message.id === notice.id).length, 1);
   assert.equal(live.operationError, null); assert.equal(live.control.canSend, true);
   f.emit('session/event', f.agent.session, errorEvent);
   close(); close = await f.watch();
+  assert.deepEqual(current(f).lastTurn, live.lastTurn);
   assert.deepEqual(current(f).messages.find(message => message.id === notice.id), notice);
   assert.equal(current(f).messages.filter(message => message.id === notice.id).length, 1);
   assert.equal(f.calls.length, 1, 'showing or reopening a failure never resubmits');
@@ -382,7 +425,7 @@ test('dsh steer and cancel bind original open turn; stale turn cannot cancel lat
   await f.adapter.sendMessage(f.id, { ...operation(current(f)), text: '当前任务引导', delivery: 'steer' });
   await until(() => current(f).submission?.delivery === 'confirmed'); assert.equal(f.calls[0].mode, 'steer');
   const old = operation(current(f)); f.event('turn/end', { turn: 1 }); f.event('turn/start', { turn: 2 });
-  await until(() => current(f).control.token !== old.controlToken);
+  await until(() => current(f).control.token !== old.controlToken && current(f).control.canInterrupt);
   await assert.rejects(f.adapter.interruptSession(f.id, old), { code: 'DEEPSEEK_STALE_CONTROL' });
   assert.equal(f.calls.filter(call => call.action === 'interrupt').length, 0);
   assert.equal((await f.adapter.interruptSession(f.id, operation(current(f)))).delivery, 'submitted');
@@ -522,7 +565,7 @@ test('dsh public Agent routes retain pairing auth, session-bound SSE tokens and 
   assert.equal((await app.inject({ url: '/api/agents/deepseek/sessions', headers: deviceAuth })).statusCode, 200);
   const streamToken = (await app.inject({ method: 'POST', url: `${route}/stream-token`, headers: deviceAuth })).json().streamToken;
   assert.equal((await fetch(`${base}/api/agents/deepseek/sessions/${randomUUID()}/events?streamToken=${streamToken}`)).status, 401);
-  const response = await fetch(`${base}${route}/events?streamToken=${streamToken}`), reader = response.body.getReader();
+  const response = await fetch(`${base}${route}/events?streamToken=${streamToken}&v=1`), reader = response.body.getReader();
   const { value } = await reader.read(), frame = new TextDecoder().decode(value);
   const snapshot = JSON.parse(frame.split('\n').find(line => line.startsWith('data:')).slice(5));
   for (const [kind, extra, native] of [['questions', { answers: [['继续']] }, nativeQuestion], ['permissions', { decision: 'reject' }, nativePermission]]) {
@@ -537,6 +580,20 @@ test('dsh public Agent routes retain pairing auth, session-bound SSE tokens and 
   const [a, b] = await Promise.all([app.inject(request), app.inject(request)]);
   assert.equal(a.statusCode, 200); assert.equal(b.statusCode, 200); assert.equal(f.calls.filter(call => call.action === 'message').length, 1);
   assert.equal((await app.inject({ ...request, payload: { ...payload, text: '同ID改内容' } })).statusCode, 409);
+  f.event('turn/end', { turn: 1, reason: modelUnavailable });
+  let buffer = '', terminal;
+  while (!terminal) {
+    const chunk = await reader.read(); assert.equal(chunk.done, false); buffer += new TextDecoder().decode(chunk.value);
+    let end;
+    while ((end = buffer.indexOf('\n\n')) >= 0) {
+      const event = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+      if (!event.includes('event: agent-session')) continue;
+      const line = event.split('\n').find(value => value.startsWith('data:'));
+      const value = JSON.parse(line.slice(5)); if (value.lastTurn) terminal = value;
+    }
+  }
+  assert.equal(terminal.lastTurn.status, 'failed'); assert.equal(terminal.lastTurn.reason.code, 'model_unavailable');
+  assert.equal(terminal.protocolVersion, 1); assert.equal(terminal.partial, true);
   await reader.cancel();
 });
 

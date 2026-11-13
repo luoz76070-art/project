@@ -1,22 +1,32 @@
+import { makeLastTurn, codexReason, type LastTurn } from "./lastTurn.js";
+
 export type TurnProgress = {
   turnStatus?: "inProgress" | "completed" | "interrupted" | "failed";
   activity?: "thinking" | "working" | "outputting";
+  lastTurn?: LastTurn | null;
 };
 
 /** Project lifecycle and public work phases, never reasoning text or tool arguments. */
-export function turnProgress(records: Array<{ value: unknown }>): TurnProgress {
+export function turnProgress(records: Array<{ value: unknown }>, previous?: LastTurn | null): TurnProgress {
   const progress: TurnProgress = {};
+  let turnId: unknown;
   for (const { value } of records) {
     if (!value || typeof value !== "object") continue;
-    const line = value as { type?: string; payload?: Record<string, unknown> };
+    const line = value as { type?: string; timestamp?: unknown; payload?: Record<string, unknown> };
     const payload = line.payload;
     if (!payload) continue;
     const kind = payload.type;
+    if (line.type === "turn_context" || (line.type === "event_msg" && kind === "task_started")) turnId = payload.turn_id ?? payload.turnId;
     if (line.type === "event_msg") {
       if (kind === "task_started") { progress.turnStatus = "inProgress"; progress.activity = "thinking"; }
       if (kind === "task_complete" || kind === "task_completed") progress.turnStatus = "completed";
       if (kind === "turn_aborted") progress.turnStatus = "interrupted";
       if (kind === "task_failed" || kind === "turn_failed") progress.turnStatus = "failed";
+      if (["task_complete", "task_completed", "turn_aborted", "task_failed", "turn_failed"].includes(String(kind))) {
+        const status = progress.turnStatus as "completed" | "failed" | "interrupted";
+        progress.lastTurn = makeLastTurn(payload.turn_id ?? payload.turnId ?? turnId, status,
+          status === "completed" ? "ok" : status === "interrupted" ? "cancelled" : codexReason(payload.error), line.timestamp, progress.lastTurn ?? previous);
+      }
       if (kind === "agent_message") progress.activity = "outputting";
       if (kind === "item_started" || kind === "item_completed") {
         const item = payload.item as { type?: string } | undefined;

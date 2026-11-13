@@ -1,4 +1,5 @@
 import type { CodexMessage } from "../../app/types";
+import type { LastTurn } from "../../../../../shared/lastTurn";
 
 export type AgentSession = { id: string; title: string; directory: string; updatedAt: string };
 export type AgentQuestion = {
@@ -11,6 +12,7 @@ export type AgentPermission = {
   detail: string; unavailableReason: string | null; decisions: ("once" | "always" | "reject")[];
 };
 export type AgentSessionSnapshot = {
+  lastTurn?: LastTurn | null;
   agentId: string; session: AgentSession; connected: boolean; updatedAt: string;
   status: "idle" | "running"; activity: "thinking" | "working" | "outputting";
   messages: CodexMessage[]; questions: AgentQuestion[]; permissions: AgentPermission[]; historyCursor: string | null;

@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ordinaryPrompts, contextEnvelopes } from './fixtures/user-prompts.mjs';
+import { turnResults } from './fixtures/last-turn.mjs';
 
 const dist = process.env.UI_FIXTURE_DIST ? path.resolve(process.env.UI_FIXTURE_DIST) : fileURLToPath(new URL('../apps/mobile/dist/', import.meta.url));
 const hotBundle = process.env.UI_FIXTURE_HOT_BUNDLE;
@@ -60,6 +61,22 @@ function confirmNative(state) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/fixture/last-turn') {
+      const name = url.searchParams.get('name') ?? 'A', state = states.get(name);
+      if (!state) return json(res, { error: 'unknown fixture' }, 400);
+      const status = url.searchParams.get('status') ?? 'failed', running = url.searchParams.get('running') === '1';
+      let result = turnResults.find(value => value.status === status) ?? null;
+      if (result && url.searchParams.get('agent') === 'deepseek' && status === 'failed') result = { ...result, reason: { code: 'model_unavailable', message: '模型暂不可用，请稍后重试或在电脑端切换模型。' } };
+      const agentId = url.searchParams.get('agent');
+      if (['claude', 'deepseek', 'opencode'].includes(agentId)) {
+        const snapshot = agentSnapshot(name, agentId);
+        snapshot.lastTurn = result; snapshot.status = running ? 'running' : 'idle'; snapshot.control.canInterrupt = running;
+      } else {
+        state.lastTurn = result; state.turnStatus = running ? 'inProgress' : result?.status ?? 'idle'; state.cursor++;
+      }
+      for (const notify of notifications.values()) notify();
+      return json(res, { ok: true });
+    }
     if (url.pathname === '/fixture/images') {
       if (url.searchParams.has('fail')) imageFixture.fail = url.searchParams.get('fail') === '1';
       if (url.searchParams.has('delay')) imageFixture.delay = Math.min(10000, Number(url.searchParams.get('delay')) || 0);
@@ -506,7 +523,7 @@ const server = http.createServer(async (req, res) => {
         const delta = () => {
           if (route.startsWith('/api/agents/')) { res.write(`event: agent-session\ndata: ${JSON.stringify(agentSnapshot(name, route.split('/')[3]))}\n\n`); return; }
           res.write(`event: delta\ndata: ${JSON.stringify(state)}\n\n`);
-          res.write(`event: desktop\ndata: ${JSON.stringify({ threadId: 'same-thread', status: state.turnStatus, messages: state.desktopMessages ?? state.messages, inputReplacements: state.inputReplacements, userInputs: state.userInputs, approvals: state.approvals, interactionsAvailable: true, control: state.control, source: 'desktop-ipc', eventCount: state.cursor, updatedAt: new Date().toISOString() })}\n\n`);
+          res.write(`event: desktop\ndata: ${JSON.stringify({ threadId: 'same-thread', status: state.turnStatus, lastTurn: state.lastTurn, messages: state.desktopMessages ?? state.messages, inputReplacements: state.inputReplacements, userInputs: state.userInputs, approvals: state.approvals, interactionsAvailable: true, control: state.control, source: 'desktop-ipc', eventCount: state.cursor, updatedAt: new Date().toISOString() })}\n\n`);
         };
         delta();
         streams.add(res);

@@ -5,14 +5,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { turnResults } from './fixtures/last-turn.mjs';
+import { turnResult } from '../plugins/mobile-deepseek/turnResult.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-rendering-'));
 const output = path.join(temp, 'render.cjs');
-await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { imageSource } from './apps/mobile/src/features/chat/imageSources';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
+await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { imageSource } from './apps/mobile/src/features/chat/imageSources';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
 const originalStorage = globalThis.localStorage;
 globalThis.localStorage = { getItem: () => null };
-const { default: { h, render, MessageContent, MessageTimeline, ToolMessageBubble, ComputerComposer, imageSource } } = await import(pathToFileURL(output).href);
+const { default: { h, render, MessageContent, MessageTimeline, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice } } = await import(pathToFileURL(output).href);
 globalThis.localStorage = originalStorage;
 test.after(() => fs.rm(temp, { recursive: true, force: true }));
 const tool = index => ({ id: `t${index}`, role: 'tool', kind: 'commandExecution', text: `Command: rg query-${index}`, turnId: 'turn-a', timestamp: '2026-11-07T00:00:00Z' });
@@ -102,4 +104,17 @@ test('all computer channels share composer controls without granting unsupported
   assert.match(running, /disabled="" aria-label="引导发送"/); assert.match(running, /aria-label="排队发送"/); assert.match(running, /aria-label="停止生成"/);
   const empty = render(h(ComputerComposer, { ...props, draft: '', hasContent: false, running: true, canStop: false }));
   assert.match(empty, /disabled="" aria-label="停止生成"/); assert.doesNotMatch(empty, /aria-label="发送"/);
+});
+
+for (const result of turnResults) test(`S1 mobile renders ${result.status} in the existing notice area`, () => {
+  const html = render(h(TurnResultNotice, { result }));
+  assert.match(html, new RegExp(`data-turn-result="${result.status}"`));
+  assert.ok(html.includes(result.reason.message)); assert.ok(html.includes(result.endedAt));
+  assert.match(render(h(TurnResultNotice, { result, running: true })), /上轮/);
+});
+test('S1 actual DeepSeek model failure is visible on mobile, and unknown results stay absent', () => {
+  const result = turnResult({ type: 'turn/end', seq: 3, time: 1000, data: { turn: 1, reason: { kind: 'error', error: { code: 'INVALID_REQUEST', message: 'model is unavailable on every account (per-model cooldown) PRIVATE' } } } });
+  const html = render(h(TurnResultNotice, { result }));
+  assert.match(html, /执行失败/); assert.match(html, /模型暂不可用/); assert.doesNotMatch(html, /PRIVATE/);
+  for (const result of [undefined, null, { status: 'idle' }]) assert.equal(render(h(TurnResultNotice, { result })), '');
 });

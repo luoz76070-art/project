@@ -1,4 +1,5 @@
 import { loadReadingPositions, saveReadingPositions } from "../chat/readingPositions";
+import { TurnResultNotice } from "../chat/TurnResultNotice";
 import { productBeforeNavigate, isKelivoHost } from "../product/host";
 import { useEffect, useRef, useState } from "react";
 import { registerVoiceAgentDrafts } from "../voice/draftRecovery";
@@ -303,6 +304,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
         {agent.id === "deepseek" && <p>查看历史不会启动任务；发送后继续原会话，运行中可引导或排队。权限请求须核对完整参数后允许一次或拒绝。</p>}
       </details>}
       {snapshot?.operationError && <p className="connection-notice" role="status">{snapshot.operationError.code === "rejected" ? "电脑会话拒绝了本次操作，输入内容已保留。" : "操作尚未送达电脑便已过期，输入内容已保留。"}</p>}
+      <TurnResultNotice result={snapshot?.lastTurn} running={snapshot?.status === "running"} />
       {historyCursor && (agent.id === "deepseek" || history.length < 190) && <button className="history-button" disabled={historyBusy} onClick={() => void older()}>{historyBusy ? "读取历史中…" : "加载更早的消息"}</button>}
       {agent.id === "deepseek" && history.length > 0 && <button className="history-button" disabled={historyBusy} onClick={() => { setHistory([]); setHistoryCursor(snapshot?.historyCursor ?? null); nearBottom.current = true; requestAnimationFrame(() => viewport.current?.scrollTo({ top: viewport.current.scrollHeight })); }}>正在浏览历史 · 返回最新</button>}
       {agent.id !== "deepseek" && history.length >= 190 && <p className="setting-description">已达到手机历史显示上限，更早记录可在电脑查看。</p>}

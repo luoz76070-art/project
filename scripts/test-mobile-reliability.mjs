@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import { build } from 'esbuild';
+import { turnResults } from './fixtures/last-turn.mjs';
 
 // Import the production sync module; keep actual App effect bodies for lifecycle integration.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -14,7 +15,9 @@ const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-reliability-'));
 const source = await fs.readFile(path.join(mobile, 'app/App.tsx'), 'utf8');
 const ast = ts.createSourceFile('App.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const effects = new Map();
+let startResponsePatch;
 function visit(node) {
+  if (ts.isCallExpression(node) && node.expression.getText(ast) === 'patchRuntime' && node.arguments[0]?.getText(ast) === 'data.threadId') startResponsePatch = node.arguments[1].getText(ast);
   if (ts.isCallExpression(node) && node.expression.getText(ast) === 'useEffect') {
     const callback = node.arguments[0]?.getText(ast) ?? '';
     if (callback.includes('await watchDesktopDelta(')) effects.set('desktopPoll', callback);
@@ -25,12 +28,14 @@ function visit(node) {
 }
 visit(ast);
 assert.equal(effects.size, 4, 'actual polling and subscription effects must be covered');
+assert.ok(startResponsePatch, 'actual turn/start response state must be covered');
 const entry = `
 import { createPollScope } from ${JSON.stringify(path.join(mobile, 'features/chat/sync.ts'))};
 import { defaultRuntime, desktopControlOfflinePatch, saveThreadRuntimeCache, loadThreadRuntimeCache, threadCacheSaveNotice } from ${JSON.stringify(path.join(mobile, 'features/chat/runtime.ts'))};
 import { createSnapshotReducer } from ${JSON.stringify(path.join(mobile, 'features/connection/snapshotPatch.ts'))};
 export { defaultRuntime, saveThreadRuntimeCache, loadThreadRuntimeCache, threadCacheSaveNotice };
 import { createRuntimeSync } from ${JSON.stringify(path.join(mobile, 'features/chat/runtimeSync.ts'))};
+import { capMessages, mergeMessagesById, turnStatusText } from ${JSON.stringify(path.join(mobile, 'features/chat/messages.ts'))};
 export function driver(seed = defaultRuntime()) {
  let state = seed, response, queueUpdates = false;
  const updates = [], requests = [], subscriptions = [], timers = new Map(), listeners = new Set();
@@ -60,6 +65,7 @@ export function driver(seed = defaultRuntime()) {
  return { state: () => state, statuses, requests, subscriptions, timers, listeners,
  queue: () => { queueUpdates = true; }, flush: () => { queueUpdates = false; for (const fn of updates.splice(0)) state = fn(state); },
  patch: patch => patchRuntime('thread', patch), disposeScope: () => scopeAbortRef.current.abort(),
+ start: data => { const baseMessages = state.messages; patchRuntime('thread', ${startResponsePatch}); },
  ${[...effects].map(([name, callback]) => `${name}: () => { const activeRuntime = state; return (${callback})(); },`).join('\n')}
  response: value => { response = value; },
  live: value => applyLiveTurnSnapshot('thread', value), desktop: value => applyDesktopStreamSnapshot('thread', value),
@@ -79,6 +85,31 @@ function deferred(d) {
  d.response(new Promise((yes, no) => { resolve = yes; reject = no; }));
  return { resolve, reject };
 }
+
+test('S1 an already-ended turn/start response releases the composer without waiting for an SSE subscription', () => {
+ for (const result of turnResults) {
+   const d = driver(); d.patch({ sending: true, turnStatus: 'starting' });
+   d.start({ ...turn(result.turnId, result.status), lastTurn: result });
+   assert.equal(d.state().sending, false); assert.equal(d.state().activeTurnId, null); assert.deepEqual(d.state().lastTurn, result);
+   d.start(turn('next', 'inProgress')); assert.deepEqual(d.state().lastTurn, result, 'legacy response retains the preceding result');
+   assert.equal(d.state().sending, true); assert.equal(d.state().activeTurnId, 'next');
+ }
+});
+
+test('S1 snapshots and metadata-only deltas update results without old HTTP reads undoing a terminal snapshot', async () => {
+ for (const result of turnResults) {
+   const d = driver(); d.live({ ...turn('current', 'inProgress'), lastTurn: null });
+   const pending = deferred(d), wait = d.poll('current');
+   d.live({ ...turn('current', result.status), lastTurn: result });
+   pending.resolve({ turn: { ...turn('current', 'inProgress'), lastTurn: null } }); await wait;
+   assert.deepEqual(d.state().lastTurn, result); assert.equal(d.state().activeTurnId, null);
+   const desktop = driver(); desktop.desktop({ threadId: 'thread', status: result.status, messages: [], lastTurn: result });
+   desktop.delta({ messages: [], cursor: 1 }); assert.deepEqual(desktop.state().lastTurn, result);
+   desktop.delta({ messages: [], cursor: 2, lastTurn: null }); assert.equal(desktop.state().lastTurn, null);
+   desktop.delta({ messages: [], cursor: 3, lastTurn: result }); assert.deepEqual(desktop.state().lastTurn, result);
+   desktop.delta({ messages: [], cursor: 0, generation: 'new', reset: true }); assert.equal(desktop.state().lastTurn, null);
+ }
+});
 
 test('late old-turn completion cannot clear a new active turn', async () => {
  const d = driver(); d.live(turn('old', 'inProgress'));

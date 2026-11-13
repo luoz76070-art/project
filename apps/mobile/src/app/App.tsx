@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { ProductRemoteShell } from "../features/product/ProductRemoteShell";
+import { TurnResultNotice } from "../features/chat/TurnResultNotice";
 import { isKelivoHost, navigateProduct, productBeforeNavigate, productOpenUpdates, takeProductSettingsLaunch, ProductHost } from "../features/product/host";
 import { productVersionCode, productVersionLabel } from "../features/product/identity";
 import { HandoffCard } from '../features/product/HandoffCard';
@@ -449,7 +450,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
         const mergedMessages = capMessages(mergeMessages(reset ? [] : runtime.messages, data.messages), { historyBrowsing });
         return {
           ...runtime,
-          ...turnProgressPatch(reset ? { ...runtime, turnStatus: "idle", activity: undefined, sending: false, activeTurnId: null } : runtime, data),
+          ...turnProgressPatch(reset ? { ...runtime, lastTurn: null, turnStatus: "idle", activity: undefined, sending: false, activeTurnId: null } : runtime, data),
           messages: mergedMessages,
           loaded: true,
           cursor: data.cursor ?? runtime.cursor,
@@ -840,8 +841,10 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
         watching: false,
         readonlyReason: "已由手机 Relay 接管；后续发送、引导、打断都会走手机控制通道。",
         status: turnStatusText(data.status),
-        activeTurnId: data.turnId,
+        sending: data.status === "starting" || data.status === "inProgress",
+        activeTurnId: data.status === "starting" || data.status === "inProgress" ? data.turnId : null,
         turnStatus: data.status,
+        ...(data.lastTurn !== undefined ? { lastTurn: data.lastTurn } : {}),
         lastEventCount: data.eventCount,
         lastTurnError: data.error ?? "",
         approvals: data.approvals ?? [],
@@ -1914,7 +1917,8 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
                 ))}
               </div>
             )}
-            {activeRuntime.lastTurnError && (
+            <TurnResultNotice result={activeRuntime.lastTurn} running={activeRuntime.turnStatus === "inProgress" || activeRuntime.turnStatus === "starting"} />
+            {activeRuntime.lastTurnError && activeRuntime.lastTurnError !== activeRuntime.lastTurn?.reason.message && (
               <div className="control-banner error-control">
                 <AlertCircle size={15} />
                 <span>{activeRuntime.lastTurnError}</span>

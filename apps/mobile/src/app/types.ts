@@ -1,4 +1,6 @@
 
+import type { LastTurn } from "../../../../shared/lastTurn";
+
 export type ThreadSummary = {
   id: string;
   threadName: string;
@@ -90,6 +92,7 @@ export type ApprovalPolicy = "never" | "on-request";
 export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
 
 export type ThreadRuntime = {
+  lastTurn?: LastTurn | null;
   messages: CodexMessage[];
   draft: string;
   sending: boolean;
@@ -152,6 +155,8 @@ export type LiveApproval = {
 };
 
 export type LiveTurnSnapshot = {
+  lastTurn?: LastTurn | null;
+  connected?: boolean;
   threadId: string;
   turnId: string;
   status: LiveTurnStatus;
@@ -166,8 +171,9 @@ export type LiveTurnSnapshot = {
 };
 
 export type DesktopStreamSnapshot = {
+  lastTurn?: LastTurn | null;
   threadId: string;
-  status: LiveTurnStatus;
+  status: LiveTurnStatus | "idle";
   messages: CodexMessage[];
   inputReplacements?: import("../features/chat/messageReconciliation").InputReplacement[];
   messageCount: number;

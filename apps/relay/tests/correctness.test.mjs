@@ -9,6 +9,10 @@ import { LiveTurnController } from '../dist/codex/liveTurnController.js';
 import { turnProgress } from '../dist/store/turnActivity.js';
 import { createRelayServer } from '../dist/server/createRelayServer.js';
 import { ordinaryPrompts, contextEnvelopes } from '../../../scripts/fixtures/user-prompts.mjs';
+import { turnResults } from '../../../scripts/fixtures/last-turn.mjs';
+import { codexLastTurn, makeLastTurn, LastTurnCache } from '../dist/store/lastTurn.js';
+import { desktopLastTurn } from '../dist/desktop/desktopControl.js';
+import { snapshotSender } from '../dist/server/snapshotPatch.js';
 
 const id = '11111111-1111-1111-1111-111111111111';
 const record = (text, type = 'agent_message') => JSON.stringify({ type: 'event_msg', timestamp: '2026-10-20T00:00:00Z', payload: { type, message: text } }) + '\n';
@@ -204,6 +208,129 @@ class FakeClient extends EventEmitter {
   isConnected() { return this.ready; }
   async stop() { this.stops++; this.ready = false; }
 }
+
+test('S1 desktop and rollout project only explicit terminal evidence with safe reasons and stable times', () => {
+  for (const expected of turnResults) {
+    const native = { turnId: expected.turnId, status: expected.status, completedAtMs: Date.parse(expected.endedAt), error: { message: 'PRIVATE TOKEN' } };
+    assert.deepEqual(codexLastTurn(native), expected);
+    assert.deepEqual(desktopLastTurn({ turns: [native] }), expected);
+    const kind = { completed: 'task_completed', failed: 'task_failed', interrupted: 'turn_aborted' }[expected.status];
+    assert.deepEqual(turnProgress([{ value: { type: 'event_msg', timestamp: expected.endedAt, payload: { type: kind, turn_id: expected.turnId, error: native.error } } }]).lastTurn, expected);
+  }
+  for (const status of [undefined, 'idle', 'new-unknown-status', 'inProgress']) assert.equal(codexLastTurn({ id: 't', status }), null);
+  assert.equal(desktopLastTurn({ turns: [{ turnId: 'unknown', status: 'unknown' }] }, turnResults[0]), null);
+  assert.equal(desktopLastTurn({ turns: [{ turnId: 'next', status: 'inProgress' }] }, turnResults[0]), turnResults[0]);
+  const observed = makeLastTurn('t', 'failed', 'provider_error');
+  assert.equal(observed.timeSource, 'observed');
+  assert.equal(makeLastTurn('t', 'failed', 'provider_error', undefined, observed), observed);
+  const precise = makeLastTurn('t', 'failed', 'provider_error', 1000, observed);
+  assert.equal(precise.timeSource, 'provider'); assert.equal(precise.endedAt, '1970-01-01T00:00:01.000Z');
+  const cache = new LastTurnCache();
+  for (let i = 0; i < 129; i++) cache.set(String(i), observed);
+  assert.equal(cache.get('0'), null); assert.equal(cache.get('128'), observed);
+  cache.set('session', observed, 'generation-1');
+  assert.equal(cache.get('session', 'generation-2'), null);
+  cache.set('session', precise, 'generation-2'); assert.equal(cache.get('session', 'generation-1'), null);
+});
+
+test('S1 results survive existing full reads, latest windows and deltas without extra history recovery', async t => {
+  const line = (result, type = 'task_completed') => JSON.stringify({ type: 'event_msg', timestamp: result.endedAt, payload: { type, turn_id: result.turnId } }) + '\n';
+  const { store, file } = await fixture(t, line(turnResults[0])); t.after(() => store.close());
+  assert.deepEqual((await store.readThread(id)).lastTurn, turnResults[0]);
+  const latest = await store.readThreadLatest(id); assert.deepEqual(latest.lastTurn, turnResults[0]);
+  await fs.appendFile(file, line(turnResults[2], 'turn_aborted'));
+  const delta = await store.readThreadDelta(id, latest.cursor, undefined, latest.generation);
+  assert.deepEqual(delta.lastTurn, turnResults[2]);
+  assert.deepEqual((await store.readThreadLatest(id)).lastTurn, turnResults[2]);
+  await fs.appendFile(file, record('', 'task_completed')); // No trustworthy turn ID at this boundary.
+  assert.equal((await store.readThread(id)).lastTurn, null);
+  assert.equal((await store.readThreadLatest(id)).lastTurn, null);
+  assert.equal((await store.readThreadDelta(id, delta.cursor, undefined, delta.generation)).lastTurn, null);
+  await fs.writeFile(file, record('new file'));
+  const reset = await store.readThreadDelta(id, delta.cursor, undefined, delta.generation);
+  assert.equal(reset.reset, true); assert.equal(reset.lastTurn, undefined);
+});
+
+test('S1 old SSE events and v1 metadata patches both carry a result when no message changes', () => {
+  for (const event of ['turn', 'desktop', 'agent-session']) for (const incremental of [false, true]) {
+    const frames = [], publish = snapshotSender((name, data) => frames.push({ name, data }), event, incremental);
+    publish({ messages: [], lastTurn: null });
+    for (const lastTurn of turnResults) publish({ messages: [], lastTurn });
+    assert.deepEqual(frames.slice(1).map(frame => frame.data.lastTurn), turnResults);
+    assert.ok(frames.every(frame => frame.name === event));
+    if (incremental) assert.equal(frames.at(-1).data.partial, true);
+  }
+});
+
+async function resultController(t, { early = false, status = 'completed' } = {}) {
+  const client = new EventEmitter(); let connected = false, ordinal = 0;
+  client.start = async () => { connected = true; };
+  client.isConnected = () => connected;
+  client.stop = async () => { connected = false; };
+  client.request = async method => {
+    if (method === 'thread/resume' || method === 'turn/interrupt') return {};
+    if (method === 'turn/start') {
+      const turn = { id: `result-${++ordinal}`, status: 'inProgress' };
+      if (early) for (let i = 0; i < 40; i++) client.emit('notification', { method: 'error', params: { threadId: id, turnId: turn.id, willRetry: true } });
+      if (early) client.emit('notification', { method: 'turn/completed', params: { threadId: id, turn: { ...turn, status, completedAt: 100 } } });
+      return { turn };
+    }
+    if (method === 'thread/read') return { thread: { id, name: 'Synthetic', updatedAt: 1, turns: [] } };
+    assert.fail(method);
+  };
+  const controller = new LiveTurnController('/synthetic', () => client);
+  t.after(() => controller.stop());
+  const start = () => controller.startTurn({ threadId: id, message: 'Synthetic' });
+  return { client, controller, start, event: (method, turnId, extra = {}) => client.emit('notification', { method, params: { threadId: id, turnId, ...extra } }) };
+}
+
+for (const status of ['completed', 'failed', 'interrupted']) test(`S1 Relay ${status} survives an event arriving before the start response`, async t => {
+  const f = await resultController(t, { early: true, status });
+  const turn = await f.start();
+  assert.equal(turn.lastTurn.status, status);
+  assert.equal(turn.lastTurn.endedAt, '1970-01-01T00:01:40.000Z');
+  assert.equal(turn.status, status);
+});
+
+test('S1 retry errors, interrupt ACK and transport disconnect do not settle; confirmed engine exit does', async t => {
+  const f = await resultController(t), turn = await f.start();
+  f.event('error', turn.turnId, { willRetry: true, error: { message: 'PRIVATE', codexErrorInfo: 'usageLimitExceeded' } });
+  assert.equal(f.controller.getTurn(turn.turnId).lastTurn, null);
+  const ack = await f.controller.interruptTurn({ threadId: id, turnId: turn.turnId });
+  assert.equal(ack.status, 'inProgress'); assert.equal(ack.lastTurn, null);
+  f.event('turn/completed', turn.turnId, { turn: { id: turn.turnId, status: 'unknown' } });
+  assert.equal(f.controller.getTurn(turn.turnId).lastTurn, null);
+  f.client.emit('disconnect');
+  const disconnected = f.controller.getTurn(turn.turnId);
+  assert.equal(disconnected.lastTurn, null); assert.equal(disconnected.status, 'inProgress'); assert.equal(disconnected.connected, false);
+  f.client.emit('engine-exit', { code: 1 });
+  const ended = f.controller.getTurn(turn.turnId);
+  assert.equal(ended.lastTurn.status, 'failed'); assert.equal(ended.lastTurn.reason.code, 'engine_exited');
+  assert.doesNotMatch(JSON.stringify(ended), /PRIVATE/);
+});
+
+test('S1 Relay retains previous turn result during a new turn and ignores stale end events', async t => {
+  const f = await resultController(t), a = await f.start();
+  f.event('turn/completed', a.turnId, { turn: { id: a.turnId, status: 'failed', error: { codexErrorInfo: 'usageLimitExceeded', message: 'PRIVATE' } } });
+  const result = f.controller.getTurn(a.turnId).lastTurn;
+  assert.equal(result.reason.code, 'rate_limited');
+  const b = await f.start(); assert.deepEqual(b.lastTurn, result);
+  f.event('turn/completed', b.turnId, { turn: { id: b.turnId, status: 'completed', completedAt: 200 } });
+  f.event('turn/completed', a.turnId, { turn: { id: a.turnId, status: 'failed' } });
+  const c = await f.start(); assert.equal(c.lastTurn.turnId, b.turnId);
+});
+
+test('S1 Relay final errors settle only when willRetry is false and native completion refines their time', async t => {
+  const f = await resultController(t), turn = await f.start();
+  f.event('error', turn.turnId, { error: { message: 'PRIVATE' } }); assert.equal(f.controller.getTurn(turn.turnId).lastTurn, null);
+  const error = { message: 'PRIVATE', codexErrorInfo: 'usageLimitExceeded' };
+  f.event('error', turn.turnId, { willRetry: false, error });
+  const result = f.controller.getTurn(turn.turnId).lastTurn;
+  assert.equal(result.status, 'failed'); assert.equal(result.reason.code, 'rate_limited'); assert.equal(result.timeSource, 'observed');
+  f.event('turn/completed', turn.turnId, { turn: { id: turn.turnId, status: 'failed', completedAt: 100, error } });
+  assert.equal(f.controller.getTurn(turn.turnId).lastTurn.timeSource, 'provider');
+  assert.equal(f.controller.getTurn(turn.turnId).lastTurn.endedAt, '1970-01-01T00:01:40.000Z');
+});
 
 test('ordinary role prompts survive app-server notifications and completed thread refresh', async t => {
   const client = new EventEmitter();

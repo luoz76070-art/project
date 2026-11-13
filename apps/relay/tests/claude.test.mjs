@@ -28,6 +28,30 @@ function fixture(t, limits = { leaseMs: 1000, pollMs: 15, operationMs: 500 }, in
   return { adapter, input, host, emit, watch, poll, latest, op, ready, disconnected: () => disconnected };
 }
 
+test('S1 Claude keeps unknown endings null and only accepts matching final evidence or an aborted lifecycle', async t => {
+  const f = fixture(t); const close = await f.ready();
+  assert.equal(f.latest().lastTurn, null);
+  f.emit([{ type: 'state', turnId: 'normal', activity: 'thinking' }, { type: 'state', turnId: null, activity: 'thinking', aborted: false }]);
+  assert.equal(f.latest().lastTurn, null, 'non-aborted alone is not success');
+  const final = turnId => ({ type: 'messages', partial: false, messages: [{ role: 'assistant', text: 'Synthetic final', turnId, phase: 'final_answer' }] });
+  f.emit([final('older')]); assert.equal(f.latest().lastTurn, null);
+  f.emit([final('normal')]); const completed = f.latest().lastTurn;
+  assert.equal(completed.status, 'completed'); assert.equal(completed.reason.code, 'ok'); assert.equal(completed.timeSource, 'observed');
+  f.emit([final('normal')]); assert.deepEqual(f.latest().lastTurn, completed);
+  f.emit([{ type: 'state', turnId: 'cancelled', activity: 'working' }]); assert.deepEqual(f.latest().lastTurn, completed);
+  const op = f.op(); await f.adapter.interruptSession(f.input.sessionId, op); await f.poll();
+  f.emit([{ type: 'receipt', id: op.clientMessageId, delivery: 'confirmed' }]); assert.deepEqual(f.latest().lastTurn, completed);
+  f.emit([{ type: 'state', turnId: null, activity: 'thinking', aborted: true }]);
+  assert.equal(f.latest().lastTurn.status, 'interrupted'); assert.equal(f.latest().lastTurn.reason.code, 'cancelled');
+  f.emit([{ type: 'state', turnId: 'unknown', activity: 'thinking' }, { type: 'state', turnId: null, activity: 'thinking' }, final('unknown')]);
+  assert.equal(f.latest().lastTurn, null);
+  close(); await f.watch(); assert.equal(f.latest().lastTurn, null);
+  f.adapter.end(f.input.sessionId, f.host.generation); // A lost host never manufactures failed.
+  const next = f.adapter.register(f.input), snapshots = [];
+  await f.adapter.watchSession(f.input.sessionId, value => snapshots.push(value), () => {});
+  assert.notEqual(next.generation, f.host.generation); assert.equal(snapshots.at(-1).lastTurn, null);
+});
+
 test('configuration, registration and passive status expose no credentials or startup side effects', async t => {
   const adapter = new ClaudeAdapter(); t.after(() => adapter.stop());
   assert.deepEqual((await adapter.listSessions()).sessions, []);
