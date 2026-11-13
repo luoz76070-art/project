@@ -42,7 +42,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
                 Root.COLUMN_ROOT_ID to WorkspaceDocumentPaths.ROOT,
                 Root.COLUMN_DOCUMENT_ID to WorkspaceDocumentPaths.ROOT,
                 Root.COLUMN_TITLE to "MobiCodex",
-                Root.COLUMN_ICON to R.mipmap.ic_launcher,
+                Root.COLUMN_ICON to R.mipmap.ic_launcher_mc,
                 Root.COLUMN_FLAGS to (Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD),
                 Root.COLUMN_MIME_TYPES to "*/*",
             ))

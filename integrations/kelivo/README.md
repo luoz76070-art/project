@@ -14,7 +14,7 @@
 
 ### 品牌资源再生成
 
-在 `apps/kelivo` 使用固定 Dart SDK，先运行 `dart run tool/prepare_mobicodex_branding.dart`，再依次运行 `dart run flutter_launcher_icons -f tool/mobicodex_icons.yaml`、`dart run flutter_native_splash:create --path=tool/mobicodex_splash.yaml`，最后运行 `dart run tool/prepare_mobicodex_branding.dart --finalize-android`。最后一步将四份旧系统启动背景指向仅宿主提供的 `android12splash`，避免远控模块的同名 `splash` 横竖屏资源覆盖。生成后复查主题继承、图标裁切、完整 Android lint 和实际资源合并结果。
+A1源文件在 `apps/kelivo/assets/branding/`。在macOS仓库根目录运行 `python3 apps/kelivo/tool/prepare_mobicodex_branding.py --preview-dir /tmp/b4-preview`，使用本机Swift/AppKit直接渲染SVG，无需Flutter或额外依赖。脚本保留图片尺寸，生成Android矢量层、传统图标及浅深启动图；预览从实际VectorDrawable投影，保存在临时目录。旧Dart入口转发同一脚本，`--finalize-android`仍只修正四份启动背景，防止远控模块的同名splash覆盖。不要再用旧PNG亮度推导前景，也不要在此流程之后运行Android launcher PNG生成器覆盖矢量资源。生成后仍需Android资源编译和实际设备验收。
 
 ## 历史 code9 交付
 
