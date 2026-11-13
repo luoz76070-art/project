@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { createRelayServer } from '../dist/server/createRelayServer.js';
 import { DeviceRegistry } from '../dist/server/devices.js';
 
@@ -40,7 +41,7 @@ async function fixture(t, { cleanup, watch } = {}) {
     const code = (await app.inject({ method: 'POST', url: '/api/pairing', headers: auth('admin-fixture') })).json().code;
     return (await app.inject({ method: 'POST', url: '/api/pairing/consume', payload: { code, name: 'fixture' } })).json();
   };
-  const routes = ['/api/live/turns/turn', '/api/desktop/threads/thread', '/api/agents/fixture/sessions/session'];
+  const routes = ['/api/live/turns/turn', '/api/desktop/threads/thread', '/api/agents/fixture/sessions/session', '/api/work-items'];
   async function ticket(route, token) {
     const result = await app.inject({ method: 'POST', url: `${route}/stream-token`, headers: auth(token), payload: {} });
     assert.equal(result.statusCode, 200, result.body);
@@ -56,8 +57,12 @@ async function fixture(t, { cleanup, watch } = {}) {
     stream.done = (async () => { try { while (!(await reader.read()).done) stream.frames++; } catch { /* destroyed HTTP streams may reject */ } finally { stream.closed = true; } })();
     return stream;
   }
-  return { app, pair, auth, routes, ticket, open, turns, desktop, agent, publish: () => {
+  return { app, pair, auth, routes, ticket, open, turns, desktop, agent, publish: async () => {
     turns.emit('snapshot', { ...turn, status: 'completed' }); desktop.emit('snapshot', snapshot); agent.emit('snapshot', agentSnapshot);
+    const changed = await app.inject({ method: 'POST', url: '/api/work-items', headers: auth('admin-fixture'), payload: {
+      uid: randomUUID(), mutationId: randomUUID(), expectedRevision: 0, kind: 'task', title: '隔离测试事项', detail: '', assets: [], codeRefs: [],
+    } });
+    assert.equal(changed.statusCode, 200, changed.body);
   } };
 }
 
@@ -82,7 +87,7 @@ test('all SSE families close within 1s before slow revoke cleanup; other device 
   assert.equal((await f.app.inject({ method: 'POST', url: '/api/pairing/consume', headers: f.auth(a.token), payload: {} })).statusCode, 401);
   assert.equal((await fetch(base + '/health')).status, 200, 'anonymous health stays public');
   const frames = unaffected.map(s => s.frames);
-  f.publish();
+  await f.publish();
   await within((async () => { while (unaffected.some((s, i) => s.frames <= frames[i])) await new Promise(r => setTimeout(r, 5)); })());
   assert.ok(unaffected.every(s => !s.closed));
   assert.equal(f.turns.listenerCount('snapshot'), 2);

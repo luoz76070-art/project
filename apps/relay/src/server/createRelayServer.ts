@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createWorkItemRoutes } from "./workItemRoutes.js";
 import { DeviceRegistry } from "./devices.js";
 import type { FastifyRequest } from "fastify";
 import { snapshotSender } from "./snapshotPatch.js";
@@ -69,10 +70,11 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const streams = new Set<PassThrough>();
   const readImage = createProjectImageReader();
   const agentSessionRoutes = createAgentSessionRoutes({ gateway: agentGateway, owners, devices, streams, deviceStreams, submissions, readImage });
+  const workItemRoutes = createWorkItemRoutes({ root: config.defaultCwd, owners, devices, streams, deviceStreams });
   // A route may still await its upstream's first frame before reply.send(stream).
   // Cancel adapters before HTTP drain, otherwise onClose cannot release that wait.
   app.addHook("preClose", async () => { voice.stop(); for (const stream of streams) stream.destroy(); await Promise.all([agentGateway.stop(), desktopControl.messageQueue?.stop()]); });
-  app.addHook("onClose", async () => { store.close(); await Promise.all([desktopControl.stop(), liveTurns.stop(), live.stop?.()]); });
+  app.addHook("onClose", async () => { store.close(); await Promise.all([desktopControl.stop(), liveTurns.stop(), live.stop?.(), workItemRoutes.stop()]); });
 
   await app.register(cors, {
     origin: true,
@@ -91,6 +93,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     if (eventStream && isValidStreamToken(eventStream.streamToken, eventStream.turnId)) owner = streamTokens.get(eventStream.streamToken!)!.owner;
     if (desktopEventStream && isValidDesktopStreamToken(desktopEventStream.streamToken, desktopEventStream.threadId)) owner = desktopStreamTokens.get(desktopEventStream.streamToken!)!.owner;
     owner ??= agentSessionRoutes.owner(request.url);
+    owner ??= workItemRoutes.owner(request.url);
     if (!owner) {
       const header = request.headers.authorization;
       const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
@@ -144,6 +147,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     const persisted = devices.revoke(id);
     voice.revoke(id);
     agentSessionRoutes.revoke(id);
+    workItemRoutes.revoke(id);
     for (const stream of deviceStreams.get(id) ?? []) stream.destroy();
     for (const [token, value] of streamTokens) if (value.owner === id) streamTokens.delete(token);
     for (const [token, value] of desktopStreamTokens) if (value.owner === id) desktopStreamTokens.delete(token);
@@ -184,6 +188,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     return { agent: await agentGateway.probe(id) };
   });
   agentSessionRoutes.register(app);
+  workItemRoutes.register(app);
 
   app.get("/health", async () => ({
     ok: true,
