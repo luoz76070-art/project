@@ -1,0 +1,865 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../scheduled_tasks/pages/scheduled_tasks_page.dart';
+import 'package:flutter/material.dart';
+import '../../../l10n/app_localizations.dart';
+import 'package:provider/provider.dart';
+import '../../../icons/lucide_adapter.dart';
+import '../../../core/providers/settings_provider.dart';
+import '../../model/pages/default_model_page.dart';
+import '../../provider/pages/providers_page.dart';
+import 'display_settings_page.dart';
+import 'settings_search_page.dart';
+import '../widgets/settings_search_entry.dart';
+import '../../mcp/pages/mcp_page.dart';
+import '../../workspace/pages/skills_page.dart';
+import '../../workspace/pages/workspace_settings_page.dart';
+import '../../assistant/pages/assistant_settings_page.dart';
+import 'about_page.dart';
+import 'memory_settings_page.dart';
+import 'tts_services_page.dart';
+import 'tool_schema_settings_page.dart';
+import 'sponsor_page.dart';
+import 'log_viewer_page.dart';
+import '../../search/pages/search_services_page.dart';
+import '../../backup/pages/backup_page.dart';
+import '../../quick_phrase/pages/quick_phrases_page.dart';
+import '../../instruction_injection/pages/instruction_injection_page.dart';
+import '../../world_book/pages/world_book_page.dart';
+import '../../../shared/widgets/section_card.dart';
+import 'network_proxy_page.dart';
+import 'phone_control_settings_page.dart';
+import '../../home/services/local_tools_service.dart';
+import 'storage_space_page.dart';
+import '../../stats/pages/stats_page.dart';
+import '../../../core/services/storage/storage_usage_service.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/services/haptics.dart';
+import 'package:Kelivo/theme/app_font_weights.dart';
+import 'package:Kelivo/theme/app_semantic_colors.dart';
+
+class SettingsPage extends StatelessWidget {
+  const SettingsPage({
+    super.key,
+    this.isProductRoot = false,
+    this.onComputerSettings,
+    this.onAppUpdates,
+  });
+
+  final bool isProductRoot;
+  final VoidCallback? onComputerSettings;
+  final VoidCallback? onAppUpdates;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final cs = Theme.of(context).colorScheme;
+    final settings = context.watch<SettingsProvider>();
+
+    String modeLabel(ThemeMode m) {
+      final l10n = AppLocalizations.of(context)!;
+      switch (m) {
+        case ThemeMode.dark:
+          return l10n.settingsPageDarkMode;
+        case ThemeMode.light:
+          return l10n.settingsPageLightMode;
+        case ThemeMode.system:
+          return l10n.settingsPageSystemMode;
+      }
+    }
+
+    Future<void> pickThemeMode() async {
+      final settingsProvider = context.read<SettingsProvider>();
+      final selected = await showModalBottomSheet<ThemeMode>(
+        context: context,
+        backgroundColor: context.overlaySurface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (ctx) {
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _sheetOption(
+                    ctx,
+                    icon: Lucide.Monitor,
+                    label: modeLabel(ThemeMode.system),
+                    onTap: () => Navigator.of(ctx).pop(ThemeMode.system),
+                  ),
+                  _sheetDivider(ctx),
+                  _sheetOption(
+                    ctx,
+                    icon: Lucide.Sun,
+                    label: modeLabel(ThemeMode.light),
+                    onTap: () => Navigator.of(ctx).pop(ThemeMode.light),
+                  ),
+                  _sheetDivider(ctx),
+                  _sheetOption(
+                    ctx,
+                    icon: Lucide.Moon,
+                    label: modeLabel(ThemeMode.dark),
+                    onTap: () => Navigator.of(ctx).pop(ThemeMode.dark),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+      if (selected != null) {
+        await settingsProvider.setThemeMode(selected);
+      }
+    }
+
+    // iOS-style section header (neutral color, not theme color)
+    Widget header(String text, {bool first = false}) => Padding(
+      padding: EdgeInsets.fromLTRB(12, first ? 2 : 12, 12, 6),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: AppFontWeights.semibold,
+          color: cs.onSurface.withValues(alpha: 0.8),
+        ),
+      ),
+    );
+
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: !isProductRoot,
+        leading: isProductRoot
+            ? null
+            : Tooltip(
+                message: l10n.settingsPageBackButton,
+                child: _TactileIconButton(
+                  icon: Lucide.ArrowLeft,
+                  color: cs.onSurface,
+                  size: 22,
+                  onTap: () => Navigator.of(context).maybePop(),
+                ),
+              ),
+        title: Text(l10n.settingsPageTitle),
+      ),
+      body: SettingsSearchList(
+        onSearch: (origin) => showMobileSettingsSearch(
+          context,
+          origin: origin,
+          onColorMode: pickThemeMode,
+        ),
+        children: [
+          if (isProductRoot && onComputerSettings != null) ...[
+            header('电脑', first: true),
+            SectionCard(
+              children: [
+                _iosNavRow(
+                  context,
+                  icon: Lucide.Monitor,
+                  label: '电脑连接与控制',
+                  detailText: '配对、设备与运行策略',
+                  onTap: onComputerSettings!,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (isProductRoot && onAppUpdates != null) ...[
+            header('应用'),
+            SectionCard(
+              children: [
+                _iosNavRow(
+                  context,
+                  icon: Lucide.Download,
+                  label: '应用更新',
+                  detailText: '检查新版本、下载并安装',
+                  onTap: onAppUpdates!,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (!settings.hasAnyActiveModel)
+            Material(
+              color: cs.errorContainer.withValues(alpha: 0.30),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Icon(
+                      Lucide.MessageCircleWarning,
+                      size: 18,
+                      color: cs.error,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        l10n.settingsPageWarningMessage,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurface.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // 通用设置：使用iOS风格分组卡片，黑色（中性）图标与标题，无描述
+          header(l10n.settingsPageGeneralSection, first: true),
+          SectionCard(
+            children: [
+              _iosNavRow(
+                context,
+                icon: Lucide.SunMoon,
+                label: l10n.settingsPageColorMode,
+                detailText: modeLabel(settings.themeMode),
+                onTap: pickThemeMode,
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Monitor,
+                label: l10n.settingsPageDisplay,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const DisplaySettingsPage(),
+                    ),
+                  );
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Bot,
+                label: l10n.settingsPageAssistant,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AssistantSettingsPage(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+          header(l10n.settingsPageModelsServicesSection),
+          SectionCard(
+            children: [
+              _iosNavRow(
+                context,
+                icon: Lucide.Heart,
+                label: l10n.settingsPageDefaultModel,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const DefaultModelPage()),
+                  );
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Boxes,
+                label: l10n.settingsPageProviders,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ProvidersPage()),
+                  );
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Earth,
+                label: l10n.settingsPageSearch,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SearchServicesPage(),
+                    ),
+                  );
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Volume2,
+                label: l10n.settingsPageTts,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const TtsServicesPage()),
+                  );
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Terminal,
+                label: l10n.settingsPageMcp,
+                onTap: () {
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const McpPage()));
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.FolderCode,
+                label: l10n.settingsPageWorkspace,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const WorkspaceSettingsPage(),
+                    ),
+                  );
+                },
+              ),
+              _iosDivider(context),
+              if (defaultTargetPlatform == TargetPlatform.android ||
+                  defaultTargetPlatform == TargetPlatform.iOS) ...[
+                _iosNavRow(
+                  context,
+                  icon: LucideIcons.clock,
+                  label: l10n.scheduledTasksTitle,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ScheduledTasksPage(),
+                    ),
+                  ),
+                ),
+                _iosDivider(context),
+              ],
+              _iosNavRow(
+                context,
+                icon: Lucide.WandSparkles,
+                label: l10n.settingsPageSkills,
+                onTap: () {
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const SkillsPage()));
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.BookOpen,
+                label: l10n.settingsPageWorldBook,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const WorldBookPage()),
+                  );
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Brain,
+                label: l10n.settingsPageMemory,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const MemorySettingsPage(),
+                    ),
+                  );
+                },
+              ),
+              _iosDivider(context),
+              if (DeviceLocalTools.phoneControlSupported) ...[
+                _iosNavRow(
+                  context,
+                  icon: Lucide.Smartphone,
+                  label: l10n.phoneControlTitle,
+                  onTap: () => PhoneControlSettingsPage.open(context),
+                ),
+                _iosDivider(context),
+              ],
+              _iosNavRow(
+                context,
+                icon: Lucide.Zap,
+                label: l10n.settingsPageQuickPhrase,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const QuickPhrasesPage()),
+                  );
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Layers,
+                label: l10n.settingsPageInstructionInjection,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const InstructionInjectionPage(),
+                    ),
+                  );
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.EthernetPort,
+                label: l10n.settingsPageNetworkProxy,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const NetworkProxyPage()),
+                  );
+                },
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+          header(l10n.settingsPageDataSection),
+          SectionCard(
+            children: [
+              _iosNavRow(
+                context,
+                icon: Lucide.Database,
+                label: l10n.settingsPageBackup,
+                onTap: () {
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const BackupPage()));
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.HardDrive,
+                label: l10n.settingsPageChatStorage,
+                detailBuilder: (_) => const _ChatStorageSummary(),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const StorageSpacePage()),
+                  );
+                },
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+          header(l10n.settingsPageAboutSection),
+          SectionCard(
+            children: [
+              _iosNavRow(
+                context,
+                icon: Lucide.BadgeInfo,
+                label: l10n.settingsPageAbout,
+                onTap: () {
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const AboutPage()));
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.ChartColumnBig,
+                label: l10n.settingsPageStatistics,
+                onTap: () {
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const StatsPage()));
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Library,
+                label: l10n.settingsPageDocs,
+                onTap: () async {
+                  final uri = Uri.parse(
+                    'https://github.com/luoz76070-art/project/blob/main/docs/usage.md',
+                  );
+                  if (!await launchUrl(uri, mode: LaunchMode.platformDefault)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+              ),
+              if (settings.requestLogEnabled ||
+                  settings.flutterLogEnabled ||
+                  settings.contextLogEnabled) ...[
+                _iosDivider(context),
+                _iosNavRow(
+                  context,
+                  icon: Lucide.FileText,
+                  label: l10n.settingsPageLogs,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const LogViewerPage()),
+                    );
+                  },
+                ),
+              ],
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Wrench,
+                label: l10n.toolSchemaSettingsPageTitle,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ToolSchemaSettingsPage(),
+                    ),
+                  );
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Heart,
+                label: l10n.settingsPageSponsor,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SponsorPage()),
+                  );
+                },
+              ),
+              // _iosDivider(context),
+              // _iosNavRow(
+              //   context,
+              //   icon: Lucide.Share2,
+              //   label: l10n.settingsPageShare,
+              //   onTap: () async {
+              //     // Provide anchor rect from overlay for iPad share sheet
+              //     Rect anchor;
+              //     try {
+              //       final overlay = Overlay.of(context);
+              //       final ro = overlay?.context.findRenderObject();
+              //       if (ro is RenderBox && ro.hasSize) {
+              //         final center = ro.size.center(Offset.zero);
+              //         final global = ro.localToGlobal(center);
+              //         anchor = Rect.fromCenter(center: global, width: 1, height: 1);
+              //       } else {
+              //         final size = MediaQuery.of(context).size;
+              //         anchor = Rect.fromCenter(center: Offset(size.width / 2, size.height / 2), width: 1, height: 1);
+              //       }
+              //     } catch (_) {
+              //       final size = MediaQuery.of(context).size;
+              //       anchor = Rect.fromCenter(center: Offset(size.width / 2, size.height / 2), width: 1, height: 1);
+              //     }
+              //     await Share.share(l10n.settingsShare, sharePositionOrigin: anchor);
+              //   },
+              // ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+// --- iOS-style widgets for Settings page ---
+
+Widget _iosDivider(BuildContext context) {
+  final cs = Theme.of(context).colorScheme;
+  // Restore previous visual: align with icon slot (36) + gap (12) + padding (12)
+  return Divider(
+    height: 6,
+    thickness: 0.6,
+    indent: 54,
+    endIndent: 12,
+    color: cs.outlineVariant.withValues(alpha: 0.18),
+  );
+}
+
+// Shared color tween wrapper to mimic iOS gentle press color transition
+class _AnimatedPressColor extends StatelessWidget {
+  const _AnimatedPressColor({
+    required this.pressed,
+    required this.base,
+    required this.builder,
+  });
+  final bool pressed;
+  final Color base;
+  final Widget Function(Color color) builder;
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final target = pressed
+        ? (Color.lerp(base, cs.surface, 0.55) ?? base)
+        : base;
+    return TweenAnimationBuilder<Color?>(
+      tween: ColorTween(end: target),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      builder: (context, color, _) => builder(color ?? base),
+    );
+  }
+}
+
+class _ChatStorageSummary extends StatefulWidget {
+  const _ChatStorageSummary();
+
+  @override
+  State<_ChatStorageSummary> createState() => _ChatStorageSummaryState();
+}
+
+class _ChatStorageSummaryState extends State<_ChatStorageSummary> {
+  late Future<StorageUsageReport> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = StorageUsageService.computeReport();
+  }
+
+  String _fmtBytes(int bytes) {
+    const kb = 1024;
+    const mb = kb * 1024;
+    const gb = mb * 1024;
+    if (bytes >= gb) return '${(bytes / gb).toStringAsFixed(2)} GB';
+    if (bytes >= mb) return '${(bytes / mb).toStringAsFixed(2)} MB';
+    if (bytes >= kb) return '${(bytes / kb).toStringAsFixed(1)} KB';
+    return '$bytes B';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final cs = Theme.of(context).colorScheme;
+    final style = TextStyle(
+      color: cs.onSurface.withValues(alpha: 0.6),
+      fontSize: 13,
+    );
+
+    return FutureBuilder<StorageUsageReport>(
+      future: _future,
+      builder: (context, snapshot) {
+        final data = snapshot.data;
+        if (snapshot.connectionState != ConnectionState.done) {
+          return Text(l10n.settingsPageCalculating, style: style);
+        }
+        return Text(_fmtBytes(data?.totalBytes ?? 0), style: style);
+      },
+    );
+  }
+}
+
+Widget _iosNavRow(
+  BuildContext context, {
+  required IconData icon,
+  required String label,
+  VoidCallback? onTap,
+  String? detailText,
+  Widget Function(BuildContext ctx)? detailBuilder,
+}) {
+  final cs = Theme.of(context).colorScheme;
+  final interactive = onTap != null;
+  return _TactileRow(
+    onTap: onTap,
+    pressedScale: 1.00,
+    haptics: false,
+    builder: (pressed) {
+      final baseColor = cs.onSurface.withValues(alpha: 0.9);
+      return _AnimatedPressColor(
+        pressed: pressed,
+        base: baseColor,
+        builder: (c) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            child: Row(
+              children: [
+                SizedBox(width: 36, child: Icon(icon, size: 20, color: c)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: c,
+                      fontWeight: AppFontWeights.medium,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (detailBuilder != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: DefaultTextStyle.merge(
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: cs.onSurface.withValues(alpha: 0.6),
+                      ),
+                      child: detailBuilder(context),
+                    ),
+                  )
+                else if (detailText != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Text(
+                      detailText,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: cs.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ),
+                if (interactive) Icon(Lucide.ChevronRight, size: 16, color: c),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+class _TactileRow extends StatefulWidget {
+  const _TactileRow({
+    required this.builder,
+    this.onTap,
+    this.pressedScale = 1.00,
+    this.haptics = true,
+  });
+  final Widget Function(bool pressed) builder;
+  final VoidCallback? onTap;
+  final double pressedScale;
+  final bool haptics;
+  @override
+  State<_TactileRow> createState() => _TactileRowState();
+}
+
+class _TactileRowState extends State<_TactileRow> {
+  bool _pressed = false;
+  void _setPressed(bool v) {
+    if (_pressed != v) setState(() => _pressed = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: widget.onTap == null ? null : (_) => _setPressed(true),
+      onTapUp: widget.onTap == null ? null : (_) => _setPressed(false),
+      onTapCancel: widget.onTap == null ? null : () => _setPressed(false),
+      onTap: widget.onTap == null
+          ? null
+          : () {
+              if (widget.haptics &&
+                  context.read<SettingsProvider>().hapticsOnListItemTap) {
+                Haptics.soft();
+              }
+              widget.onTap!.call();
+            },
+      child: widget.builder(_pressed),
+    );
+  }
+}
+
+// Icon-only tactile button for AppBar: no ripple, slight press scale
+class _TactileIconButton extends StatefulWidget {
+  const _TactileIconButton({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    this.size = 22,
+  });
+
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  final double size;
+
+  @override
+  State<_TactileIconButton> createState() => _TactileIconButtonState();
+}
+
+class _TactileIconButtonState extends State<_TactileIconButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = widget.color;
+    final pressColor = base.withValues(alpha: 0.7);
+    final icon = Icon(
+      widget.icon,
+      size: widget.size,
+      color: _pressed ? pressColor : base,
+    );
+
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: () {
+          Haptics.light();
+          widget.onTap();
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: icon,
+        ),
+      ),
+    );
+  }
+}
+
+// Bottom sheet iOS-style option with tactile feedback (no ripple)
+Widget _sheetOption(
+  BuildContext context, {
+  required IconData icon,
+  required String label,
+  required VoidCallback onTap,
+}) {
+  final cs = Theme.of(context).colorScheme;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  return _TactileRow(
+    pressedScale: 1.00,
+    haptics: true,
+    onTap: onTap,
+    builder: (pressed) {
+      final base = cs.onSurface;
+      final bgTarget = pressed
+          ? (cs.onSurface.withValues(alpha: isDark ? 0.06 : 0.05))
+          : Colors.transparent;
+      return _AnimatedPressColor(
+        pressed: pressed,
+        base: base,
+        builder: (c) {
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            color: bgTarget,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                SizedBox(width: 24, child: Icon(icon, size: 20, color: c)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(label, style: TextStyle(fontSize: 15, color: c)),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+Widget _sheetDivider(BuildContext context) {
+  final cs = Theme.of(context).colorScheme;
+  return Divider(
+    height: 1,
+    thickness: 0.6,
+    indent: 52,
+    endIndent: 16,
+    color: cs.outlineVariant.withValues(alpha: 0.18),
+  );
+}

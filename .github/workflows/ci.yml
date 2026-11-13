@@ -2,15 +2,9 @@ name: CI
 
 on:
   pull_request:
-    paths:
-      - "codex-to-phone/**"
-      - ".github/workflows/ci.yml"
   push:
     branches:
       - main
-    paths:
-      - "codex-to-phone/**"
-      - ".github/workflows/ci.yml"
   workflow_dispatch:
 
 permissions:
@@ -31,7 +25,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        working-directory: codex-to-phone
+        working-directory: .
 
     steps:
       - name: Check out repository
@@ -48,7 +42,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: codex-to-phone/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -76,6 +70,11 @@ jobs:
           set -o pipefail
           pnpm test:verification 2>&1 | tee ci-artifacts/quality/test-verification.log
 
+      - name: Run message reconciliation regression
+        run: |
+          set -o pipefail
+          pnpm test:messages 2>&1 | tee ci-artifacts/quality/test-messages.log
+
       - name: Upload quality logs and build outputs
         if: always()
         uses: actions/upload-artifact@v4
@@ -83,9 +82,9 @@ jobs:
           name: ci-quality-outputs
           if-no-files-found: warn
           path: |
-            codex-to-phone/ci-artifacts/quality/
-            codex-to-phone/apps/mobile/dist/
-            codex-to-phone/apps/relay/dist/
+            ci-artifacts/quality/
+            apps/mobile/dist/
+            apps/relay/dist/
 
   android:
     name: Android debug APK and lint
@@ -93,7 +92,7 @@ jobs:
     timeout-minutes: 45
     defaults:
       run:
-        working-directory: codex-to-phone
+        working-directory: .
 
     steps:
       - name: Check out repository
@@ -110,7 +109,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: codex-to-phone/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Set up JDK 17 for Android lint
         id: jdk17
@@ -185,6 +184,6 @@ jobs:
           name: ci-android-debug
           if-no-files-found: warn
           path: |
-            codex-to-phone/ci-artifacts/android/
-            codex-to-phone/apps/mobile/android/app/build/reports/
-            codex-to-phone/apps/mobile/android/app/build/outputs/apk/debug/*.apk
+            ci-artifacts/android/
+            apps/mobile/android/app/build/reports/
+            apps/mobile/android/app/build/outputs/apk/debug/*.apk
