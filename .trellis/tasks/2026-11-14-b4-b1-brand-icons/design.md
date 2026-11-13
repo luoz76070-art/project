@@ -1,0 +1,6 @@
+# 设计
+
+B4提交：五份源SVG逐字节复制；原生矢量保留1536 viewport并平移256，width/height为108dp，取消旧inset，准确保留渐变三色与10%径向高光。浅底启动图用mark-light，深底用同画布的米白M/琥珀点；主图和既有品牌文件按原尺寸重绘。生成脚本从SVG解析几何而非再次从旧PNG亮度推导alpha。
+B1提交：启动资源切为ic_launcher_mc及ic_launcher_mc_round、Manifest与两处Kotlin同步；删除旧ic_launcher资源、旧色值及app_icon_dark；通知只取M路径，白色透明底。停用会重建默认旧名的Android PNG图标生成配置，保留其他平台配置。
+qlmanage在本沙箱返回sandbox initialization failed: Operation not permitted。不用提权；替代为本机Swift/AppKit的SVG原生渲染（已验证透明PNG），不安装依赖。预览SVG由最终VectorDrawable反向投影后渲染，预览与生成清单放/tmp/b4-preview，不入Git。
+全仓引用扫描区分Kelivo宿主、独立apps/mobile及第三方示例；后两者有自己的同名资源，不跨边界修改。Android资源名变化仍须荣耀覆盖安装验证，不能把XML和图像检查称为系统缓存真机验收。

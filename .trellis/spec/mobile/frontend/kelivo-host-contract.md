@@ -8,7 +8,7 @@ Flutter 的 KelivoApplication 拥有唯一主引擎、AI业务和全局设置。
 
 当前本地独立包：`com.mobilecodex.kelivo.preview`，`0.1.8-native-preview` / code10，minSdk24，arm64 AOT；独立通道交付见mobicodex-branding审计。Namespace 继续为上游值，不等于实际包名。Android OAuth scheme 为 `mobilecodex.kelivo.preview`，Manifest/Kotlin/Dart/测试须同时核对；其他平台不全局替换。备份 URI 仅增加精确包白名单。
 
-显示品牌为 MobiCodex。普通/自适应/monochrome 图标及浅深启动资源使用用户选定图片，生成入口为 `tool/prepare_mobicodex_branding.dart` 与 `tool/mobicodex_*.yaml`。内部 package、OAuth、数据库、备份、工具 ID 保持兼容；上游来源/许可真实保留。内置技能只刷新精确匹配旧 SHA 且来源为 bundled 的文件，保留用户编辑、删除与设置。
+显示品牌为 MobiCodex。B4：`assets/branding/`五份A1 SVG为品牌源。`tool/prepare_mobicodex_branding.py`使用macOS Swift/AppKit原生SVG渲染，旧Dart入口转发同一生成器；无需安装依赖。Android背景为三色线性渐变叠10%白色径向高光，前景米白M/琥珀点，monochrome为透明底纯色M/点。矢量108dp、1536 viewport、平移256，对齐源文件72dp可见区；禁止另加旧16% inset。浅深启动图及实际引用的品牌PNG按原尺寸生成，`icon_mac.png`为透明模板，源码/预览均不得混入许可或包身份修改。内部 package、OAuth、数据库、备份、工具 ID 保持兼容；上游来源/许可真实保留。内置技能只刷新精确匹配旧 SHA 且来源为 bundled 的文件，保留用户编辑、删除与设置。
 
 ## 导航与状态
 
