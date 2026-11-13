@@ -10,6 +10,7 @@ const digest = (token: string) => createHash("sha256").update(token).digest("hex
 /** Only device hashes persist. One-time codes are bounded and expire on restart. */
 export class DeviceRegistry {
   private devices: Device[] = [];
+  private readonly revoked = new Set<string>();
   private readonly codes = new Map<string, number>();
   private failures = 0;
   private retryAt = 0;
@@ -26,10 +27,10 @@ export class DeviceRegistry {
 
   authenticate(token: string): string | null {
     const actual = Buffer.from(digest(token), "hex");
-    return this.devices.find(device => timingSafeEqual(Buffer.from(device.tokenHash, "hex"), actual))?.id ?? null;
+    return this.devices.find(device => !this.revoked.has(device.id) && timingSafeEqual(Buffer.from(device.tokenHash, "hex"), actual))?.id ?? null;
   }
 
-  has(id: string) { return id === "admin" || this.devices.some(device => device.id === id); }
+  has(id: string) { return id === "admin" || (!this.revoked.has(id) && this.devices.some(device => device.id === id)); }
   list() { return this.devices.map(({ tokenHash: _hash, ...device }) => device); }
 
   createPairing() {
@@ -65,10 +66,13 @@ export class DeviceRegistry {
   }
 
   async revoke(id: string) {
+    // Fail closed immediately, including while another credential write is pending.
+    if (this.devices.some(device => device.id === id)) this.revoked.add(id);
     return this.serialize(async () => {
       const next = this.devices.filter(device => device.id !== id);
       await this.persist(next);
       this.devices = next;
+      this.revoked.delete(id);
     });
   }
 

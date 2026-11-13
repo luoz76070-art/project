@@ -90,14 +90,18 @@ export function createAgentSessionRoutes(context: {
         if (!streamToken) return reply.code(401).send({ error: "unauthorized" });
         const adapter = sessionAdapter(params), owner = streamToken.owner;
         const { v } = z.object({ v: z.coerce.number().optional() }).parse(request.query);
-        if (streams.size >= 32 || (deviceStreams.get(owner)?.size ?? 0) >= 4 || !devices.has(owner)) return reply.code(429).send({ error: "stream_limit" });
+        if (!devices.has(owner)) return reply.code(401).send({ error: "unauthorized" });
+        if (streams.size >= 32 || (deviceStreams.get(owner)?.size ?? 0) >= 4) return reply.code(429).send({ error: "stream_limit" });
         const events = createEventStream(reply, streams), owned = deviceStreams.get(owner) ?? new Set<PassThrough>();
         deviceStreams.set(owner, owned); owned.add(events.stream);
         const key = mediaKey(owner, params), bindings = media.get(key) ?? new Set<MediaBinding>();
         const binding: MediaBinding = { directory: null, epoch: 0, references: new Set(), history: new Set() };
         media.set(key, bindings); bindings.add(binding);
         let closed = false, unsubscribe: (() => void) | undefined;
-        events.onClose(() => { closed = true; binding.directory = null; bindings.delete(binding); if (!bindings.size) media.delete(key);
+        events.onClose(() => {
+          // watchSession can still be awaiting its first upstream frame.
+          if (!reply.sent && !reply.raw.headersSent && !devices.has(owner)) void reply.code(401).send({ error: "unauthorized" });
+          closed = true; binding.directory = null; bindings.delete(binding); if (!bindings.size) media.delete(key);
           unsubscribe?.(); owned.delete(events.stream); if (!owned.size) deviceStreams.delete(owner); });
         const publish = snapshotSender(events.send, "agent-session", v === 1);
         try {
@@ -111,8 +115,8 @@ export function createAgentSessionRoutes(context: {
             publish(snapshot);
           }, () => { binding.directory = null; events.stream.destroy(); });
           if (closed) unsubscribe();
-          return events.ready();
-        } catch (error) { events.stream.destroy(); throw error; }
+          return reply.sent ? reply : events.ready();
+        } catch (error) { events.stream.destroy(); if (reply.sent) return reply; throw error; }
       });
       app.post("/api/agents/:agentId/sessions/:sessionId/messages", { bodyLimit: 90_000 }, async request => {
         const params = paramsSchema.parse(request.params);
