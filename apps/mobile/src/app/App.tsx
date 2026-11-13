@@ -1947,7 +1947,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
               deliveries={nativeDesktop ? { steer: canSubmitMessage, queue: canSend } : undefined}
               status={!activeRuntime.desktopSubmission && activeRuntime.desktopSendFeedback ? activeRuntime.desktopSendFeedback : isLiveTurnActive ? turnActivity.label : `${isDesktopWatch ? "电脑" : "Relay"} · ${isDesktopHistoryOnly ? "历史会话" : "当前会话"}`}
               statusTitle={activeRuntime.desktopSendFeedback || (isLiveTurnActive ? turnActivity.label : controlText)} placeholder="向 Codex 发送消息"
-              voice={<VoiceInput scope={scope} thread={`codex:${activeThreadKey || newThreadId}`} recovery={voiceRecovery} key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
+              voice={<VoiceInput context={{ cwd: selected?.cwd, title: selected?.threadName, messages }} scope={scope} thread={`codex:${activeThreadKey || newThreadId}`} recovery={voiceRecovery} key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
                 onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }} />} />
           </footer>
         </section>

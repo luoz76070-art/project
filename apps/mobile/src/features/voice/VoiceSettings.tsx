@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { voiceApi } from "./api";
 import { voiceError, type VoiceConfig } from "./model";
 
+import { voiceContextEnabled, setVoiceContextEnabled } from "./preferences";
+
 export function VoiceSettings({ endpoint, token }: { endpoint: string; token: string }) {
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false);
   const [config, setConfig] = useState<VoiceConfig | null>(null), [error, setError] = useState("");
@@ -10,6 +12,7 @@ export function VoiceSettings({ endpoint, token }: { endpoint: string; token: st
   const [qwenKey, setQwenKey] = useState(""), [deepseekKey, setDeepseekKey] = useState("");
   const [qwenBaseUrl, setQwenBaseUrl] = useState(""), [qwenModel, setQwenModel] = useState("qwen-audio-3.1-asr-flash");
   const [deepseekBaseUrl, setDeepseekBaseUrl] = useState(""), [deepseekModel, setDeepseekModel] = useState("");
+  const [useContext, setUseContext] = useState(voiceContextEnabled);
   const current = useRef<AbortController | null>(null);
   useEffect(() => () => current.current?.abort(), []);
   useEffect(() => { if (!open) { current.current?.abort(); setQwenKey(""); setDeepseekKey(""); } }, [open]);
@@ -36,6 +39,10 @@ export function VoiceSettings({ endpoint, token }: { endpoint: string; token: st
   }}>
     <summary>语音与提示词</summary>
     <p className="setting-description">百炼 Qwen-ASR 转文字，DeepSeek 整理提示词。Key 保存在当前电脑网关，仅此配对设备使用；留空保留已有配置。</p>
+    <label>识别时参考当前会话（项目名、标题、文件名）
+      <button type="button" className="action-button" role="switch" aria-label="识别时参考当前会话（项目名、标题、文件名）" aria-checked={useContext} onClick={() => { const next = !useContext; setVoiceContextEnabled(next); setUseContext(next); }}>{useContext ? "已开启" : "已关闭"}</button>
+    </label>
+    <p className="setting-description">开启后，项目名、会话标题和近期文件名会发给语音识别服务商；不发送完整路径或消息正文。关闭立即生效。</p>
     {busy && <p role="status">正在处理配置…</p>}
     {config && <>
       <label>百炼地域<select value={region} onChange={event => {

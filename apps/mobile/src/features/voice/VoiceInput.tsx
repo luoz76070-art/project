@@ -10,14 +10,17 @@ import { voiceDraftHash } from "./recovery";
 import { findMissingVoiceDetails } from "./refineGuard";
 import type { VoiceRecoveryPort } from "./useVoiceRecovery";
 
+import { buildAsrHints, type VoiceContextSource } from "./asrContext";
+import { voiceContextEnabled } from "./preferences";
+
 type Phase = "idle" | "starting" | "recording" | "transcribing" | "failed" | "refining" | "preview";
-export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, recovery }: { endpoint: string; token: string; draft: string; onDraft: (value: string) => void; scope: string; thread: string; recovery: VoiceRecoveryPort }) {
+export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, recovery, context }: { endpoint: string; token: string; draft: string; onDraft: (value: string) => void; scope: string; thread: string; recovery: VoiceRecoveryPort; context?: VoiceContextSource }) {
   const [open, setOpen] = useState(false), [phase, setPhase] = useState<Phase>("idle");
   const [mode, setMode] = useState<"text" | "prompt">("prompt"), [seconds, setSeconds] = useState(0);
   const [original, setOriginal] = useState(""), [prompt, setPrompt] = useState(""), [error, setError] = useState("");
   const sheet = useRef<HTMLElement | null>(null);
-  const session = useRef<{ id: string; base: string; conflict: boolean; mode: "text" | "prompt"; abort: AbortController; requestId?: string; finished?: boolean; recordingReceived?: boolean; recording?: { dataBase64: string; durationMs: number } } | null>(null);
-  const latest = useRef({ draft, onDraft }); latest.current = { draft, onDraft };
+  const session = useRef<{ id: string; base: string; conflict: boolean; mode: "text" | "prompt"; abort: AbortController; requestId?: string; hints?: string[]; finished?: boolean; recordingReceived?: boolean; recording?: { dataBase64: string; durationMs: number } } | null>(null);
+  const latest = useRef({ draft, onDraft, context }); latest.current = { draft, onDraft, context };
   if (session.current && draft !== session.current.base) session.current.conflict = true;
   const api = voiceApi(endpoint, token);
   const available = voiceRecordingSupported();
@@ -90,7 +93,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
     if (session.current !== active || !active.finished || !active.recording || active.abort.signal.aborted) return;
     active.finished = false; setPhase("transcribing"); setError("");
     try {
-      const text = await submit("asr", active, id => api.transcribe(id, active.recording!.dataBase64, active.recording!.durationMs, active.abort.signal));
+      const text = await submit("asr", active, id => api.transcribe(id, active.recording!.dataBase64, active.recording!.durationMs, active.abort.signal, voiceContextEnabled() ? active.hints : undefined));
       if (session.current !== active) return;
       active.requestId = undefined; active.recording = undefined; setOriginal(text);
       if (active.mode === "prompt") await refine(text, active);
@@ -107,7 +110,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
   async function start() {
     if (session.current && !session.current.finished) return;
     cancel(); setError(""); setPrompt(""); setOriginal(""); setSeconds(0); setPhase("starting");
-    const active = { id: crypto.randomUUID(), base: latest.current.draft, conflict: false, mode, abort: new AbortController() } as NonNullable<typeof session.current>;
+    const active = { id: crypto.randomUUID(), base: latest.current.draft, hints: voiceContextEnabled() && latest.current.context ? buildAsrHints(latest.current.context) : undefined, conflict: false, mode, abort: new AbortController() } as NonNullable<typeof session.current>;
     session.current = active;
     let listener: Awaited<ReturnType<typeof VoiceRecorder.addListener>> | undefined;
     try {

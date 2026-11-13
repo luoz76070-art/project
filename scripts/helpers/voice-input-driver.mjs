@@ -8,10 +8,10 @@ const source = await fs.readFile(new URL('../../apps/mobile/src/features/voice/V
 const ast = ts.createSourceFile('VoiceInput.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n').replace('export function VoiceInput', 'function VoiceInput');
 const js = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.React, jsxFactory: 'h', jsxFragmentFactory: 'Fragment' } }).outputText;
-const dependencies = ['useEffect', 'useRef', 'useState', 'createPortal', 'VoiceRecorder', 'voiceRecordingSupported', 'voiceApi', 'mergeVoiceDraft', 'voiceError', 'writeClipboard', 'voiceDraftHash', 'document', 'HTMLElement', 'h', 'Fragment', 'Mic', 'X', 'Square', 'Loader2', 'Copy', 'findMissingVoiceDetails'];
+const dependencies = ['useEffect', 'useRef', 'useState', 'createPortal', 'VoiceRecorder', 'voiceRecordingSupported', 'voiceApi', 'mergeVoiceDraft', 'voiceError', 'writeClipboard', 'voiceDraftHash', 'document', 'HTMLElement', 'h', 'Fragment', 'Mic', 'X', 'Square', 'Loader2', 'Copy', 'findMissingVoiceDetails', 'buildAsrHints', 'voiceContextEnabled'];
 const component = new Function(...dependencies, `${js}\nreturn VoiceInput;`);
 
-export function voiceInputDriver({ api, recovery, mergeVoiceDraft, voiceError, voiceDraftHash, findMissingVoiceDetails }) {
+export function voiceInputDriver({ api, recovery, mergeVoiceDraft, voiceError, voiceDraftHash, findMissingVoiceDetails, buildAsrHints, voiceContextEnabled }) {
   let cursor = 0, tree, dirty = false, listener, mounted = true;
   const slots = [], effects = [], listeners = new Map(), calls = { start: 0, cancel: 0 };
   const drafts = [];
@@ -32,7 +32,7 @@ export function voiceInputDriver({ api, recovery, mergeVoiceDraft, voiceError, v
     if (!previous || deps.some((value, i) => value !== previous.deps[i])) effects.push(() => { previous?.cleanup?.(); slots[index] = { deps, cleanup: setup() }; });
   };
   const h = (type, props, ...children) => ({ type, props: { ...props, children } });
-  const Component = component(useEffect, useRef, useState, child => child, native, () => true, () => api, mergeVoiceDraft, voiceError, async () => {}, voiceDraftHash, document, class {}, h, 'fragment', ...Array(5).fill('icon'), findMissingVoiceDetails);
+  const Component = component(useEffect, useRef, useState, child => child, native, () => true, () => api, mergeVoiceDraft, voiceError, async () => {}, voiceDraftHash, document, class {}, h, 'fragment', ...Array(5).fill('icon'), findMissingVoiceDetails, buildAsrHints, voiceContextEnabled);
   function render(patch = {}) {
     assert.ok(mounted); Object.assign(props, patch);
     do { dirty = false; cursor = 0; tree = Component(props); for (const run of effects.splice(0)) run(); } while (dirty);
