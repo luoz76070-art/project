@@ -3,11 +3,14 @@ import type { z } from "zod";
 import type { AgentAdapter, AgentStatus } from "./agentGateway.js";
 import { claudeRegisterSchema, claudeSessionId, claudeInteractionWaitSchema, type ClaudeCommand, type ClaudeEvent, type ClaudeInteractionInput } from "./claudeProtocol.js";
 import { ClaudeInteractions } from "./claudeInteractions.js";
+import { makeLastTurn, type LastTurn } from "../store/lastTurn.js";
 import { agentError, type AgentDelivery, type AgentMessage, type AgentOperation, type AgentSessionSnapshot, type SessionAdapter } from "./sessions.js";
 
 type Listener = { snapshot: (snapshot: AgentSessionSnapshot) => void; disconnect: () => void };
 type Pending = { command: ClaudeCommand; sent: boolean; expires: number };
 type Entry = {
+  lastTurn: LastTurn | null;
+  endedTurn?: { id: string; observedAt: string };
   sessionId: string; activationId: string; generation: string; sequence: number; touched: number; connected: boolean;
   version: string; directory: string; turnId: string | null; activity: AgentSessionSnapshot["activity"];
   messages: AgentMessage[]; live: Map<string, AgentMessage>; partial: boolean; ready: boolean;
@@ -50,7 +53,7 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
       const previous = entry;
       const requests = new ClaudeInteractions(() => { if (entry) this.publish(entry); }, this.limits.pollMs, this.limits.interactionMs);
       entry = { ...input, requests, generation: randomUUID(), sequence: 0, touched: Date.now(), connected: true, activity: "thinking", messages: [], live: new Map(),
-        partial: true, ready: false, listeners: new Set(), queue: [], submission: previous?.submission ?? null, pending: null, operationError: null };
+        partial: true, ready: false, listeners: new Set(), queue: [], submission: previous?.submission ?? null, pending: null, operationError: null, lastTurn: null };
       this.entries.set(input.sessionId, entry);
     }
     entry.touched = Date.now();
@@ -193,6 +196,12 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
       case "state": {
         const previousTurn = entry.turnId;
         entry.turnId = event.turnId; entry.activity = event.activity;
+        if (event.turnId) entry.endedTurn = undefined;
+        if (previousTurn && !event.turnId) {
+          entry.lastTurn = event.aborted === true ? makeLastTurn(previousTurn, "interrupted", "cancelled") : null;
+          entry.endedTurn = event.aborted === false ? { id: previousTurn, observedAt: new Date().toISOString() } : undefined;
+          this.publish(entry);
+        }
         entry.requests.retainTurn(event.turnId);
         if (entry.pending?.command.type === "interrupt" && !event.turnId && entry.pending.command.turnId === previousTurn) {
           entry.submission = { ...entry.submission!, delivery: event.aborted ? "confirmed" : "uncertain" }; entry.pending = null;
@@ -216,6 +225,15 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
         entry.activity = "working"; break;
       }
       case "messages": {
+        // The unchanged plugin only marks a final answer after reason=answer and !isAborted.
+        // A null turn ID alone cannot distinguish success from an unreported failure.
+        const ended = entry.endedTurn;
+        if (!entry.turnId && ended && event.messages.some(message => message.role === "assistant" && message.phase === "final_answer" && message.turnId === ended.id)) {
+          const result = makeLastTurn(ended.id, "completed", "ok", ended.observedAt, entry.lastTurn);
+          entry.lastTurn = result ? { ...result, timeSource: "observed" } : null;
+          entry.endedTurn = undefined;
+          this.publish(entry);
+        }
         if (!entry.listeners.size) break;
         entry.messages = event.messages.map((m, i) => ({ ...m, id: m.id ?? `claude:${entry.generation}:${i}`, kind: m.kind ?? (m.role === "user" ? "user_message" : "agent_message"), timestamp: new Date().toISOString() }));
         if (!entry.turnId) entry.live.clear();
@@ -236,6 +254,7 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
   private view(entry: Entry): AgentSessionSnapshot {
     const enabled = entry.connected && entry.ready && !entry.pending && (!entry.submission || entry.submission.delivery === "confirmed");
     return { agentId: "claude", session: this.session(entry), connected: entry.connected, updatedAt: new Date().toISOString(), status: entry.turnId ? "running" : "idle", activity: entry.activity,
+      lastTurn: entry.lastTurn,
       messages: [...entry.messages, ...entry.live.values()], ...entry.requests.views(), historyCursor: null, partialText: entry.partial,
       operationError: entry.operationError,
       control: entry.connected ? { token: entry.generation, canSend: enabled, canSteer: false, canInterrupt: enabled && Boolean(entry.turnId) } : null,

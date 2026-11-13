@@ -114,6 +114,26 @@ async function fixture(t, options = {}) {
   return { root, config, client, adapter, state, streams, requests, emit, snapshots, follow, latest, operation, posts };
 }
 
+test('S1 OpenCode maps all idle outcomes, retains results while running and does not infer success from idle', async t => {
+  const f = await fixture(t); let close = await f.follow();
+  assert.equal(f.latest().lastTurn, null);
+  for (const [index, outcome] of ['succeeded', 'failed', 'interrupted'].entries()) {
+    f.state.active = false;
+    f.state.messages.push({ id: `msg_idle_${index}`, type: 'idle', time: { created: 4000 + index }, outcome }); f.emit();
+    await until(() => f.latest().lastTurn?.turnId === `msg_idle_${index}`);
+    const result = f.latest().lastTurn;
+    assert.equal(result.status, outcome === 'succeeded' ? 'completed' : outcome);
+    assert.equal(result.reason.code, { succeeded: 'ok', failed: 'provider_error', interrupted: 'cancelled' }[outcome]);
+    assert.equal(result.endedAt, new Date(4000 + index).toISOString());
+    f.state.active = true; f.emit(); await until(() => f.latest().status === 'running');
+    assert.deepEqual(f.latest().lastTurn, result);
+  }
+  close(); close = await f.follow(); assert.equal(f.latest().lastTurn.status, 'interrupted');
+  f.state.messages.push({ id: 'msg_unknown_end', type: 'idle', time: { created: 5000 } }); f.state.active = false; f.emit();
+  await until(() => f.latest().lastTurn === null);
+  close();
+});
+
 test('configuration is explicit, loopback-only and strict; construction has no connection side effects', async t => {
   const f = await fixture(t);
   assert.equal(f.requests.length, 0);

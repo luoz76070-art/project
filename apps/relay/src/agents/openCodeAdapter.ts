@@ -1,3 +1,4 @@
+import { LastTurnCache, makeLastTurn } from "../store/lastTurn.js";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AgentAdapter, AgentStatus } from "./agentGateway.js";
@@ -23,6 +24,7 @@ const operationSchema = z.object({ controlToken: z.string().uuid(), clientMessag
 const voidSchema = z.undefined();
 
 export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
+  private readonly results = new LastTurnCache();
   private state: AgentStatus = {
     id: "opencode", label: "OpenCode", state: "unprobed", transport: "opencode-v2-http-sse",
     usesAccessibility: false, sameDesktopThreadVerified: false, capabilities: { ...emptyCapabilities },
@@ -170,7 +172,7 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
     });
   }
 
-  async stop() { this.stopped = true; this.disconnect(true); this.client.stop(); }
+  async stop() { this.stopped = true; this.disconnect(true); this.client.stop(); this.results.clear(); }
 
   private async respond(sessionId: string, id: string, input: AgentOperation, kind: "question" | "permission", body: (request: RequestState<AgentQuestion> | RequestState<AgentPermission>) => unknown): Promise<AgentDelivery> {
     const entry = this.lock(sessionId, input.controlToken);
@@ -317,6 +319,14 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
     if (!this.current(entry)) return;
     if (questions.data.some(q => q.sessionID !== entry.id) || permissions.data.some(p => p.sessionID !== entry.id)) throw agentError("OPENCODE_PROTOCOL_ERROR");
     const status = active.data[entry.id] ? "running" : "idle";
+    const terminal = [...messages.data].sort((a, b) => b.time.created - a.time.created).find(message => message.type === "idle");
+    if (terminal) {
+      const outcome = terminal.outcome;
+      const result = outcome ? makeLastTurn(terminal.id, outcome === "succeeded" ? "completed" : outcome,
+        outcome === "succeeded" ? "ok" : outcome === "interrupted" ? "cancelled" : "provider_error",
+        terminal.time.completed ?? terminal.time.created, this.results.get(entry.id)) : null;
+      this.results.set(entry.id, result);
+    }
     const view = messagesView(messages.data);
     const runKey = `${status}:${view.filter(m => m.role === "user").at(-1)?.id ?? ""}`;
     if (entry.runKey && entry.runKey !== runKey) entry.token = randomUUID();
@@ -341,6 +351,7 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
     entry.rawMessages = messages.data;
     if (status === "idle") entry.activityHint = null;
     entry.snapshot = { agentId: "opencode", session, connected: true, updatedAt: new Date().toISOString(), status, activity,
+      lastTurn: this.results.get(entry.id),
       messages: view, questions: [], permissions: [], historyCursor: messages.cursor.next ?? null, partialText: false, control: null, submission: null };
     this.publish(entry);
   }
