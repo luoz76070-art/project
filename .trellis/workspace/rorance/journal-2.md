@@ -91,3 +91,27 @@
 
 - 等待用户启动docs/plans/2026-11-07-agent-phone-acceptance.md；真实发送、工具/图片、附件语音、问答审批与停止等按项验收。
 - 总体Kelivo整合与59组保持in_progress；Claude/OpenCode原宿主未配置，不自动启动其他任务。
+
+
+## Session 61: MobiCodex repository boundary migration
+<!-- trellis-session: v=2 fp=f7947907a7dea113 -->
+
+**Date**: 2026-11-13
+**Task**: MobiCodex repository boundary migration
+**Package**: mobile
+**Branch**: `main`
+
+### Summary
+
+将 codex-to-phone 提升为 project 仓库根目录，归档其他项目，修正 MobiCodex CI、文档和发布路径；完成 pnpm、Android、YAML 与路径验证。创建提交 6f0907c 和 1388a0a，未推送；用户原有宣传、文档和 codex-live-session 资料保留为未提交文件。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6f0907c` | chore(repo): promote MobiCodex to repository root |
+| `1388a0a` | chore(repo): remove unrelated projects from MobiCodex tree |
+
+### Status
+
+[OK] **Completed**
