@@ -1,3 +1,4 @@
+import { activityEvidenceSchema } from "../store/activityEvidence.js";
 import path from "node:path";
 import { z } from "zod";
 import { lastTurnSchema } from "../store/lastTurn.js";
@@ -22,6 +23,8 @@ export const deepSeekDelivery = z.object({ ok: z.literal(true), delivery: z.enum
 const messages = z.array(z.object({ id: z.string().max(512), timestamp: z.string().datetime(), role: z.enum(["user", "assistant", "tool"]), text: z.string().max(32768), kind: z.enum(["user_message", "agent_message", "function_call", "function_call_output"]), turnId: z.string().max(512).optional(), phase: z.enum(["commentary", "final_answer"]).optional() })).max(120);
 export const deepSeekHistory = z.object({ messages, cursor: z.string().uuid().nullable() });
 export const deepSeekSnapshot = z.object({
+  activeTurnId: z.string().min(1).max(512).nullable().optional(),
+  activityEvidence: activityEvidenceSchema.nullable().optional(),
   lastTurn: lastTurnSchema.nullable().optional(),
   agentId: z.literal("deepseek"), session, connected: z.literal(true), updatedAt: z.string().datetime(),
   status: z.enum(["idle", "running"]), activity: z.enum(["thinking", "working", "outputting"]),

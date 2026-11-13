@@ -68,7 +68,7 @@ export class DeepSeekAdapter implements AgentAdapter, SessionAdapter {
         const queuePrefix = `${id}:queue:`;
         const queued = new Set((next.queue?.items ?? []).map(item => queuePrefix + item.clientMessageId));
         for (const key of this.interactionLocks.keys()) if (key.startsWith(queuePrefix) && !queued.has(key)) this.interactionLocks.delete(key);
-        const snapshot: AgentSessionSnapshot = next;
+        const snapshot: AgentSessionSnapshot = { ...next, activityEvidence: next.status === "running" && next.activeTurnId && next.activityEvidence?.turnId === next.activeTurnId ? next.activityEvidence : null };
         for (const item of snapshot.queue?.items ?? []) {
           const lock = this.interactionLocks.get(queuePrefix + item.clientMessageId);
           if (lock) item.status = lock === "uncertain" ? "uncertain" : "cancelling";
