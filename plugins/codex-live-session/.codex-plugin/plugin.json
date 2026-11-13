@@ -1,0 +1,39 @@
+{
+  "name": "codex-live-session",
+  "version": "0.1.0",
+  "description": "Session-scoped mobile bridge for a live Codex Desktop conversation.",
+  "author": {
+    "name": "Local Workspace",
+    "email": "local@example.invalid",
+    "url": "https://example.invalid/codex-live-session"
+  },
+  "homepage": "https://example.invalid/codex-live-session",
+  "repository": "https://example.invalid/codex-live-session",
+  "license": "UNLICENSED",
+  "keywords": [
+    "codex",
+    "mobile",
+    "remote-control"
+  ],
+  "interface": {
+    "displayName": "Codex Live Session",
+    "shortDescription": "Bridge the current Codex conversation to a phone.",
+    "longDescription": "Starts a temporary session-scoped bridge for one Codex conversation, streams live progress to a phone page, and accepts phone-originated text input for the bound conversation.",
+    "developerName": "Local Workspace",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Remote Control",
+      "Session Scoped"
+    ],
+    "websiteURL": "https://example.invalid/codex-live-session",
+    "privacyPolicyURL": "https://example.invalid/privacy",
+    "termsOfServiceURL": "https://example.invalid/terms",
+    "defaultPrompt": [
+      "Start a mobile bridge for this session.",
+      "Show me the pairing URL for my phone.",
+      "Stop the mobile bridge."
+    ],
+    "brandColor": "#2563EB"
+  }
+}
