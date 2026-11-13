@@ -73,6 +73,10 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      # Caches Gradle wrapper, dependencies and build cache. Written on main, read-only on tags.
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Set up Flutter 3.47.6
         uses: subosito/flutter-action@v2
         with:
@@ -156,26 +160,6 @@ jobs:
           set -o pipefail
           mkdir -p ../../ci-artifacts/kelivo
           dart analyze --fatal-infos lib test integration_test 2>&1 | tee ../../ci-artifacts/kelivo/dart-analyze.log
-
-      - name: Run Kelivo Flutter tests (Ubuntu report-only)
-        continue-on-error: true
-        working-directory: apps/kelivo
-        run: |
-          set -o pipefail
-          set +e
-          flutter test --reporter expanded 2>&1 | tee ../../ci-artifacts/kelivo/flutter-test.log
-          status=${PIPESTATUS[0]}
-          set -e
-          {
-            echo "## Kelivo Flutter tests on Ubuntu"
-            if [[ "$status" -eq 0 ]]; then
-              echo "The full suite passed."
-            else
-              echo "The full upstream UI suite returned exit code $status on the GitHub-hosted Ubuntu runner."
-              echo "The log is uploaded as an artifact; Android lint, unit tests, and APK build remain blocking checks."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit "$status"
 
       - name: Run markstream Flutter tests
         working-directory: apps/kelivo
@@ -345,3 +329,67 @@ jobs:
           assert published["isPrerelease"] is True
           print(f"Verified {len(expected)} Kelivo Release assets.")
           PY
+
+  # Report-only upstream UI suite: runs beside the release job in 3 shards so it never
+  # delays publishing. Android lint, unit tests and the APK build stay blocking above.
+  flutter-tests-report:
+    name: Kelivo Flutter tests report (shard ${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Check out repository source revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+
+      - name: Set up Flutter 3.47.6
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.6"
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies for Ubuntu platform
+        working-directory: apps/kelivo
+        run: |
+          set -euo pipefail
+          flutter pub get
+          (cd dependencies/markstream && flutter pub get)
+
+      - name: Run Kelivo Flutter tests shard (Ubuntu report-only)
+        continue-on-error: true
+        working-directory: apps/kelivo
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -o pipefail
+          mkdir -p ../../ci-artifacts/kelivo
+          set +e
+          flutter test --reporter expanded --total-shards 3 --shard-index "$((SHARD - 1))" 2>&1 \
+            | tee "../../ci-artifacts/kelivo/flutter-test-shard-${SHARD}.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "## Kelivo Flutter tests on Ubuntu (shard ${SHARD}/3)"
+            if [[ "$status" -eq 0 ]]; then
+              echo "This shard passed."
+            else
+              echo "This shard of the upstream UI suite returned exit code $status on the GitHub-hosted Ubuntu runner."
+              echo "The log is uploaded as an artifact; Android lint, unit tests, and APK build remain blocking checks."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      - name: Upload Flutter test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobicodex-kelivo-flutter-tests-shard-${{ matrix.shard }}
+          if-no-files-found: warn
+          path: ci-artifacts/kelivo/flutter-test-shard-*.log
