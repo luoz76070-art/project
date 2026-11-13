@@ -3,6 +3,8 @@ package com.mobilecodex.remote;
 import android.content.Context;
 import android.content.SharedPreferences;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.UUID;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -10,6 +12,7 @@ import org.json.JSONObject;
 /** One private handoff. A durable unknown result is reserved before any network write. */
 public final class ProductHandoffStore {
     private static final String KEY = "handoff";
+    private static final String MIGRATION_BACKUP = "migration-backup";
     private ProductHandoffStore() {}
 
     private static SharedPreferences preferences(Context context) {
@@ -19,6 +22,60 @@ public final class ProductHandoffStore {
     public static synchronized JSONObject read(Context context) throws JSONException {
         String value = preferences(context).getString(KEY, null);
         return value == null ? null : new JSONObject(value);
+    }
+
+    private static String digest(String value) {
+        try {
+            byte[] bytes = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder();
+            for (byte b : bytes) result.append(Character.forDigit((b & 255) >>> 4, 16)).append(Character.forDigit(b & 15, 16));
+            return result.toString();
+        } catch (NoSuchAlgorithmException error) { throw new IllegalStateException(error); }
+    }
+
+    /** Snapshot and opaque digest must describe the same stored bytes. No credentials are included. */
+    public static synchronized JSONObject migrationState(Context context) throws JSONException {
+        String raw = preferences(context).getString(KEY, null);
+        JSONObject handoff = raw == null ? null : new JSONObject(raw);
+        JSONObject info = raw == null ? null : new JSONObject().put("version", 1)
+            .put("id", handoff.getString("id")).put("digest", digest(raw));
+        return new JSONObject().put("handoff", handoff == null ? JSONObject.NULL : handoff)
+            .put("handoffMigration", info == null ? JSONObject.NULL : info);
+    }
+
+    private static void requireUuid(String value) {
+        if (value == null || !UUID.fromString(value).toString().equals(value)) throw new IllegalArgumentException("Invalid migration identity");
+    }
+
+    /** Archive only after Relay import + read-back; unlike close this safely retains uncertain sends. */
+    public static synchronized JSONObject ackMigration(Context context, String id, String expectedDigest, String storeId, String workItemUid) throws JSONException {
+        requireUuid(id); requireUuid(storeId); requireUuid(workItemUid);
+        if (expectedDigest == null || !expectedDigest.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("Invalid migration digest");
+        SharedPreferences prefs = preferences(context);
+        String previousBackup = prefs.getString(MIGRATION_BACKUP, null);
+        if (previousBackup != null) {
+            JSONObject previous = new JSONObject(previousBackup);
+            if (id.equals(previous.optString("id"))) {
+                if (!expectedDigest.equals(previous.optString("digest")) || !storeId.equals(previous.optString("storeId"))
+                    || !workItemUid.equals(previous.optString("workItemUid"))) throw new IllegalStateException("迁移回执不匹配，旧记录已保留。");
+                return read(context); // Lost ACK response: never remove a newer active handoff.
+            }
+        }
+        String raw = prefs.getString(KEY, null);
+        if (raw == null || !id.equals(new JSONObject(raw).optString("id")) || !expectedDigest.equals(digest(raw))) {
+            throw new IllegalStateException("交接已改变，请保留原记录并重新核对迁移。");
+        }
+        String backup = new JSONObject().put("version", 1).put("id", id).put("digest", expectedDigest)
+            .put("storeId", storeId).put("workItemUid", workItemUid).put("raw", raw).toString();
+        if (backup.getBytes(StandardCharsets.UTF_8).length > 256 * 1024) throw new IllegalArgumentException("迁移备份过大，旧记录已保留。");
+        if (!prefs.edit().putString(MIGRATION_BACKUP, backup).remove(KEY).commit()) {
+            // Android can update memory before reporting a failed disk commit. Restore the active value too.
+            SharedPreferences.Editor restore = prefs.edit().putString(KEY, raw);
+            if (previousBackup == null) restore.remove(MIGRATION_BACKUP); else restore.putString(MIGRATION_BACKUP, previousBackup);
+            restore.commit();
+            throw new IllegalStateException("迁移确认未能保存，旧记录已保留，请重试。");
+        }
+        return read(context);
     }
 
     private static void write(Context context, JSONObject value) {
