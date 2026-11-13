@@ -1,3 +1,4 @@
+import { activityEvidence, itemActivity, type ActivityEvidence } from "../store/activityEvidence.js";
 import { CodexStore, type CodexMessage, type CodexThreadSummary } from "../store/codexStore.js";
 import { createHash, randomUUID } from "node:crypto";
 import { DesktopIpcClient, getDesktopIpcPipePath, type DesktopIpcClientStatus } from "./desktopIpcClient.js";
@@ -28,6 +29,8 @@ type DesktopStreamThread = {
 };
 
 export type DesktopStreamSnapshot = {
+  activeTurnId?: string | null;
+  activityEvidence?: ActivityEvidence | null;
   threadId: string;
   status: "idle" | "starting" | "inProgress" | "completed" | "interrupted" | "failed";
   lastTurn?: LastTurn | null;
@@ -224,7 +227,7 @@ export class DesktopControl {
     this.streamStates.delete(threadId);
     const previous = this.streamSnapshots.get(threadId);
     if (previous) {
-      const snapshot = { ...previous, userInputs: [], approvals: [], interactionsAvailable: false, control: this.nativeControl.capability(threadId, this.transport), changeType: "disconnected", updatedAt: new Date().toISOString() };
+      const snapshot = { ...previous, userInputs: [], approvals: [], interactionsAvailable: false, control: this.nativeControl.capability(threadId, this.transport), changeType: "disconnected", activityEvidence: null, updatedAt: new Date().toISOString() };
       if (this.transport === "native") snapshot.control.queue = this.messageQueue.snapshot(threadId);
       this.streamSnapshots.set(threadId, snapshot);
       for (const listener of this.streamSnapshotListeners) listener(snapshot);
@@ -669,6 +672,7 @@ function conversationToStreamSnapshot(
   return {
     threadId: conversationId,
     status: normalizeStreamStatus(state),
+    ...desktopActivity(state),
     lastTurn: desktopLastTurn(state, previous),
     messages,
     inputReplacements,
@@ -794,6 +798,18 @@ function isGeneratedContextText(trimmed: string): boolean {
     trimmed.startsWith("# AGENTS.md instructions") ||
     trimmed.startsWith("<INSTRUCTIONS>")
   );
+}
+
+/** Only a current, explicitly running native item is an activity observation. */
+export function desktopActivity(state: Record<string, unknown>): { activeTurnId: string | null; activityEvidence: ActivityEvidence | null } {
+  const turn = conversationTurns(state).at(-1);
+  const active = turn?.status === "inProgress" || turn?.status === "starting";
+  const turnId = turn?.turnId ?? turn?.id;
+  const id = active && typeof turnId === "string" && turnId.length <= 512 ? turnId : null;
+  const items = active && Array.isArray(turn.items) ? turn.items : [];
+  const item = items.at(-1) as Record<string, unknown> | undefined;
+  const kind = item && ["inProgress", "running"].includes(String(item.status)) ? itemActivity(item.type) : null;
+  return { activeTurnId: id, activityEvidence: kind ? activityEvidence(kind, id) : null };
 }
 
 export function desktopLastTurn(state: Record<string, unknown>, previous?: LastTurn | null): LastTurn | null {
