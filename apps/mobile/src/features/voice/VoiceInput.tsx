@@ -7,6 +7,7 @@ import { mergeVoiceDraft, voiceError, type VoiceRecording } from "./model";
 import { writeClipboard } from "../../shared/clipboard";
 
 import { voiceDraftHash } from "./recovery";
+import { findMissingVoiceDetails } from "./refineGuard";
 import type { VoiceRecoveryPort } from "./useVoiceRecovery";
 
 type Phase = "idle" | "starting" | "recording" | "transcribing" | "failed" | "refining" | "preview";
@@ -21,6 +22,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
   const api = voiceApi(endpoint, token);
   const available = voiceRecordingSupported();
   const busy = ["starting", "recording", "transcribing", "refining"].includes(phase);
+  const missingDetails = prompt ? findMissingVoiceDetails(original, prompt) : [];
 
   function cancel() {
     const active = session.current; session.current = null;
@@ -158,6 +160,11 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
         {busy && phase !== "recording" && <p className="voice-stage" role="status"><Loader2 size={16} className="spin" />{phase === "starting" ? "正在准备麦克风…" : phase === "transcribing" ? "百炼正在转文字…" : "DeepSeek 正在整理…"}</p>}
         {original && <label>识别原文<textarea aria-label="语音识别原文" value={original} maxLength={20_000} disabled={busy} rows={4} onChange={event => { setOriginal(event.target.value); setPrompt(""); }} /></label>}
         {prompt && <label>整理后的提示词<textarea aria-label="整理后的提示词" value={prompt} maxLength={20_000} disabled={busy} rows={6} onChange={event => setPrompt(event.target.value)} /></label>}
+        {missingDetails.length > 0 && <div className="voice-error" role="status" aria-label="整理稿关键信息警告">
+          <p>整理稿可能遗漏关键信息，建议采用原文：</p>
+          <ul>{missingDetails.slice(0, 5).map((detail, index) => <li key={index}>{({ number: "数字", literal: "路径或标识", negation: "否定或禁止" })[detail.kind]}：{detail.text}</li>)}</ul>
+          {missingDetails.length > 5 && <p>等 {missingDetails.length} 项</p>}
+        </div>}
         {error && <p className="voice-error" role="alert">{error}</p>}
         {phase === "failed" && <div className="voice-actions">
           <button type="button" className="action-button" onClick={() => { if (session.current) void transcribe(session.current); }}>重新转写</button>
@@ -165,7 +172,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
         </div>}
         {session.current?.conflict && <p role="status">输入框已有新内容。请复制所需文字后自行粘贴。</p>}
         {original && <div className="voice-actions">
-          <button type="button" className="action-button" disabled={busy || !original.trim() || session.current?.conflict} onClick={() => adopt(original)}>采用原文</button>
+          <button type="button" className="action-button" disabled={busy || !original.trim() || session.current?.conflict} onClick={() => adopt(original)}>{missingDetails.length ? "采用原文（推荐）" : "采用原文"}</button>
           <button type="button" className="action-button" disabled={busy || !original.trim()} onClick={() => { if (session.current) void refine(original, session.current); }}>重新整理</button>
           {prompt && <button type="button" className="action-button" disabled={busy || !prompt.trim() || session.current?.conflict} onClick={() => adopt(prompt)}>采用提示词</button>}
           <button type="button" className="action-button" disabled={busy} onClick={() => void writeClipboard(prompt || original).catch(() => setError("复制失败，请手动选择文字复制。"))}><Copy size={15} />复制</button>

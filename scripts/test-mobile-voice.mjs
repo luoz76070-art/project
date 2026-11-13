@@ -23,6 +23,9 @@ const recoverySource = await fs.readFile(new URL('../apps/mobile/src/features/vo
 await fs.writeFile(path.join(root, 'recovery.mjs'), ts.transpileModule(recoverySource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText.replace('"./model"', '"./model.mjs"'));
 const { createVoiceRecovery, voiceDraftHash, recoveredVoiceDraft, loadVoicePending, voiceRecoveryTtl } = await import(path.join(root, 'recovery.mjs'));
 const { parseVoiceResult } = await import(path.join(root, 'model.mjs'));
+const guardSource = await fs.readFile(new URL('../apps/mobile/src/features/voice/refineGuard.ts', import.meta.url), 'utf8');
+await fs.writeFile(path.join(root, 'refineGuard.mjs'), ts.transpileModule(guardSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText);
+const { findMissingVoiceDetails } = await import(path.join(root, 'refineGuard.mjs'));
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function storage() { const data = new Map(); return { data, getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: k => data.delete(k) }; }
 async function pending(overrides = {}) { return { requestId: crypto.randomUUID(), stage: 'asr', scope: 'connection-one', thread: 'codex:original-thread', createdAt: Date.now(), draftHash: await voiceDraftHash('原草稿'), ...overrides }; }
@@ -212,7 +215,7 @@ async function until(check) {
   while (!check()) { if (Date.now() >= deadline) assert.fail('voice state did not settle'); await tick(); }
 }
 function inputDriver(t, recovery, api = {}) {
-  const driver = voiceInputDriver({ recovery, mergeVoiceDraft, voiceError, voiceDraftHash, api: {
+  const driver = voiceInputDriver({ recovery, mergeVoiceDraft, voiceError, voiceDraftHash, findMissingVoiceDetails, api: {
     config: async () => ({ qwenConfigured: true, deepseekConfigured: true }),
     cancel: async () => {}, refine: async () => '整理结果', ...api,
   } });
@@ -341,4 +344,124 @@ test('retry preserves captured draft conflicts and refine failures keep editable
   await until(() => driver.button('采用提示词'));
   assert.equal(driver.original(), '已有原文'); assert.equal(asr, 2); assert.equal(refinements, 2);
   assert.equal(driver.button('采用提示词').props.disabled, true); assert.deepEqual(driver.drafts, []);
+});
+
+const guardCases = [
+  ['上限3', '上限三', []], ['重试3次', '重试三遍', []],
+  ['修改src/main.ts不要发布', '修改src/main.ts', ['negation']],
+  ['修改src/main.ts不要发布', '修改src/main.ts，请勿发布', []],
+  ['-3', '3', ['number']], ['-3.5%', '-三点五%', []], ['+3 个', '三个', []],
+  ['两百三人、一千五个、两万五次、一千万份', '230人、1500个、25000次、10000000份', []],
+  ['两百零三人、一千零五个', '203人、1005个', []],
+  ['修改src/main.ts文件', '修改 src/main.ts', []],
+  ['更改级别并识别别名', '调整等级和名称', []],
+  ['不要发布', '发布被禁止', []], ['do not deploy', 'deploy is not allowed', []],
+  ['do not deploy', 'deployment is never permitted', []],
+  ['3 个', '保留 `三` 个', []], ['不要发布', '保留“不要发布”要求', []],
+  ['不要发布', '`不要发布`', []], ['camelCase', 'camel Case', []],
+  ['`foo(x)`', 'foo ( x )', []], ['版本1.0.21', '版本 `1.0.21`', []],
+  ['main.ts', 'use main.ts.', []], ['https://example.com', 'see https://example.com.', []],
+  ['/资料/报告.md', '保留 /资料/报告.md', []], ['/资料/报告.md', '/资料/结果.md', ['literal']],
+  ['三点五零%', '3.5%', []], ['9:30', '九点三十', []], ['5月3日', '05/03', []],
+  ['3 个任务', '三个任务', []], ['三个任务', '3 个任务', []],
+  ['十二项、两百零三人、一万二千三百四十五次', '12项，203人，12345次', []],
+  ['零、十、两、1000', '0、10、2、一千', []],
+  ['0.50 秒与三点五秒', '零点五秒和3.50秒', []],
+  ['版本 1.0.21', '版本 1.0.22', ['number']],
+  ['版本1.0.21', '版本一.零.二十一', []],
+  ['版本1.0.21', '版本1.021', ['number']],
+  ['完成百分之三十和 5%', '完成30%和百分之五', []],
+  ['5%', '5 个', ['number']], ['三个人', '两个人', ['number']],
+  ['2026-11-13', '二零二六年十一月十三日', []],
+  ['2026/11/13', '2026.11.13', []],
+  ['2026年11月13日', '2026年11月14日', ['number']],
+  ['9:30', '九点三十分', []], ['09:30:00', '9点30', []],
+  ['九点整', '09:00', []], ['9:30:15', '九时三十分十五秒', []],
+  ['09:30', '09:45', ['number']],
+  ['一起检查一下文件，一般不妨先看看', '先检查文件', []],
+  ['路径 apps/mobile/src/main.ts', '路径 APPS/MOBILE/SRC/MAIN.TS', []],
+  ['路径 /tmp/config.yaml', '读取 /tmp/config.yaml', []],
+  ['路径 /tmp/config.yaml', '读取 /tmp/config.yml', ['literal']],
+  ['修改 main.ts', '修改 main.tsx', ['literal']],
+  ['修改 .env', '修改 .ENV', []],
+  ['访问 https://example.com/v1?q=3', '访问 HTTPS://EXAMPLE.COM/v1?q=3。', []],
+  ['访问 https://example.com/v1', '访问 https://example.com/v2', ['literal']],
+  ['修改 camelCase 和 snake_case', '修改 CAMELCASE 与 SNAKE_CASE', []],
+  ['修改 camelCase 和 snake_case', '修改 otherName', ['literal', 'literal']],
+  ['执行 `run ( x )`', '执行 run(x)', []],
+  ['代码 `not_found` 与 `item3`', '替换为其他代码', ['literal', 'literal']],
+  ['普通英文 words 和中文说明', '另一种措辞', []],
+  ['３ 个，１．０．２１，ＡＰＰＳ／ＭＡＩＮ．ＴＳ', '三个，1.0.21，apps/main.ts', []],
+  ['不要发布', '发布', ['negation']], ['不要发布', '请勿发布', []],
+  ['不要发布，也不要删除', '禁止发布，删除', ['negation']],
+  ['不要发布，也不要删除', '请勿删除，也不准发布', []],
+  ['不要发布', '发布，但不要删除', ['negation']],
+  ['不要发布', '禁止上线', []],
+  ['不要发布，不要发布', '不要发布', ['negation']],
+  ["Don't deploy", 'DO NOT deploy', []], ["Don’t deploy", 'never deploy', []],
+  ['do not deploy; never delete files', 'never delete files; deploy', ['negation']],
+  ['do not deploy', 'deploy without tests', ['negation']],
+  ['run without publishing', 'run publishing', ['negation']],
+  ['not ready', 'ready', ['negation']],
+  ['not only tests; 不仅检查，分别处理', '检查和处理', []],
+  ['不发布、别删除、勿提交、禁止上线、不准执行、不能关闭、无需升级、没有备份', '执行操作', Array(8).fill('negation')],
+  ['', '任何整理稿', []],
+];
+for (const [original, refined, kinds] of guardCases) {
+  test(`refinement guard: ${original || '(empty)'} -> ${refined}`, () => {
+    const actual = findMissingVoiceDetails(original, refined);
+    assert.deepEqual(actual.map(item => item.kind), kinds, JSON.stringify(actual));
+    assert.deepEqual(findMissingVoiceDetails(original, original), [], 'unchanged input must never warn');
+    assert.deepEqual(findMissingVoiceDetails(original, refined), actual, 'pure/deterministic result');
+  });
+}
+
+test('refinement guard reports the missing phrase and deduplicates repeated technical/numeric mentions', () => {
+  assert.deepEqual(findMissingVoiceDetails('不要发布，不要删除', '不要发布，删除'), [{ kind: 'negation', text: '不要删除' }]);
+  assert.deepEqual(findMissingVoiceDetails('3 个，3 个，main.ts，main.ts', '删掉全部'), [{ kind: 'number', text: '3' }, { kind: 'literal', text: 'main.ts' }]);
+});
+
+async function refinedInput(t, original, refined) {
+  const manager = coordinator(t, storage()); manager.setVisible(true);
+  const driver = inputDriver(t, manager, { transcribe: async () => original, refine: async () => refined });
+  driver.click('整理提示词'); await record(driver);
+  await until(() => driver.button('采用提示词'));
+  return driver;
+}
+test('refinement warning recommends original but allows either original or refined adoption', async t => {
+  for (const selection of ['采用原文（推荐）', '采用提示词']) {
+    const driver = await refinedInput(t, '不要发布，保留 3 个文件 main.ts', '发布，保留文件');
+    const warning = driver.warning();
+    assert.equal(warning.items.length, 3); assert.match(warning.text, /不要发布/);
+    assert.equal(driver.button(selection).props.disabled, false);
+    driver.click(selection);
+    assert.deepEqual(driver.drafts, [`原草稿\n\n${selection.includes('原文') ? '不要发布，保留 3 个文件 main.ts' : '发布，保留文件'}`]);
+  }
+});
+test('preview edits recalculate warnings and preserve the no-warning UI', async t => {
+  const driver = await refinedInput(t, '不要发布，保留3个文件 main.ts', '禁止发布，保留三个文件 MAIN.TS');
+  assert.equal(driver.warning(), undefined); assert.ok(driver.button('采用原文'));
+  driver.edit('整理后的提示词', '发布文件');
+  assert.ok(driver.warning()); assert.ok(driver.button('采用原文（推荐）'));
+  driver.edit('整理后的提示词', '请勿发布，保留三个文件 main.ts');
+  assert.equal(driver.warning(), undefined); assert.ok(driver.button('采用原文'));
+  driver.edit('整理后的提示词', '发布文件');
+  driver.edit('语音识别原文', '新的原文');
+  assert.equal(driver.warning(), undefined); assert.equal(driver.button('采用提示词'), undefined);
+});
+test('warning lists at most five details and gives the total; close/session changes clear it', async t => {
+  const original = '不要发布，保留3个、5个、7个、9个；a.ts、b.ts';
+  const driver = await refinedInput(t, original, '处理文件');
+  assert.equal(driver.warning().items.length, 5); assert.match(driver.warning().text, /等 7 项/);
+  driver.click('关闭语音输入'); driver.click('语音输入');
+  assert.equal(driver.warning(), undefined);
+  const other = await refinedInput(t, original, '处理文件');
+  other.render({ thread: 'codex:other-thread' }); assert.equal(other.warning(), undefined);
+});
+
+
+test('refinement guard handles maximum-length text and numeric runs without truncation warnings', () => {
+  for (const original of ['普通说明'.repeat(5000), '1'.repeat(20000), 'a'.repeat(20000), '不要发布，'.repeat(4000)]) {
+    assert.deepEqual(findMissingVoiceDetails(original, original), []);
+  }
 });
