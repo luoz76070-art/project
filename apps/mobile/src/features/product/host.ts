@@ -5,7 +5,7 @@ export const productBeforeNavigate = "product-before-navigate";
 export const productAppearanceChanged = "product-appearance-changed";
 export const productOpenUpdates = "product-open-updates";
 export const ProductHost = registerPlugin<HandoffHost & {
-  getState(): Promise<{ revision: number; openSettings?: boolean; openUpdates?: boolean; appearance: ProductAppearance; handoff?: ProductHandoff | null }>;
+  getState(): Promise<{ revision: number; openSettings?: boolean; openUpdates?: boolean; appearance: ProductAppearance; handoff?: ProductHandoff | null; handoffMigration?: { version: 1; id: string; digest: string } }>;
   navigate(options: { tab: "ai" | "settings" }): Promise<void>;
 }>("ProductHost");
 let openSettings = false;

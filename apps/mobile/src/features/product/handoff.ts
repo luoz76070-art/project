@@ -10,13 +10,13 @@ export type ProductHandoff = {
 };
 export type HandoffDraft = { id: string; text: string; scope: string; targetId: string; attachments: PendingAttachment[] };
 type Storage = Pick<globalThis.Storage, 'getItem' | 'setItem' | 'removeItem'>;
-export type HandoffMutation = { id: string; action: 'submit' | 'confirm' | 'close'; message?: string; target?: ProductHandoff['target']; clientMessageId?: string; acceptance?: 'desktop' | 'queue' };
+export type HandoffMutation = { id: string; action: 'submit' | 'confirm' | 'close' | 'ackMigration'; message?: string; target?: ProductHandoff['target']; clientMessageId?: string; acceptance?: 'desktop' | 'queue'; expectedDigest?: string; storeId?: string; workItemUid?: string };
 export type HandoffHost = { handoff(value: HandoffMutation): Promise<{ handoff?: ProductHandoff | null }> };
 const key = 'mobileCodexProductHandoffV1';
 const inFlight = new Set<string>();
 const byteLength = (value: string) => new TextEncoder().encode(value).length;
 
-function cleanDraft(value: HandoffDraft): HandoffDraft {
+export function cleanHandoffDraft(value: HandoffDraft): HandoffDraft {
   if (typeof value.text !== 'string' || byteLength(value.text) > 64 * 1024 || typeof value.id !== 'string' ||
     typeof value.scope !== 'string' || typeof value.targetId !== 'string' || !Array.isArray(value.attachments) || value.attachments.length > 16) {
     throw new Error('交接内容过大或格式无效，请缩短说明并检查附件。');
@@ -30,7 +30,7 @@ function cleanDraft(value: HandoffDraft): HandoffDraft {
     }) };
 }
 export function saveHandoffDraft(value: HandoffDraft, storage: Storage = localStorage) {
-  const json = JSON.stringify(cleanDraft(value));
+  const json = JSON.stringify(cleanHandoffDraft(value));
   if (byteLength(json) > 128 * 1024) throw new Error('交接内容过大，请减少附件或缩短说明。');
   try { storage.setItem(key, json); }
   catch { throw new Error('交接草稿保存失败，请释放空间后重试。'); }
@@ -42,7 +42,7 @@ export function loadHandoffDraft(handoff: ProductHandoff, scope: string, storage
   if (raw) {
     try {
       const value = JSON.parse(raw);
-      if (value.id === handoff.id) return cleanDraft(value);
+      if (value.id === handoff.id) return cleanHandoffDraft(value);
     } catch { throw new Error('已保存的交接草稿无法读取，请先检查存储。'); }
   }
   return { id: handoff.id, text: handoff.text, scope, targetId: '', attachments: [] };
