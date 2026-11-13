@@ -1,9 +1,12 @@
+import { relayAuthorization } from "./authorization";
+
 export type SubscriptionState = "connecting" | "online" | "recovering" | "paused" | "unauthorized";
 export type SubscriptionDiagnostic = { at: string; generation: number; state: SubscriptionState | "stopped";
   reason: "start" | "retry" | "open" | "stream-error" | "heartbeat-timeout" | "invalid-event" | "auth-failed" | "token-failed" | "background" | "foreground" | "network-online" | "dispose" };
 
 /** One owner for token refresh, transport loss, heartbeat and foreground recovery. */
 export function subscribeEvents(options: {
+  authorization?: { endpoint: string; token: string };
   getToken: (signal: AbortSignal) => Promise<{ streamToken: string | null }>;
   url: (token: string) => string;
   events: Record<string, (data: unknown) => void>;
@@ -88,6 +91,7 @@ export function subscribeEvents(options: {
     }
   };
   const visible = () => {
+    if (disposed || unauthorized) return;
     if (document.hidden) { close(); options.onState("paused"); record("paused", "background"); }
     else if (!source && !request) void connect("foreground");
   };
@@ -95,10 +99,15 @@ export function subscribeEvents(options: {
   document.addEventListener("visibilitychange", visible);
   window.addEventListener("online", online);
   window.addEventListener("focus", visible);
-  void connect();
+  const authorization = options.authorization && relayAuthorization(options.authorization.endpoint, options.authorization.token);
+  const revoked = () => { close(); unauthorized = true; options.onState("unauthorized"); record("unauthorized", "auth-failed"); };
+  const detachAuthorization = authorization?.subscribe(revoked);
+  if (authorization?.isRevoked()) revoked();
+  else void connect();
   return () => {
     if (disposed) return;
     disposed = true;
+    detachAuthorization?.();
     close();
     record("stopped", "dispose");
     document.removeEventListener("visibilitychange", visible);

@@ -80,7 +80,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
 
   app.addHook("onRequest", async (request, reply) => {
     const pathname = request.url.split("?")[0];
-    if (pathname === "/health" || pathname === "/api/pairing/consume" || request.method === "OPTIONS") return;
+    if (request.method === "OPTIONS" || ((pathname === "/health" || pathname === "/api/pairing/consume") && !request.headers.authorization)) return;
     if (pathname?.startsWith("/api/claude-bridge/")) {
       if (!authorizeClaudeBridge(request, config.claude?.bridgeToken)) return reply.code(401).send({ error: "unauthorized" });
       return;
@@ -106,6 +106,20 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     }
     if (pathname.endsWith("/events") && (streams.size >= 32 || (deviceStreams.get(owner)?.size ?? 0) >= 4)) return reply.code(429).send({ error: "stream_limit" });
   });
+  // Requests may outlive device authentication while awaiting a body or upstream IO.
+  app.addHook("preHandler", async (request, reply) => {
+    const owner = owners.get(request);
+    if (owner && !devices.has(owner)) return reply.code(401).send({ error: "unauthorized" });
+  });
+  app.addHook("onSend", async (request, reply, payload) => {
+    const owner = owners.get(request);
+    if (!owner || devices.has(owner)) return payload;
+    if (payload && typeof payload === "object" && "destroy" in payload && typeof payload.destroy === "function") payload.destroy();
+    reply.code(401).type("application/json; charset=utf-8");
+    reply.removeHeader("content-length");
+    reply.removeHeader("content-encoding");
+    return JSON.stringify({ error: "unauthorized" });
+  });
   const releaseUpload = (request: FastifyRequest) => {
     if (!uploadRequests.delete(request.id)) return;
     const owner = owners.get(request)!;
@@ -126,14 +140,14 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   app.delete("/api/devices/:id", async (request, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     if (owners.get(request) !== "admin" && owners.get(request) !== id) return reply.code(403).send({ error: "admin_required" });
-    await devices.revoke(id);
-    await desktopControl.messageQueue?.revoke(id);
+    // revoke() blocks authentication synchronously; slow cleanup cannot delay disconnect.
+    const persisted = devices.revoke(id);
     voice.revoke(id);
-    await voiceCredentials.remove(id);
     agentSessionRoutes.revoke(id);
     for (const stream of deviceStreams.get(id) ?? []) stream.destroy();
     for (const [token, value] of streamTokens) if (value.owner === id) streamTokens.delete(token);
     for (const [token, value] of desktopStreamTokens) if (value.owner === id) desktopStreamTokens.delete(token);
+    await Promise.all([persisted, desktopControl.messageQueue?.revoke(id), voiceCredentials.remove(id)]);
     return { ok: true };
   });
 
@@ -292,7 +306,8 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
 
     const owner = owners.get(request)!;
     // Reserve synchronously before subscriptions perform any asynchronous work.
-    if (streams.size >= 32 || (deviceStreams.get(owner)?.size ?? 0) >= 4 || !devices.has(owner)) return reply.code(429).send({ error: "stream_limit" });
+    if (!devices.has(owner)) return reply.code(401).send({ error: "unauthorized" });
+    if (streams.size >= 32 || (deviceStreams.get(owner)?.size ?? 0) >= 4) return reply.code(429).send({ error: "stream_limit" });
     const events = createEventStream(reply, streams);
     const owned = deviceStreams.get(owner) ?? new Set<PassThrough>();
     deviceStreams.set(owner, owned);
@@ -415,7 +430,8 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     if (!desktopControl.followThread) void desktopControl.status().catch(() => undefined);
     const owner = owners.get(request)!;
     // Reserve synchronously before subscriptions perform any asynchronous work.
-    if (streams.size >= 32 || (deviceStreams.get(owner)?.size ?? 0) >= 4 || !devices.has(owner)) return reply.code(429).send({ error: "stream_limit" });
+    if (!devices.has(owner)) return reply.code(401).send({ error: "unauthorized" });
+    if (streams.size >= 32 || (deviceStreams.get(owner)?.size ?? 0) >= 4) return reply.code(429).send({ error: "stream_limit" });
     const events = createEventStream(reply, streams);
     const owned = deviceStreams.get(owner) ?? new Set<PassThrough>();
     deviceStreams.set(owner, owned);

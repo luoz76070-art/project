@@ -13,9 +13,11 @@ const source = await fs.readFile(new URL('../apps/mobile/src/features/voice/mode
 await fs.writeFile(path.join(root, 'model.mjs'), ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText);
 const { mergeVoiceDraft, parseVoiceConfig, parseVoiceText, voiceError } = await import(path.join(root, 'model.mjs'));
 
+const authorizationSource = await fs.readFile(new URL('../apps/mobile/src/features/connection/authorization.ts', import.meta.url), 'utf8');
+await fs.writeFile(path.join(root, 'authorization.mjs'), ts.transpileModule(authorizationSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText);
 // Exercise the actual HTTP error translator with a native transport stub; no real requests.
 const httpSource = await fs.readFile(new URL('../apps/mobile/src/features/connection/http.ts', import.meta.url), 'utf8');
-const httpJs = ts.transpileModule(httpSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText.replace(/import[^;]+from "@capacitor\/core";/, 'const Capacitor = { isNativePlatform: () => false }; const CapacitorHttp = {};');
+const httpJs = ts.transpileModule(httpSource.replace('"./authorization"', '"./authorization.mjs"'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText.replace(/import[^;]+from "@capacitor\/core";/, 'const Capacitor = { isNativePlatform: () => false }; const CapacitorHttp = {};');
 await fs.writeFile(path.join(root, 'http.mjs'), httpJs);
 const { ensureHttpOk } = await import(path.join(root, 'http.mjs'));
 

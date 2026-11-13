@@ -16,7 +16,18 @@ async function moduleFrom(file) {
   await build({ entryPoints: [new URL(`../apps/mobile/src/${file}`, import.meta.url).pathname], outfile: outputPath, bundle: true, format: 'esm', platform: 'node', target: 'es2022', define: { 'import.meta.env': '{}' } });
   return import(pathToFileURL(outputPath).href);
 }
-const { subscribeEvents } = await moduleFrom('features/connection/subscription.ts');
+const authorizationBundle = path.join(temp, 'authorization.mjs');
+await build({ stdin: { contents: `
+  export * from './apps/mobile/src/features/connection/http.ts';
+  export * from './apps/mobile/src/features/connection/subscription.ts';
+  export * from './apps/mobile/src/features/connection/authorization.ts';
+  export { Capacitor, CapacitorHttp } from '@capacitor/core';
+`, resolveDir: process.cwd(), loader: 'ts' }, outfile: authorizationBundle, bundle: true, platform: 'node', format: 'esm',
+  plugins: [{ name: 'native-http-fixture', setup(plugin) {
+    plugin.onResolve({ filter: /^@capacitor\/core$/ }, () => ({ path: 'capacitor', namespace: 'fixture' }));
+    plugin.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export const Capacitor = { isNativePlatform: () => false }; export const CapacitorHttp = { request: async () => { throw new Error("unexpected native request"); } };', loader: 'js' }));
+  } }], define: { 'import.meta.env': '{}' } });
+const { subscribeEvents, apiGet, relayAuthorization, Capacitor, CapacitorHttp, deviceRevokedMessage } = await import(pathToFileURL(authorizationBundle).href);
 const { mergeLastTurn } = await moduleFrom('features/chat/lastTurn.ts');
 const { saveThreadRuntimeCache, loadThreadRuntimeCache, readThreadMessageCacheForDiagnostics, defaultRuntime, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, desktopApprovalsPatch, approvalResponsePatch } = await moduleFrom('features/chat/runtime.ts');
 const { makeMessageDiagnostics } = await moduleFrom('features/chat/messageDiagnostics.ts');
@@ -850,3 +861,54 @@ test('diagnostic cache reader reports missing/corrupt data and does not migrate 
 });
 
 test.after(() => fs.rm(temp, { recursive: true, force: true }));
+
+test('REST 401 stops all same-credential streams, remounts and polling requests; other scopes survive', async t => {
+  const { sources, document, window, own } = environment(t);
+  const endpoint = 'http://localhost/r/revocation', token = 'revoked-fixture';
+  let calls = 0, lateResolve;
+  t.mock.method(globalThis, 'fetch', async url => {
+    calls++;
+    if (url.endsWith('/late')) return new Promise(resolve => { lateResolve = resolve; });
+    return new Response('{}', { status: url.endsWith('/denied') ? 401 : 200 });
+  });
+  const states = [[], [], [], []], attempts = [0, 0, 0, 0];
+  const scopes = [{ endpoint, token }, { endpoint, token }, { endpoint, token: 'other-fixture' }, { endpoint: 'http://localhost/r/other', token }];
+  scopes.forEach((authorization, index) => own(subscribeEvents({ authorization,
+    getToken: async () => { attempts[index]++; return { streamToken: 'fixture' }; }, url: () => 'fixture', events: {}, onState: state => states[index].push(state), retryBaseMs: 1 })));
+  await tick(); sources.forEach(s => s.onopen());
+  const late = apiGet(`${endpoint}/api/late`, token);
+  await assert.rejects(apiGet(`${endpoint}/api/denied`, token), { status: 401, message: deviceRevokedMessage });
+  assert.deepEqual(sources.map(s => s.closed), [true, true, false, false]);
+  assert.equal(states[0].at(-1), 'unauthorized'); assert.equal(states[1].at(-1), 'unauthorized');
+  lateResolve(new Response('{"private":true}'));
+  await assert.rejects(late, { status: 401 });
+  for (let i = 0; i < 5; i++) await assert.rejects(apiGet(`${endpoint}/api/connection`, token), { status: 401 });
+  document.hidden = true; document.dispatchEvent(new Event('visibilitychange'));
+  document.hidden = false; document.dispatchEvent(new Event('visibilitychange'));
+  window.dispatchEvent(new Event('online')); window.dispatchEvent(new Event('focus'));
+  let remounts = 0;
+  own(subscribeEvents({ authorization: { endpoint, token }, getToken: async () => { remounts++; return { streamToken: 'bad' }; }, url: x => x, events: {}, onState() {} }));
+  await tick();
+  assert.equal(calls, 2); assert.equal(remounts, 0); assert.deepEqual(attempts.slice(0, 2), [1, 1]);
+  assert.equal(states[0].at(-1), 'unauthorized', 'background cannot replace unauthorized with paused');
+  await apiGet(`${endpoint}/api/connection`, 'newly-paired-fixture');
+  await apiGet('http://localhost/r/other/api/connection', token);
+  assert.equal(calls, 4);
+});
+
+test('native HTTP 401 blocks polling and suppresses a successful in-flight response', async t => {
+  const endpoint = 'http://localhost/r/native-revoke', token = 'native-fixture';
+  let calls = 0, release;
+  t.mock.method(Capacitor, 'isNativePlatform', () => true);
+  t.mock.method(CapacitorHttp, 'request', async options => {
+    calls++;
+    if (options.url.endsWith('/late')) return new Promise(resolve => { release = resolve; });
+    return { status: 401, data: {} };
+  });
+  const late = apiGet(`${endpoint}/api/late`, token);
+  await assert.rejects(apiGet(`${endpoint}/api/connection`, token), { status: 401, message: deviceRevokedMessage });
+  release({ status: 200, data: { private: true } });
+  await assert.rejects(late, { status: 401 });
+  await assert.rejects(apiGet(`${endpoint}/api/connection`, token), { status: 401 });
+  assert.equal(calls, 2); assert.equal(relayAuthorization(endpoint, token).isRevoked(), true);
+});

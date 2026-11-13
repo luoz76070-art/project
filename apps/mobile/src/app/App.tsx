@@ -1,3 +1,5 @@
+import { useDeviceRevoked } from "../features/connection/useDeviceRevoked";
+import { deviceRevokedMessage } from "../features/connection/authorization";
 import { SessionStatus } from "../features/chat/SessionStatus";
 import { codexSessionStatus, isActiveSessionStatus, readActivityEvidence, resultStatus } from "../features/chat/sessionStatusModel";
 import { createPortal } from "react-dom";
@@ -99,6 +101,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
   const desktopInterruptRef = useRef<{ threadId: string; controlToken: string; expectedTurnId: string; clientMessageId: string } | null>(null);
   const endpoint = normalizeEndpoint(connection.endpoint);
   const token = connection.token;
+  const deviceRevoked = useDeviceRevoked(endpoint, token);
   const apiGet = <T,>(url: string, auth?: string, signal = scopeAbortRef.current.signal) => requestGet<T>(url, auth, signal);
   const apiPost = <T,>(url: string, auth: string, body: unknown) => requestPost<T>(url, auth, body, scopeAbortRef.current.signal);
   useEffect(() => {
@@ -336,6 +339,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
   }
 
   useEffect(() => {
+    if (deviceRevoked) return;
     const refresh = () => {
       const sidebar = sidebarRef.current;
       if (!document.hidden && sidebar && (sidebar.classList.contains("open") || (getComputedStyle(sidebar).visibility !== "hidden" && sidebar.getBoundingClientRect().right > 0))) void loadThreads({ silent: true });
@@ -347,7 +351,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
     window.addEventListener("focus", refresh);
     return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refresh); window.removeEventListener("focus", refresh); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sidebarOpen, splitMode, selected?.id, isNewThread, threadRange, threadPage.search, threadPage.offset]);
+  }, [sidebarOpen, splitMode, selected?.id, isNewThread, threadRange, threadPage.search, threadPage.offset, deviceRevoked]);
 
   async function testConnection() {
     if (normalizeEndpoint(draftEndpoint) !== endpoint || draftToken !== token) {
@@ -1453,7 +1457,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
   }, [activeThreadKey, activeRuntime.watchMode, activeRuntime.turnStatus, activeRuntime.lastTurn]);
 
   useEffect(() => {
-    if (!selected?.id || activeRuntime.loading || activeRuntime.watchMode !== "desktop-tail" || streamState === "online" || streamState === "unauthorized") return;
+    if (deviceRevoked || !selected?.id || activeRuntime.loading || activeRuntime.watchMode !== "desktop-tail" || streamState === "online" || streamState === "unauthorized") return;
     const polling = createPollScope(scopeAbortRef.current.signal);
     const { signal } = polling.controller;
     desktopPollRef.current = polling.controller;
@@ -1493,15 +1497,16 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
       if (timer !== null) window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, activeRuntime.loading, activeRuntime.watchMode, streamState, endpoint, token]);
+  }, [selected?.id, activeRuntime.loading, activeRuntime.watchMode, streamState, endpoint, token, deviceRevoked]);
 
   useEffect(() => {
-    if (!selected?.id || activeRuntime.loading || activeRuntime.watchMode !== "desktop-tail" || !canUseEventSource()) return;
+    if (deviceRevoked || !selected?.id || activeRuntime.loading || activeRuntime.watchMode !== "desktop-tail" || !canUseEventSource()) return;
     const subscription = createPollScope(scopeAbortRef.current.signal);
     const { signal } = subscription.controller;
     const threadId = selected.id;
     const reduce = createSnapshotReducer<DesktopStreamSnapshot>();
     const unsubscribe = subscribeEvents({
+      authorization: { endpoint, token },
       onDiagnostic: diagnosticJournalRef.current.subscribe("desktop"),
       getToken: (signal) => requestPost(buildUrl(endpoint, `/api/desktop/threads/${encodeURIComponent(threadId)}/stream-token`), token, {}, signal),
       url: (streamToken) => {
@@ -1519,16 +1524,16 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
         if (state === "online" || state === "unauthorized") desktopPollRef.current?.abort();
         setStreamState(state);
         if (state !== "online") updateRuntime(threadId, runtime => ({ ...runtime, activityEvidence: null, sourceConnected: false, ...desktopControlOfflinePatch(runtime) }));
-        if (state === "unauthorized") { patchRuntime(threadId, { status: "连接凭证已失效，请在设置中更新", watching: false }); setConnectionState("error"); }
+        if (state === "unauthorized") { patchRuntime(threadId, { status: deviceRevokedMessage, watching: false }); setConnectionState("error"); }
         else if (state === "recovering") patchRuntime(threadId, { status: "正在恢复连接，已有内容已保留" });
       },
     });
     return () => { subscription.dispose(); unsubscribe(); updateRuntime(threadId, runtime => ({ ...runtime, activityEvidence: null, sourceConnected: false, ...desktopControlOfflinePatch(runtime) })); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, activeRuntime.loading, activeRuntime.watchMode, endpoint, token]);
+  }, [selected?.id, activeRuntime.loading, activeRuntime.watchMode, endpoint, token, deviceRevoked]);
 
   useEffect(() => {
-    if (!activeRuntime.activeTurnId || !activeThreadKey || activeRuntime.watchMode === "desktop-tail") return;
+    if (deviceRevoked || !activeRuntime.activeTurnId || !activeThreadKey || activeRuntime.watchMode === "desktop-tail") return;
     if (!canUseEventSource()) return;
     const subscription = createPollScope(scopeAbortRef.current.signal);
     const { signal } = subscription.controller;
@@ -1562,6 +1567,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
 
     const reduce = createSnapshotReducer<LiveTurnSnapshot>();
     const unsubscribe = subscribeEvents({
+      authorization: { endpoint, token },
       onDiagnostic: diagnosticJournalRef.current.subscribe("live"),
       getToken: (signal) => requestPost(buildUrl(endpoint, `/api/live/turns/${encodeURIComponent(turnId)}/stream-token`), token, {}, signal),
       url: (streamToken) => buildUrl(endpoint, `/api/live/turns/${encodeURIComponent(turnId)}/events?v=1&streamToken=${encodeURIComponent(streamToken)}`),
@@ -1578,7 +1584,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
           patchRuntime(threadKey, { userInputs: [], activityEvidence: null, sourceConnected: false });
         }
         if (state === "recovering") patchRuntime(threadKey, { status: "正在恢复连接" });
-        if (state === "unauthorized") { patchRuntime(threadKey, { status: "连接凭证已失效，请在设置中更新" }); setConnectionState("error"); }
+        if (state === "unauthorized") { patchRuntime(threadKey, { status: deviceRevokedMessage }); setConnectionState("error"); }
       },
     });
     return () => {
@@ -1588,10 +1594,10 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
       patchRuntime(threadKey, { userInputs: [], activityEvidence: null, sourceConnected: false });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeThreadKey, activeRuntime.activeTurnId, activeRuntime.watchMode, endpoint, token]);
+  }, [activeThreadKey, activeRuntime.activeTurnId, activeRuntime.watchMode, endpoint, token, deviceRevoked]);
 
   useEffect(() => {
-    if (!activeRuntime.activeTurnId || !activeThreadKey || activeRuntime.watchMode === "desktop-tail") return;
+    if (deviceRevoked || !activeRuntime.activeTurnId || !activeThreadKey || activeRuntime.watchMode === "desktop-tail") return;
     if (canUseEventSource() && liveStreamFallbackTurnId !== activeRuntime.activeTurnId) return;
     const polling = createPollScope(scopeAbortRef.current.signal);
     const { signal } = polling.controller;
@@ -1627,9 +1633,10 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
       if (timer !== null) window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeThreadKey, activeRuntime.activeTurnId, activeRuntime.watchMode, endpoint, token, liveStreamFallbackTurnId]);
+  }, [activeThreadKey, activeRuntime.activeTurnId, activeRuntime.watchMode, endpoint, token, liveStreamFallbackTurnId, deviceRevoked]);
 
   useEffect(() => {
+    if (deviceRevoked) return;
     let cancelled = false;
     let inFlight = false;
     let timer: number | null = null;
@@ -1662,7 +1669,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
       window.removeEventListener("focus", onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint, token]);
+  }, [endpoint, token, deviceRevoked]);
 
   useEffect(() => {
     void refreshRelayStatus().catch(() => undefined);
@@ -1902,7 +1909,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
 
             {activeRuntime.desktopSubmission && <div className="connection-notice" role="status">提交结果待确认，草稿已保留；请勿重复发送。</div>}
             {activeRuntime.desktopInterrupt && <div className="connection-notice" role="status">打断结果待确认，正在同步会话。</div>}
-            {(streamState === "recovering" || streamState === "unauthorized" || connectionState === "error") && <div className="connection-notice" role="status"><span className="status-dot error" />{streamState === "unauthorized" ? "凭证已失效，请重新配对" : streamState === "recovering" ? "正在恢复连接，消息与草稿已保留" : "连接暂时不可用，正在检查"}</div>}
+            {(deviceRevoked || streamState === "recovering" || streamState === "unauthorized" || connectionState === "error") && <div className="connection-notice" role="status"><span className="status-dot error" />{deviceRevoked || streamState === "unauthorized" ? deviceRevokedMessage : streamState === "recovering" ? "正在恢复连接，消息与草稿已保留" : "连接暂时不可用，正在检查"}</div>}
             {pendingApprovals.length > 0 && (
               <div className="approval-stack">
                 {pendingApprovals.map((approval) => (
