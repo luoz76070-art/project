@@ -1,3 +1,5 @@
+import { SessionStatus } from "../features/chat/SessionStatus";
+import { codexSessionStatus, isActiveSessionStatus, readActivityEvidence, resultStatus } from "../features/chat/sessionStatusModel";
 import { createPortal } from "react-dom";
 import { ProductRemoteShell } from "../features/product/ProductRemoteShell";
 import { TurnResultNotice } from "../features/chat/TurnResultNotice";
@@ -17,7 +19,7 @@ import { readDiagnosticEnvironment, makeDiagnosticsExport, saveDiagnosticFile } 
 import { createConnectionJournal } from "../features/connection/diagnosticJournal";
 import { createPollScope } from "../features/chat/sync";
 import { createRuntimeSync } from "../features/chat/runtimeSync";
-import { messagesForRender, activeTurnActivity, turnInlineIndicator, capMessages, mergeMessages, mergeMessagesById, turnStatusText, desktopActionText, canUseEventSource } from "../features/chat/messages";
+import { messagesForRender, turnInlineIndicator, capMessages, mergeMessages, mergeMessagesById, turnStatusText, desktopActionText, canUseEventSource } from "../features/chat/messages";
 import { groupThreadsByProject, mergeThreads, shortPath, isDesktopSource, firstLine, threadListDetail, cleanTitle, sourceClass, sourceLabel, retainCodexThread, sessionInRange, sessionListRefreshMs, type SessionRange } from "../features/threads/model";
 import { ProjectGroups } from "../features/threads/ProjectGroups";
 import { SessionRangeControl } from "../features/threads/SessionRangeControl";
@@ -36,7 +38,7 @@ import { clamp, applyTheme } from "../shared/preferences";
 import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, Plus, ArrowUp, ChevronDown, Download } from "lucide-react";
 import { formatDate } from "../shared/format";
 import { UserInputCard } from "../features/chat/UserInputCard";
-import { MessageBubble, MessageTimeline, GenerationStatus, ApprovalCard, AttachmentTray } from "../features/chat/components";
+import { MessageBubble, MessageTimeline, ApprovalCard, AttachmentTray } from "../features/chat/components";
 import { MessageMediaProvider } from "../features/chat/MessageImage";
 import { ComputerComposer } from "../features/chat/ComputerComposer";
 import { uploadAttachments } from "../features/chat/uploadAttachments";
@@ -230,15 +232,9 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
   const smoothLatestAssistant = Boolean(latestAssistantMessageId && activeRuntime.smoothMessageId === latestAssistantMessageId);
   const smoothPending = Boolean(smoothLatestAssistant && (activeRuntime.sending || isLiveTurnActive));
   const pendingApprovals = activeRuntime.approvals.filter((approval) => ["pending", "submitting", "submitted", "uncertain"].includes(approval.status));
-  const turnActivity = activeTurnActivity(activeRuntime, {
-    desktop: canUseDesktopIpc,
-    hasAssistantOutput: latestAssistantHasText,
-    pendingApproval: pendingApprovals.length > 0,
-  });
-  const inlineTurnIndicator = turnInlineIndicator(visibleMessages, activeRuntime, {
-    desktop: canUseDesktopIpc || activeRuntime.watchMode === "desktop-tail",
-    pendingApproval: pendingApprovals.length > 0,
-  });
+  const sessionStatus = codexSessionStatus(activeRuntime, connectionState === "ok");
+  const turnActivity = isActiveSessionStatus(sessionStatus) ? sessionStatus : null;
+  const inlineTurnIndicator = turnInlineIndicator(visibleMessages, turnActivity);
   const showInlineTurnIndicator = Boolean(
     !loadingMessages &&
       inlineTurnIndicator &&
@@ -450,7 +446,8 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
         const mergedMessages = capMessages(mergeMessages(reset ? [] : runtime.messages, data.messages), { historyBrowsing });
         return {
           ...runtime,
-          ...turnProgressPatch(reset ? { ...runtime, lastTurn: null, turnStatus: "idle", activity: undefined, sending: false, activeTurnId: null } : runtime, data),
+          ...turnProgressPatch(reset ? { ...runtime, lastTurn: null, turnStatus: "idle", activity: undefined, sending: false, activeTurnId: null, activityEvidence: null, statusTurnId: null } : runtime, { ...data, activityEvidence: data.activityEvidence ?? null, activeTurnId: data.activeTurnId ?? null }),
+          sourceConnected: true,
           messages: mergedMessages,
           loaded: true,
           cursor: data.cursor ?? runtime.cursor,
@@ -797,7 +794,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
       draft: "",
       attachments: [],
       status: "启动 Codex turn",
-      turnStatus: "starting",
+      turnStatus: "starting", activityEvidence: null, statusTurnId: null, sourceConnected: true,
       lastTurnError: "",
     });
     setStatus("启动 Codex turn");
@@ -843,7 +840,8 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
         status: turnStatusText(data.status),
         sending: data.status === "starting" || data.status === "inProgress",
         activeTurnId: data.status === "starting" || data.status === "inProgress" ? data.turnId : null,
-        turnStatus: data.status,
+        turnStatus: data.status, statusTurnId: data.turnId, sourceConnected: data.connected !== false,
+        activityEvidence: readActivityEvidence(data.activityEvidence),
         ...(data.lastTurn !== undefined ? { lastTurn: data.lastTurn } : {}),
         lastEventCount: data.eventCount,
         lastTurnError: data.error ?? "",
@@ -852,7 +850,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
       if (threadKey !== data.threadId) {
         removeRuntime(threadKey);
       }
-      setStatus(turnStatusText(data.status));
+      setStatus(resultStatus(data.lastTurn)?.label ?? "已启动本轮");
       setIsNewThread(false);
 
       if (!targetThread || targetThread.id !== data.threadId) {
@@ -917,7 +915,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
     const mode = native ? requestedMode : "auto";
     const postingText = mode === "queue" ? "正在加入待发队列…" : mode === "steer" ? "正在发送引导…" : "正在发送到桌面 Codex…";
     patchRuntime(threadKey, {
-      ...(!native ? { sending: true, turnStatus: "inProgress" as const, activity: "thinking" as const, draft: "", attachments: [] } : {}),
+      ...(!native ? { sending: true, turnStatus: "inProgress" as const, activity: "thinking" as const, activityEvidence: null, statusTurnId: null, draft: "", attachments: [] } : {}),
       desktopSendFeedback: postingText,
       status: postingText,
       lastTurnError: "",
@@ -1445,14 +1443,14 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
   // Announce only committed state, never an HTTP/SSE result queued for validation.
   useEffect(() => {
     if (!activeThreadKey || activeRuntime.watchMode === "desktop-tail") return;
-    if (activeRuntime.turnStatus === "completed") {
-      setStatus("Codex 已完成");
-      void loadThreads({ silent: true });
+    if (activeRuntime.turnStatus === "starting" || activeRuntime.turnStatus === "inProgress") return;
+    const result = resultStatus(activeRuntime.lastTurn);
+    if (result) {
+      setStatus(result.label);
+      if (result.kind === "completed") void loadThreads({ silent: true });
     }
-    if (activeRuntime.turnStatus === "interrupted") setStatus("Codex 已打断");
-    if (activeRuntime.turnStatus === "failed") setStatus(activeRuntime.lastTurnError || "Codex 运行失败");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeThreadKey, activeRuntime.watchMode, activeRuntime.turnStatus, activeRuntime.lastTurnError]);
+  }, [activeThreadKey, activeRuntime.watchMode, activeRuntime.turnStatus, activeRuntime.lastTurn]);
 
   useEffect(() => {
     if (!selected?.id || activeRuntime.loading || activeRuntime.watchMode !== "desktop-tail" || streamState === "online" || streamState === "unauthorized") return;
@@ -1520,12 +1518,12 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
         if (signal.aborted) return;
         if (state === "online" || state === "unauthorized") desktopPollRef.current?.abort();
         setStreamState(state);
-        if (state !== "online") updateRuntime(threadId, runtime => ({ ...runtime, ...desktopControlOfflinePatch(runtime) }));
+        if (state !== "online") updateRuntime(threadId, runtime => ({ ...runtime, activityEvidence: null, sourceConnected: false, ...desktopControlOfflinePatch(runtime) }));
         if (state === "unauthorized") { patchRuntime(threadId, { status: "连接凭证已失效，请在设置中更新", watching: false }); setConnectionState("error"); }
         else if (state === "recovering") patchRuntime(threadId, { status: "正在恢复连接，已有内容已保留" });
       },
     });
-    return () => { subscription.dispose(); unsubscribe(); updateRuntime(threadId, runtime => ({ ...runtime, ...desktopControlOfflinePatch(runtime) })); };
+    return () => { subscription.dispose(); unsubscribe(); updateRuntime(threadId, runtime => ({ ...runtime, activityEvidence: null, sourceConnected: false, ...desktopControlOfflinePatch(runtime) })); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, activeRuntime.loading, activeRuntime.watchMode, endpoint, token]);
 
@@ -1577,7 +1575,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
           pendingSnapshot = null;
           if (snapshotTimer !== null) window.clearTimeout(snapshotTimer);
           snapshotTimer = null;
-          patchRuntime(threadKey, { userInputs: [] });
+          patchRuntime(threadKey, { userInputs: [], activityEvidence: null, sourceConnected: false });
         }
         if (state === "recovering") patchRuntime(threadKey, { status: "正在恢复连接" });
         if (state === "unauthorized") { patchRuntime(threadKey, { status: "连接凭证已失效，请在设置中更新" }); setConnectionState("error"); }
@@ -1587,7 +1585,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
       subscription.dispose();
       if (snapshotTimer !== null) window.clearTimeout(snapshotTimer);
       unsubscribe();
-      patchRuntime(threadKey, { userInputs: [] });
+      patchRuntime(threadKey, { userInputs: [], activityEvidence: null, sourceConnected: false });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThreadKey, activeRuntime.activeTurnId, activeRuntime.watchMode, endpoint, token]);
@@ -1877,12 +1875,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
                   onCopy={() => copyText(message.text, message.id)}
                 />
                 {showInlineTurnIndicator && inlineTurnIndicator?.messageId === message.id && (
-                  <GenerationStatus
-                    label={inlineTurnIndicator.label}
-                    detail={inlineTurnIndicator.detail}
-                    tone={inlineTurnIndicator.tone}
-                    anchorRole={message.role}
-                  />
+                  <SessionStatus status={turnActivity} anchorRole={message.role} />
                 )}
               </React.Fragment>
             )} />
@@ -1891,7 +1884,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
               <UserInputCard key={request.id} request={request} disabled={connectionState !== "ok" || streamState !== "online"} onRespond={answers => respondUserInput(request, answers)} />
             ))}
             {showInlineTurnIndicator && inlineTurnIndicator && !inlineTurnIndicator.messageId && (
-              <GenerationStatus label={inlineTurnIndicator.label} detail={inlineTurnIndicator.detail} tone={inlineTurnIndicator.tone} anchorRole="assistant" />
+              <SessionStatus status={turnActivity} anchorRole="assistant" />
             )}
           </div>
 
@@ -1925,7 +1918,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
               </div>
             )}
             <div className="composer-status">
-              <span>{sending ? turnActivity.label : controlText}</span>
+              <span>{sessionStatus ? <SessionStatus status={sessionStatus} variant="composer" /> : controlText}</span>
               <em>{connectionBadge(connectionState, canUseDesktopIpc ? desktopControlStatus : liveStatus)}</em>
             </div>
             {attachments.length > 0 && <AttachmentTray attachments={attachments} onRemove={removeAttachment} />}
@@ -1945,8 +1938,8 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
               disabled={!canControlSelected} uploadDisabled={!token.trim()} uploading={uploading} running={isLiveTurnActive} hasContent={hasMessageContent}
               busy={submittingMessage || (sending && !isLiveTurnActive)} canSend={canSend} canStop={canInterrupt}
               deliveries={nativeDesktop ? { steer: canSubmitMessage, queue: canSend } : undefined}
-              status={!activeRuntime.desktopSubmission && activeRuntime.desktopSendFeedback ? activeRuntime.desktopSendFeedback : isLiveTurnActive ? turnActivity.label : `${isDesktopWatch ? "电脑" : "Relay"} · ${isDesktopHistoryOnly ? "历史会话" : "当前会话"}`}
-              statusTitle={activeRuntime.desktopSendFeedback || (isLiveTurnActive ? turnActivity.label : controlText)} placeholder="向 Codex 发送消息"
+              status={!activeRuntime.desktopSubmission && activeRuntime.desktopSendFeedback ? activeRuntime.desktopSendFeedback : sessionStatus ? <SessionStatus status={sessionStatus} variant="composer" /> : `${isDesktopWatch ? "电脑" : "Relay"} · ${isDesktopHistoryOnly ? "历史会话" : "当前会话"}`}
+              statusTitle={activeRuntime.desktopSendFeedback || (sessionStatus?.detail || controlText)} placeholder="向 Codex 发送消息"
               voice={<VoiceInput scope={scope} thread={`codex:${activeThreadKey || newThreadId}`} recovery={voiceRecovery} key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
                 onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }} />} />
           </footer>

@@ -1,3 +1,4 @@
+import type { ActivityEvidence } from "../../../../shared/activityEvidence";
 
 import type { LastTurn } from "../../../../shared/lastTurn";
 
@@ -92,6 +93,9 @@ export type ApprovalPolicy = "never" | "on-request";
 export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
 
 export type ThreadRuntime = {
+  activityEvidence?: ActivityEvidence | null;
+  statusTurnId?: string | null;
+  sourceConnected?: boolean;
   lastTurn?: LastTurn | null;
   messages: CodexMessage[];
   draft: string;
@@ -155,6 +159,7 @@ export type LiveApproval = {
 };
 
 export type LiveTurnSnapshot = {
+  activityEvidence?: ActivityEvidence | null;
   lastTurn?: LastTurn | null;
   connected?: boolean;
   threadId: string;
@@ -171,6 +176,8 @@ export type LiveTurnSnapshot = {
 };
 
 export type DesktopStreamSnapshot = {
+  activeTurnId?: string | null;
+  activityEvidence?: ActivityEvidence | null;
   lastTurn?: LastTurn | null;
   threadId: string;
   status: LiveTurnStatus | "idle";

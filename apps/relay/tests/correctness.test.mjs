@@ -143,14 +143,14 @@ test('modern tool events expose only coarse activity and explicit completion end
 test('item lifecycle phases stay coarse and every terminal event clears activity', () => {
   const item = type => ({ value: { type: 'event_msg', payload: { type: 'item_completed', item: { type, text: 'private content' } } } });
   for (const [type, activity] of [['Reasoning', 'thinking'], ['McpToolCall', 'working'], ['CommandExecution', 'working'], ['FileChange', 'working'], ['AgentMessage', 'outputting']]) {
-    assert.deepEqual(turnProgress([item(type)]), { activity });
+    assert.deepEqual(turnProgress([item(type)]), { activity, activityEvidence: null });
   }
   for (const [type, turnStatus] of [['task_complete', 'completed'], ['task_completed', 'completed'], ['turn_aborted', 'interrupted'], ['task_failed', 'failed'], ['turn_failed', 'failed']]) {
     const progress = turnProgress([item('McpToolCall'), { value: JSON.parse(record('', type)) }]);
     assert.equal(progress.turnStatus, turnStatus);
     assert.equal(progress.activity, undefined);
   }
-  assert.deepEqual(turnProgress([item(123), { value: null }]), {});
+  assert.deepEqual(turnProgress([item(123), { value: null }]), { activityEvidence: null });
 });
 
 test('HTTP baseline and JSONL SSE deliver thinking, work, output and completion without IPC', { timeout: 8000 }, async t => {
@@ -473,5 +473,69 @@ test('rollout history and delta preserve the original assistant item identity an
     assert.equal(page.messages[0].phase, 'final_answer');
     assert.equal(page.messages[0].turnId, 'fixture-turn');
     assert.match(page.messages[0].id, /^log-/);
+  }
+});
+
+test('S2 evidence is a bounded whitelist and never includes source payloads', async () => {
+  const { activityEvidence, activityEvidenceSchema } = await import('../dist/store/activityEvidence.js');
+  const value = activityEvidence('working', 'current');
+  assert.deepEqual(Object.keys(value).sort(), ['kind', 'observedAt', 'turnId']);
+  assert.deepEqual(activityEvidenceSchema.parse({ ...value, command: 'PRIVATE', arguments: { path: 'PRIVATE' } }), value);
+  for (const id of ['', 'x'.repeat(513), null, {}]) assert.equal(activityEvidence('thinking', id), null);
+  assert.equal(activityEvidence('future', 'current'), null);
+  assert.equal(activityEvidence('working', 'current', 'invalid'), null);
+});
+test('S2 live evidence follows the current turn, clears at end/disconnect and ignores late events', async t => {
+  const f = await resultController(t), first = await f.start();
+  assert.equal(first.activityEvidence, null);
+  for (const [method, kind, extra] of [
+    ['item/reasoning/textDelta', 'thinking', { delta: 'PRIVATE' }],
+    ['item/started', 'working', { item: { type: 'commandExecution', command: 'PRIVATE' } }],
+    ['item/agentMessage/delta', 'outputting', { itemId: 'assistant', delta: 'PRIVATE' }],
+  ]) {
+    f.event(method, first.turnId, extra);
+    const view = f.controller.getTurn(first.turnId).activityEvidence;
+    assert.equal(view.kind, kind); assert.equal(view.turnId, first.turnId);
+    assert.deepEqual(Object.keys(view).sort(), ['kind', 'observedAt', 'turnId']); assert.doesNotMatch(JSON.stringify(view), /PRIVATE/);
+  }
+  f.event('error', first.turnId, { willRetry: true });
+  assert.equal(f.controller.getTurn(first.turnId).activityEvidence.kind, 'outputting');
+  f.event('turn/completed', first.turnId, { turn: { id: first.turnId, status: 'completed' } });
+  f.event('item/reasoning/textDelta', first.turnId, { delta: 'late' });
+  assert.equal(f.controller.getTurn(first.turnId).activityEvidence, null);
+  const next = await f.start(); assert.equal(next.activityEvidence, null);
+  assert.equal(f.controller.getTurn(first.turnId).activityEvidence, null);
+  f.event('item/reasoning/textDelta', first.turnId, { delta: 'late' });
+  assert.equal(f.controller.getTurn(next.turnId).activityEvidence, null);
+  for (let i = 0; i < 1000; i++) f.event('item/reasoning/textDelta', next.turnId, { delta: 'PRIVATE' });
+  assert.ok(JSON.stringify(f.controller.getTurn(next.turnId).activityEvidence).length < 150);
+  f.client.emit('disconnect');
+  assert.equal(f.controller.getTurn(next.turnId).activityEvidence, null);
+});
+test('S2 desktop native and rollout observations require a turn and clear default/terminal phases', async () => {
+  const { desktopActivity } = await import('../dist/desktop/desktopControl.js');
+  const turn = { id: 'native', status: 'inProgress', items: [{ type: 'commandExecution', status: 'inProgress', command: 'PRIVATE' }] };
+  assert.equal(desktopActivity({ turns: [turn] }).activityEvidence.kind, 'working');
+  assert.doesNotMatch(JSON.stringify(desktopActivity({ turns: [turn] })), /PRIVATE/);
+  assert.equal(desktopActivity({ turns: [{ ...turn, id: 'next', items: [] }] }).activityEvidence, null);
+  assert.equal(desktopActivity({ turns: [{ ...turn, status: 'completed' }] }).activityEvidence, null);
+  assert.equal(desktopActivity({ turns: [{ ...turn, items: [{ type: 'reasoning' }] }] }).activityEvidence, null);
+  const line = payload => ({ value: { type: 'event_msg', payload } });
+  const start = line({ type: 'task_started', turn_id: 'a' });
+  assert.equal(turnProgress([start]).activityEvidence, null);
+  const item = line({ type: 'item_started', item: { type: 'reasoning', text: 'PRIVATE' } });
+  assert.equal(turnProgress([item]).activityEvidence, null);
+  assert.equal(turnProgress([start, item]).activityEvidence.turnId, 'a');
+  assert.equal(turnProgress([start, item, line({ type: 'task_started', turn_id: 'b' })]).activityEvidence, null);
+  assert.equal(turnProgress([start, item, line({ type: 'task_complete', turn_id: 'a' })]).activityEvidence, null);
+});
+
+test('S2 existing full and incremental SSE frames retain evidence-only updates and explicit clears', () => {
+  for (const event of ['turn', 'desktop', 'agent-session']) for (const incremental of [false, true]) {
+    const frames = [], publish = snapshotSender((name, data) => frames.push({ name, data }), event, incremental);
+    const activityEvidence = { kind: 'thinking', turnId: 't', observedAt: '2026-11-13T12:00:00.000Z' };
+    publish({ messages: [], activityEvidence: null }); publish({ messages: [], activityEvidence }); publish({ messages: [], activityEvidence: null });
+    assert.deepEqual(frames.map(frame => frame.data.activityEvidence), [null, activityEvidence, null]);
+    assert.ok(frames.every(frame => frame.name === event));
   }
 });

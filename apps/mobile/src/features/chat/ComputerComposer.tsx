@@ -7,7 +7,7 @@ export function ComputerComposer({ draft, onDraft, onSend, onStop, onUpload, voi
   deliveries, label = "消息", maxLength,
 }: {
   draft: string; onDraft: (text: string) => void; onSend: (delivery?: "steer" | "queue") => void;
-  onStop: () => void; onUpload: () => void; voice: ReactNode; status: string; statusTitle?: string; placeholder: string;
+  onStop: () => void; onUpload: () => void; voice: ReactNode; status: ReactNode; statusTitle?: string; placeholder: string;
   disabled?: boolean; uploading?: boolean; uploadDisabled?: boolean; busy?: boolean; running?: boolean; hasContent: boolean;
   canSend: boolean; canStop?: boolean; deliveries?: { steer: boolean; queue: boolean };
   label?: string; maxLength?: number;
@@ -22,7 +22,7 @@ export function ComputerComposer({ draft, onDraft, onSend, onStop, onUpload, voi
       <button type="button" className="composer-tool-button" onClick={onUpload} disabled={uploading || uploadDisabled} aria-label="上传文件">
         {uploading ? <Loader2 size={18} className="spin" /> : <Plus size={21} />}
       </button>
-      <span className="composer-mode" role="status" aria-live="polite" title={statusTitle ?? status}>
+      <span className="composer-mode" role="status" aria-live="polite" title={statusTitle ?? (typeof status === "string" ? status : undefined)}>
         {running && <span className="composer-activity-dot" aria-hidden="true" />}<span>{status}</span>
       </span>
       {running && hasContent && <button type="button" className="composer-tool-button" onClick={onStop} disabled={!canStop || busy} aria-label="停止生成"><CircleStop size={20} /></button>}

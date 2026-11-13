@@ -24,31 +24,6 @@ export function SmoothText({ text, active, pending, onDone }: { text: string; ac
   return <MessageContent text={!active || reducedMotion ? text : displayed} />;
 }
 
-export function GenerationStatus({
-  label,
-  detail,
-  tone,
-  anchorRole,
-}: {
-  label: string;
-  detail: string;
-  tone: "thinking" | "outputting" | "approval";
-  anchorRole: string;
-}) {
-  return (
-    <div className={`generation-status ${tone} ${roleClass(anchorRole)}`} role="status" aria-live="polite">
-      <span className="generation-dots" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-      </span>
-      <span>
-        <strong>{label}</strong>
-        {detail && <em>{detail}</em>}
-      </span>
-    </div>
-  );
-}
 
 export function AttachmentTray({ attachments, onRemove }: { attachments: PendingAttachment[]; onRemove: (id: string) => void }) {
   return (

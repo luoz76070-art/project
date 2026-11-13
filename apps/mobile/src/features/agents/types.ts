@@ -1,3 +1,4 @@
+import type { ActivityEvidence } from "../../../../../shared/activityEvidence.js";
 import type { CodexMessage } from "../../app/types";
 import type { LastTurn } from "../../../../../shared/lastTurn";
 
@@ -12,6 +13,8 @@ export type AgentPermission = {
   detail: string; unavailableReason: string | null; decisions: ("once" | "always" | "reject")[];
 };
 export type AgentSessionSnapshot = {
+  activeTurnId?: string | null;
+  activityEvidence?: ActivityEvidence | null;
   lastTurn?: LastTurn | null;
   agentId: string; session: AgentSession; connected: boolean; updatedAt: string;
   status: "idle" | "running"; activity: "thinking" | "working" | "outputting";

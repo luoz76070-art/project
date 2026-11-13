@@ -365,53 +365,10 @@ export function nextSmoothMessageId(runtime: ThreadRuntime, messages: CodexMessa
   return !previous || previous.text !== latest.text ? latest.id : runtime.smoothMessageId;
 }
 
-export function turnInlineIndicator(
-  messages: CodexMessage[],
-  runtime: ThreadRuntime,
-  options: { desktop: boolean; pendingApproval: boolean },
-): { messageId: string; label: string; detail: string; tone: "thinking" | "outputting" | "approval" } | null {
-  const active = isRuntimeTurnActive(runtime);
-  if (!active && !options.pendingApproval) return null;
-
-  const latestAssistant = latestAssistantFromMessages(messages);
-  const latestUser = [...messages].reverse().find((message) => message.role === "user") ?? null;
-  const fallback = [...messages].reverse().find((message) => message.role === "assistant" || message.role === "user") ?? null;
-
-  if (options.pendingApproval) {
-    const target = latestAssistant ?? latestUser ?? fallback;
-    return { messageId: target?.id ?? "", label: "等待审批", detail: "确认后继续执行", tone: "approval" };
-  }
-
-  if (runtime.userInputs?.length) {
-    return { messageId: (latestAssistant ?? latestUser ?? fallback)?.id ?? "", ...userInputActivity(runtime), tone: "approval" };
-  }
-
-  if (runtime.activity) {
-    const labels = { thinking: "正在思考", working: "Codex 正在工作", outputting: "正在输出" };
-    return {
-      messageId: (latestAssistant ?? latestUser ?? fallback)?.id ?? "",
-      label: labels[runtime.activity],
-      detail: runtime.activity === "working" ? "正在执行操作，完成后继续同步" : options.desktop ? "同步电脑会话" : "实时接收输出",
-      tone: runtime.activity === "outputting" ? "outputting" : "thinking",
-    };
-  }
-
-  if (hasAssistantOutputAfterLatestUser(messages) && latestAssistant) {
-    return {
-      messageId: latestAssistant.id,
-      label: "正在输出",
-      detail: options.desktop ? "同步桌面输出" : "实时接收输出",
-      tone: "outputting",
-    };
-  }
-
-  const target = latestUser ?? fallback;
-  return {
-    messageId: target?.id ?? "",
-    label: "正在思考",
-    detail: options.desktop ? "等待桌面响应" : "等待 Codex 回复",
-    tone: "thinking",
-  };
+export function turnInlineIndicator(messages: CodexMessage[], status: import("./sessionStatusModel").SessionStatus | null): { messageId: string } | null {
+  if (!status || status.result) return null;
+  const target = latestAssistantFromMessages(messages) ?? [...messages].reverse().find(message => message.role === "user");
+  return { messageId: target?.id ?? "" };
 }
 
 export function isRuntimeTurnActive(runtime: ThreadRuntime) {
@@ -445,30 +402,6 @@ export function turnStatusText(status: LiveTurnStatus | "idle") {
   if (status === "interrupted") return "Codex 已打断";
   if (status === "failed") return "Codex 运行失败";
   return "";
-}
-
-export function activeTurnActivity(
-  runtime: ThreadRuntime,
-  options: { desktop: boolean; hasAssistantOutput: boolean; pendingApproval: boolean },
-) {
-  if (options.pendingApproval) return { label: "等待审批", detail: "确认后继续执行" };
-  if (runtime.userInputs?.length) return userInputActivity(runtime);
-  if (runtime.activity === "working") return { label: "Codex 正在工作", detail: "正在执行操作，完成后继续同步" };
-  if (runtime.activity === "thinking") return { label: "正在思考", detail: "电脑仍在处理当前请求" };
-  if (runtime.activity === "outputting") return { label: "正在输出", detail: "正在同步电脑回复" };
-  if (runtime.turnStatus === "starting") {
-    return { label: "正在思考", detail: options.desktop ? "等待桌面响应" : "等待 Codex 回复" };
-  }
-  if (options.hasAssistantOutput) {
-    return { label: "正在输出", detail: options.desktop || runtime.watchMode === "desktop-tail" ? "同步桌面输出" : "实时接收输出" };
-  }
-  return { label: "正在思考", detail: options.desktop || runtime.watchMode === "desktop-tail" ? "等待桌面响应" : "等待 Codex 回复" };
-}
-
-function userInputActivity(runtime: ThreadRuntime) {
-  if (runtime.userInputs?.some(input => input.status === "pending")) return { label: "等待你回答", detail: "在下方选择或输入回答" };
-  if (runtime.userInputs?.some(input => input.status === "uncertain")) return { label: "回答结果待确认", detail: "请先查看会话状态" };
-  return { label: "正在确认回答", detail: "等待会话同步处理结果" };
 }
 
 export function desktopActionText(action: DesktopControlResponse["action"]) {

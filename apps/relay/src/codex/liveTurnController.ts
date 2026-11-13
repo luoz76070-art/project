@@ -1,3 +1,4 @@
+import { activityEvidence, itemActivity, type ActivityEvidence } from "../store/activityEvidence.js";
 import { AppServerClient } from "./appServerClient.js";
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
@@ -89,6 +90,7 @@ export type LiveApproval = {
 };
 
 export type LiveTurnSnapshot = {
+  activityEvidence?: ActivityEvidence | null;
   threadId: string;
   turnId: string;
   status: LiveTurnStatus;
@@ -209,6 +211,8 @@ export class LiveTurnController extends EventEmitter {
     state.lastTurn = this.results.get(threadId);
     const result = codexLastTurn(response.turn, state.lastTurn);
     if (result) this.settle(state, result);
+    const previous = this.getStateByThread(threadId);
+    if (previous) previous.activityEvidence = null;
     this.turns.set(response.turn.id, state);
     this.activeByThread.set(threadId, response.turn.id);
     for (const event of early) this.handleNotification(event);
@@ -358,7 +362,7 @@ export class LiveTurnController extends EventEmitter {
       for (const state of this.turns.values()) {
         if (state.client !== client || isTurnStatus(state.status)) continue;
         const result = makeLastTurn(state.turnId, "failed", "engine_exited");
-        if (result) { this.settle(state, result); state.connected = false; this.emitSnapshot(state); }
+        if (result) { this.settle(state, result); state.connected = false; state.activityEvidence = null; this.emitSnapshot(state); }
       }
     });
     client.on("disconnect", () => {
@@ -366,7 +370,7 @@ export class LiveTurnController extends EventEmitter {
       this.client = null;
       for (const state of this.turns.values()) {
         if (state.client !== client || isTurnStatus(state.status)) continue;
-        state.connected = false;
+        state.connected = false; state.activityEvidence = null;
         state.error = "与执行引擎的连接已断开，结果待确认。";
         state.userInputs = []; state.userInputRequests.clear();
         state.updatedAt = new Date().toISOString();
@@ -419,6 +423,7 @@ export class LiveTurnController extends EventEmitter {
     if (threadId && threadId !== state.threadId) return;
 
     if (event.id !== undefined) {
+      state.activityEvidence = null;
       if (state.status !== "starting" && state.status !== "inProgress") return;
       if (event.method === "item/tool/requestUserInput") {
         const questions = parseUserInputQuestions(params.questions);
@@ -431,9 +436,18 @@ export class LiveTurnController extends EventEmitter {
       return;
     }
 
+    if (turnId === state.turnId && this.activeByThread.get(state.threadId) === state.turnId && !isTurnStatus(state.status)) {
+      const kind = event.method === "item/started" ? itemActivity((params.item as AppThreadItem | undefined)?.type)
+        : event.method.startsWith("item/reasoning/") ? "thinking"
+        : event.method === "item/agentMessage/delta" ? "outputting"
+        : event.method === "item/commandExecution/outputDelta" ? "working" : null;
+      if (kind) { state.activityEvidence = activityEvidence(kind, state.turnId); this.emitSnapshot(state); }
+      if (event.method === "item/completed") state.activityEvidence = null;
+    }
+
     if (event.method === "turn/started") {
       if (isTurnStatus(state.status)) return;
-      state.status = "inProgress";
+      state.status = "inProgress"; state.activityEvidence = null;
       this.pushEvent(state, event.method, "turn started");
       this.emitSnapshot(state);
       return;
@@ -487,7 +501,7 @@ export class LiveTurnController extends EventEmitter {
   }
 
   private settle(state: LiveTurnState, result: LastTurn) {
-    state.lastTurn = result; state.status = result.status;
+    state.lastTurn = result; state.status = result.status; state.activityEvidence = null;
     state.error = result.status === "failed" ? result.reason.message : null;
     state.updatedAt = new Date().toISOString();
     // A late result for an older turn must not replace the session's latest result.
@@ -526,6 +540,7 @@ export class LiveTurnController extends EventEmitter {
       error: null,
       lastTurn: null,
       connected: true,
+      activityEvidence: null,
       updatedAt: timestamp,
       itemText: new Map(),
       approvalParams: new Map(),
@@ -639,6 +654,7 @@ export class LiveTurnController extends EventEmitter {
       updatedAt: state.updatedAt,
       lastTurn: state.lastTurn ?? null,
       connected: state.connected,
+      activityEvidence: state.connected ? state.activityEvidence ?? null : null,
     };
   }
 

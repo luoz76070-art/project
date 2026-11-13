@@ -77,13 +77,22 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
   function add(entry, message) {
     entry.messages = entry.messages.filter(item => item.id !== message.id); entry.messages.push(message); bound(entry);
   }
+  function observeActivity(entry, kind, turn) {
+    if (Number.isSafeInteger(turn) && turn >= 0 && turn === entry.turn) {
+      entry.activityEvidence = { kind, turnId: String(turn), observedAt: new Date().toISOString() };
+    }
+  }
   function snapshot(entry) {
     const agent = currentAgent(entry), ready = !entry.submission || entry.submission.delivery === 'confirmed';
+    const requests = agent ? interactions.snapshot(entry) : { questions: [], permissions: [] };
+    if (agent?.status !== 'running' || requests.questions.length || requests.permissions.length) entry.activityEvidence = null;
     return {
+      activeTurnId: Number.isSafeInteger(entry.turn) && agent?.status === 'running' ? String(entry.turn) : null,
+      activityEvidence: entry.activityEvidence ?? null,
       agentId: 'deepseek', session: catalog ? catalog.row(entry.id).session : session(agent), connected: true, updatedAt: iso(Date.now()),
       status: agent?.status ?? 'idle', activity: entry.stream?.text ? 'outputting' : entry.activity,
       lastTurn: results.get(agent?.id ?? catalog?.row(entry.id).hostId)?.lastTurn ?? null,
-      messages: entry.messages, ...(agent ? interactions.snapshot(entry) : { questions: [], permissions: [] }), historyCursor: entry.historyCursor ?? null, partialText: true,
+      messages: entry.messages, ...requests, historyCursor: entry.historyCursor ?? null, partialText: true,
       control: { token: entry.token, canSend: ready, canSteer: ready && Boolean(agent) && entry.turn !== null, canInterrupt: ready && agent?.status === 'running' && entry.turn !== null },
       submission: entry.submission ? { clientMessageId: entry.submission.clientMessageId, action: entry.submission.action, delivery: entry.submission.delivery } : null,
       queue: mobileQueueSnapshot(entry, agent),
@@ -108,10 +117,10 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
     const data = event.data;
     const finalId = finalMessageId(entry, event);
     if (finalId) entry.messages = entry.messages.map(message => message.id === finalId ? { ...message, phase: 'final_answer' } : message);
-    if (event.type === 'turn/start') { entry.toolCalls.clear(); entry.step = null; entry.turn = data.turn; entry.token = randomUUID(); entry.activity = 'thinking'; }
+    if (event.type === 'turn/start') { entry.toolCalls.clear(); entry.step = null; entry.turn = data.turn; entry.token = randomUUID(); entry.activity = 'thinking'; entry.activityEvidence = null; observeActivity(entry, 'thinking', data.turn); }
     if (event.type === 'turn/end') {
       rememberResult(entry.agent?.id ?? catalog?.row(entry.id).hostId, event);
-      entry.turn = null; entry.token = randomUUID(); entry.activity = 'working';
+      entry.turn = null; entry.token = randomUUID(); entry.activity = 'working'; entry.activityEvidence = null;
       if (entry.submission?.action === 'interrupt' && entry.submission.turn === data.turn) entry.submission.delivery = 'confirmed';
     }
     if (event.type === 'step/start') { entry.step = data.step; entry.toolCalls.clear(); }
@@ -137,7 +146,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
     } else if (entry.clients.size) {
       const notice = messageOf(event); if (notice) add(entry, notice);
     }
-    if (event.type === 'tool/call' || event.type === 'tool/ptc-dispatch-start') entry.activity = 'working';
+    if (event.type === 'tool/call' || event.type === 'tool/ptc-dispatch-start') { entry.activity = 'working'; observeActivity(entry, 'working', data.turn); }
   }
   async function baseline(entry, agent, signal) {
     if (catalog) {
@@ -161,7 +170,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
     let entry = entries.get(id);
     if (!entry) {
       if (entries.size >= 32) throw fail('BUSY', 429);
-      entry = { id, agent, token: randomUUID(), turn: null, cursor: -1, clients: new Set(), messages: [], stream: null, streamRevision: 0, activity: 'working', submission: null, operationError: null, timer: null, poll: null, loading: null, buffered: [], toolCalls: new Map(), step: null };
+      entry = { id, agent, token: randomUUID(), turn: null, cursor: -1, clients: new Set(), messages: [], stream: null, streamRevision: 0, activity: 'working', activityEvidence: null, submission: null, operationError: null, timer: null, poll: null, loading: null, buffered: [], toolCalls: new Map(), step: null };
       entries.set(id, entry);
     }
     if (entry.clients.size >= 4) throw fail('BUSY', 429);
@@ -275,7 +284,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
   on('agent/status', ({ agent }) => {
     catalog?.invalidate();
     const entry = entryFor(agent); if (!entry) return;
-    if (agent.status === 'idle') { entry.token = randomUUID(); entry.turn = null; entry.activity = 'working'; }
+    if (agent.status === 'idle') { entry.token = randomUUID(); entry.turn = null; entry.activity = 'working'; entry.activityEvidence = null; }
     publish(entry);
   });
   on('agent/inbox/discarded', ({ agent, message }) => {
@@ -292,12 +301,12 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
     if (frame.type === 'start') {
       if (entry.stream) entry.messages = entry.messages.filter(message => message.id !== entry.stream.id);
       entry.stream = { id: `stream-${frame.attemptId}-${frame.revision}`, attempt: frame.attemptId, index: 0, turn: frame.turn, step: frame.step, blocks: new Map(), text: '' };
-      entry.activity = 'thinking';
+      entry.activity = 'thinking'; observeActivity(entry, 'thinking', frame.turn);
     } else {
       const stream = entry.stream;
       if (!stream || stream.attempt !== frame.attemptId || stream.index !== frame.index) return;
       if (frame.type === 'end') {
-        entry.messages = entry.messages.filter(message => message.id !== stream.id); entry.stream = null; entry.activity = 'working';
+        entry.messages = entry.messages.filter(message => message.id !== stream.id); entry.stream = null; entry.activity = 'working'; if (stream.turn === entry.turn) entry.activityEvidence = null;
       } else {
         ++stream.index;
         const chunk = frame.chunk;
@@ -306,10 +315,11 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
           if (chunk.type === 'block-end' && chunk.block?.type === 'text') stream.blocks.set(chunk.index, chunk.block.text.slice(0, 32768));
         }
         stream.text = [...stream.blocks.entries()].sort((a, b) => a[0] - b[0]).map(([, value]) => value).join('\n').slice(0, 32768);
+        if (stream.text) observeActivity(entry, 'outputting', stream.turn);
         if (stream.text) add(entry, { id: stream.id, timestamp: iso(frame.time), role: 'assistant', kind: 'agent_message', text: stream.text,
           ...(Number.isSafeInteger(stream.turn) && stream.turn >= 0 ? { turnId: String(stream.turn), phase: 'commentary' } : {}),
         });
-        else if (chunk.type === 'tool-call-delta') entry.activity = 'working';
+        else if (chunk.type === 'tool-call-delta') { entry.activity = 'working'; observeActivity(entry, 'working', stream.turn); }
       }
     }
     entry.streamRevision = frame.revision;

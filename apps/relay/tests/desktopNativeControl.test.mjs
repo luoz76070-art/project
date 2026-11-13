@@ -372,3 +372,18 @@ test('explicit steer delivers to the running turn while existing queued work rem
   assert.deepEqual(f.capability().queue.items.map(item => [item.clientMessageId, item.status]), [[queued.clientMessageId, 'waiting']]);
   assert.equal(turns(f).initial.status, 'inProgress');
 });
+
+test('S2 native snapshots project only current active item metadata and invalidate on rotation/disconnect', async t => {
+  const f = await fixture(t, true);
+  const snapshots = []; f.control.onStreamSnapshot(snapshot => snapshots.push(snapshot));
+  await f.follow();
+  const latest = () => snapshots.at(-1);
+  turns(f).initial.items = [{ id: 'private-item', type: 'commandExecution', status: 'inProgress', command: 'PRIVATE' }]; f.snapshot();
+  await until(() => latest()?.activityEvidence?.kind === 'working');
+  assert.equal(latest().activityEvidence.turnId, 'initial-turn');
+  assert.deepEqual(Object.keys(latest().activityEvidence).sort(), ['kind', 'observedAt', 'turnId']);
+  assert.doesNotMatch(JSON.stringify(latest().activityEvidence), /PRIVATE|private-item/);
+  turns(f).initial.turnId = 'new-turn'; turns(f).initial.items = []; f.snapshot();
+  await until(() => latest()?.activeTurnId === 'new-turn'); assert.equal(latest().activityEvidence, null);
+  f.disconnect(); await until(() => latest()?.changeType === 'disconnected'); assert.equal(latest().activityEvidence, null);
+});

@@ -1,3 +1,5 @@
+import { SessionStatus } from "../chat/SessionStatus";
+import { agentSessionStatus, isActiveSessionStatus } from "../chat/sessionStatusModel";
 import { loadReadingPositions, saveReadingPositions } from "../chat/readingPositions";
 import { TurnResultNotice } from "../chat/TurnResultNotice";
 import { productBeforeNavigate, isKelivoHost } from "../product/host";
@@ -8,7 +10,7 @@ import { VoiceInput } from "../voice/VoiceInput";
 import { ChevronLeft, Loader2, RefreshCcw } from "lucide-react";
 import type { CodexMessage, PendingAttachment } from "../../app/types";
 import { maxMessagesPerThread } from "../../app/config";
-import { MessageBubble, MessageTimeline, GenerationStatus, AttachmentTray } from "../chat/components";
+import { MessageBubble, MessageTimeline, AttachmentTray } from "../chat/components";
 import { ComputerComposer } from "../chat/ComputerComposer";
 import { MessageMediaProvider } from "../chat/MessageImage";
 import { composeMessageWithAttachments, mergeAttachments, revokeAttachmentPreviews } from "../chat/attachments";
@@ -293,8 +295,8 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
     if (!sendEnabled || (delivery === "steer" && !control?.canSteer)) return;
     void operate("message", "/messages", { text: composeMessageWithAttachments(input.text, attachments), delivery });
   }
-  const waiting = Boolean(snapshot?.questions.length || snapshot?.permissions.length);
-  const progress = !online ? "正在核验任务状态" : waiting ? "等待你的处理" : snapshot?.activity === "working" ? `${agent.label} 正在执行` : snapshot?.activity === "outputting" ? `${agent.label} 正在输出` : `${agent.label} 正在思考`;
+  const sessionStatus = agentSessionStatus(snapshot, online);
+  const progress = isActiveSessionStatus(sessionStatus) ? sessionStatus : null;
   return <section className="agent-chat">
     <div className="agent-connection" role="status"><span className={`status-dot ${online ? "ok" : "error"}`} />{online ? `${agent.label} 已连接` : stream === "unauthorized" ? "凭证已失效，请重新配对" : stream === "paused" ? "连接已暂停，返回前台后恢复" : "正在恢复连接…"}</div>
     <div className="messages-viewport" ref={viewport} onScroll={() => { const element = viewport.current; if (element) { nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100; reading.current[draftSession] = element.scrollTop; } }}>
@@ -313,7 +315,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
       </MessageMediaProvider>
       {snapshot?.questions.map(question => <AgentQuestions key={question.id} request={question} agentLabel={agent.label} disabled={!online || busy} onRespond={answers => operate("question", `/questions/${question.id}/respond`, { answers }, question.id)} />)}
       {snapshot?.permissions.map(permission => <PermissionCard key={permission.id} permission={permission} agentLabel={agent.label} disabled={!online || busy} onRespond={decision => operate("permission", `/permissions/${permission.id}/respond`, { decision }, permission.id)} />)}
-      {snapshot?.status === "running" && <GenerationStatus label={progress} detail={online ? "与原服务会话同步" : "连接恢复后核验运行状态"} tone={waiting ? "approval" : snapshot.activity === "outputting" ? "outputting" : "thinking"} anchorRole="assistant" />}
+      <SessionStatus status={progress} />
       {!snapshot && <p className="inline-loading" role="status"><Loader2 size={18} className="spin" />正在读取原会话…</p>}
     </div>
     <footer className="composer-panel agent-composer">
@@ -324,7 +326,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
       <input ref={uploadInput} type="file" multiple className="hidden-file-input" onChange={event => void uploadFiles(event.target.files)} />
       <ComputerComposer draft={input.text} onDraft={editText} onSend={send} onStop={() => void operate("interrupt", "/interrupt", {})} onUpload={() => uploadInput.current?.click()}
         voice={<VoiceInput scope={scopeKey} thread={draftSession} recovery={voiceRecovery} endpoint={endpoint} token={token} draft={input.text} onDraft={editText} />} label="发送给当前 Agent 会话"
-        placeholder={online ? `向 ${agent.label} 发送消息` : "草稿已保留，等待恢复连接…"} status={snapshot?.status === "running" ? progress : `${agent.label} · 当前会话`}
+        placeholder={online ? `向 ${agent.label} 发送消息` : "草稿已保留，等待恢复连接…"} status={sessionStatus ? <SessionStatus status={sessionStatus} variant="composer" /> : `${agent.label} · 当前会话`}
         uploading={uploading} uploadDisabled={!token} busy={busy} running={snapshot?.status === "running"} hasContent={Boolean(input.text.trim() || attachments.length)}
         canSend={sendEnabled} canStop={Boolean(control?.canInterrupt)} deliveries={{ steer: sendEnabled && Boolean(control?.canSteer), queue: sendEnabled }}
         maxLength={Math.max(0, 20_000 - (draft.length - input.text.length))} />

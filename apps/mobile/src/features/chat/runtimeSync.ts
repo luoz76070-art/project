@@ -1,3 +1,4 @@
+import { readActivityEvidence, type ActivityEvidence } from "./sessionStatusModel";
 import type { CodexMessage, ThreadRuntime, LiveTurnSnapshot, DesktopStreamSnapshot } from "../../app/types";
 import { capMessages, mergeMessages, mergeMessagesById, turnStatusText, nextSmoothMessageId } from "./messages";
 import { turnProgressPatch, desktopApprovalsPatch, desktopControlPatch } from "./runtime";
@@ -5,7 +6,7 @@ import { captureSyncRequest, isSyncRequestCurrent, isDesktopDeltaCurrent, type S
 import { toFriendlyFetchError } from "../connection/http";
 import { mergeLastTurn, type LastTurn } from "./lastTurn";
 
-export type DesktopDelta = { messages: CodexMessage[]; cursor: number; generation?: string; reset?: boolean; turnStatus?: ThreadRuntime["turnStatus"]; activity?: ThreadRuntime["activity"]; lastTurn?: LastTurn | null };
+export type DesktopDelta = { activeTurnId?: string | null; activityEvidence?: ActivityEvidence | null; messages: CodexMessage[]; cursor: number; generation?: string; reset?: boolean; turnStatus?: ThreadRuntime["turnStatus"]; activity?: ThreadRuntime["activity"]; lastTurn?: LastTurn | null };
 export type RuntimeSyncContext = {
   getRuntime: () => ThreadRuntime;
   getSignal: () => AbortSignal;
@@ -32,6 +33,8 @@ export function createRuntimeSync(context: RuntimeSyncContext) {
         activeTurnId: turn.status === "starting" || turn.status === "inProgress" ? turn.turnId : null,
         turnStatus: turn.status,
         lastTurn: mergeLastTurn(runtime.lastTurn, turn.lastTurn),
+        activityEvidence: turn.connected === false || !["starting", "inProgress"].includes(turn.status) ? null : readActivityEvidence(turn.activityEvidence),
+        statusTurnId: turn.turnId, sourceConnected: turn.connected !== false,
         lastEventCount: turn.eventCount,
         lastTurnError: turn.error ?? "",
         approvals: turn.approvals ?? runtime.approvals,
@@ -56,6 +59,9 @@ export function createRuntimeSync(context: RuntimeSyncContext) {
         status: snapshotActive ? "桌面实时同步中" : turnStatusText(snapshot.status),
         watching: true,
         activeTurnId: null,
+        statusTurnId: snapshot.activeTurnId ?? null,
+        sourceConnected: snapshot.changeType !== "disconnected",
+        activityEvidence: snapshot.changeType === "disconnected" || !snapshotActive ? null : readActivityEvidence(snapshot.activityEvidence),
         lastEventCount: snapshot.eventCount,
         userInputs: snapshot.interactionsAvailable ? snapshot.userInputs ?? [] : [],
         ...desktopApprovalsPatch(runtime, snapshot.approvals, snapshot.interactionsAvailable),
@@ -73,8 +79,8 @@ export function createRuntimeSync(context: RuntimeSyncContext) {
       return {
         ...runtime,
         syncRevision: (runtime.syncRevision ?? 0) + 1,
-        ...turnProgressPatch(data.reset ? { ...runtime, lastTurn: null, turnStatus: "idle", activity: undefined, sending: false, activeTurnId: null } : runtime, data),
-        cursor: data.cursor, generation: data.generation,
+        ...turnProgressPatch(data.reset ? { ...runtime, lastTurn: null, turnStatus: "idle", activity: undefined, activityEvidence: null, statusTurnId: null, sending: false, activeTurnId: null } : runtime, data),
+        sourceConnected: true, cursor: data.cursor, generation: data.generation,
         messages: nextMessages, watching: true,
         historyBefore: data.reset ? 0 : runtime.historyBefore,
         status: data.turnStatus ? turnStatusText(data.turnStatus) : runtime.status,
@@ -91,10 +97,10 @@ export function createRuntimeSync(context: RuntimeSyncContext) {
         `/api/desktop/threads/${encodeURIComponent(threadId)}/delta?cursor=${cursor}${generation ? `&generation=${encodeURIComponent(generation)}` : ""}`, signal,
       );
       if (!isSyncRequestCurrent(context.getRuntime(), request)) return;
-      if (data.cursor !== cursor || data.messages.length || data.reset || data.turnStatus || data.activity || data.lastTurn !== undefined) applyDesktopDelta(threadId, data, request);
+      if (data.cursor !== cursor || data.messages.length || data.reset || data.turnStatus || data.activity || data.activityEvidence !== undefined || data.lastTurn !== undefined) applyDesktopDelta(threadId, data, request);
     } catch (error) {
       if (!isSyncRequestCurrent(context.getRuntime(), request)) return;
-      updateRuntime(threadId, runtime => isSyncRequestCurrent(runtime, request) ? { ...runtime, watching: false, status: toFriendlyFetchError(error) } : runtime);
+      updateRuntime(threadId, runtime => isSyncRequestCurrent(runtime, request) ? { ...runtime, watching: false, activityEvidence: null, sourceConnected: false, status: toFriendlyFetchError(error) } : runtime);
     }
   }
 
@@ -111,7 +117,7 @@ export function createRuntimeSync(context: RuntimeSyncContext) {
       applyLiveTurnSnapshot(threadKey, data.turn, request);
     } catch (error) {
       if (!isSyncRequestCurrent(context.getRuntime(), request)) return;
-      updateRuntime(threadKey, runtime => isSyncRequestCurrent(runtime, request) ? { ...runtime, status: toFriendlyFetchError(error), lastTurnError: toFriendlyFetchError(error) } : runtime);
+      updateRuntime(threadKey, runtime => isSyncRequestCurrent(runtime, request) ? { ...runtime, activityEvidence: null, sourceConnected: false, status: toFriendlyFetchError(error), lastTurnError: toFriendlyFetchError(error) } : runtime);
     }
   }
 

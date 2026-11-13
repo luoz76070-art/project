@@ -466,3 +466,28 @@ test('Relay routes authenticate devices, bind SSE token to agent/session, dedupl
   await reader.cancel().catch(error => assert.equal(error.message, 'terminated'));
   await until(() => !f.streams.size);
 });
+
+test('S2 OpenCode evidence requires an attributable active run and clears across idle/new runs', async t => {
+  const f = await fixture(t); await f.follow();
+  f.state.questions = []; f.state.permissions = [];
+  assert.equal(f.latest().activityEvidence, null, 'a partial history with no turn boundary is not evidence');
+  const boundary = { id: 'msg_boundary', type: 'idle', outcome: 'succeeded', time: { created: 500 } };
+  f.state.messages = [boundary, user('msg_input', 'PRIVATE')]; f.emit();
+  await until(() => f.latest().activeTurnId === 'msg_input');
+  assert.equal(f.latest().activityEvidence, null, 'legacy default thinking is not evidence');
+  f.emit('session.reasoning.delta', { sessionID, delta: 'PRIVATE' });
+  await until(() => f.latest().activityEvidence?.kind === 'thinking');
+  assert.equal(f.latest().activityEvidence.turnId, 'msg_input');
+  f.emit('session.tool.input.delta', { sessionID, delta: 'PRIVATE' });
+  await until(() => f.latest().activityEvidence?.kind === 'working');
+  assert.deepEqual(Object.keys(f.latest().activityEvidence).sort(), ['kind', 'observedAt', 'turnId']);
+  assert.doesNotMatch(JSON.stringify(f.latest().activityEvidence), /PRIVATE/);
+  f.state.active = false; f.emit();
+  await until(() => f.latest().status === 'idle'); assert.equal(f.latest().activityEvidence, null);
+  f.emit('session.reasoning.delta', { sessionID, delta: 'PRIVATE' }); await sleep(40);
+  assert.equal(f.latest().activityEvidence, null);
+  f.state.active = true; f.state.messages = [boundary, { ...user('msg_next', 'next'), time: { created: 3000 } }]; f.emit();
+  await until(() => f.latest().activeTurnId === 'msg_next'); assert.equal(f.latest().activityEvidence, null);
+  f.emit('session.reasoning.delta', { sessionID, delta: 'LATE_PRIVATE' }); await sleep(40);
+  assert.equal(f.latest().activityEvidence, null, 'events older than the new input cannot revive old activity');
+});

@@ -1,3 +1,4 @@
+import { activityEvidence, type ActivityEvidence } from "../store/activityEvidence.js";
 import { LastTurnCache, makeLastTurn } from "../store/lastTurn.js";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -11,6 +12,9 @@ import { OpenCodeStreamText } from "./openCodeStream.js";
 type RequestState<T> = { sourceId: string; signature: string; source: unknown; view: T };
 type Listener = { snapshot: (snapshot: AgentSessionSnapshot) => void; disconnect: () => void };
 type Entry = {
+  activityEvidence: ActivityEvidence | null;
+  activityTurnId: string | null;
+  activityStartedAt: number;
   id: string; epoch: number; token: string; runKey: string; listeners: Set<Listener>;
   snapshot: AgentSessionSnapshot | null; questions: Map<string, RequestState<AgentQuestion>>; permissions: Map<string, RequestState<AgentPermission>>;
   refresh: Promise<void> | null; dirty: boolean; timer?: NodeJS.Timeout; writing: boolean;
@@ -86,7 +90,7 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
       if (this.entries.size >= 4) throw agentError("OPENCODE_SESSION_LIMIT", 429);
       entry = { id: sessionId, epoch: this.epoch, token: randomUUID(), runKey: "", listeners: new Set(), snapshot: null,
         questions: new Map(), permissions: new Map(), refresh: null, dirty: false, writing: false,
-        rawMessages: [], text: new OpenCodeStreamText(), activityHint: null };
+        rawMessages: [], text: new OpenCodeStreamText(), activityHint: null, activityEvidence: null, activityTurnId: null, activityStartedAt: 0 };
       this.entries.set(sessionId, entry);
     }
     const listener = { snapshot: onSnapshot, disconnect: onDisconnect };
@@ -273,7 +277,9 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
       try {
         if (event.type === "session.reasoning.delta" || event.type === "session.tool.input.delta") {
           const activity = event.type === "session.reasoning.delta" ? "thinking" : "working";
-          if (entry.activityHint !== activity) { entry.activityHint = activity; this.publish(entry); }
+          const previousEvidence = entry.activityEvidence;
+          this.observeActivity(entry, event, activity);
+          if (entry.activityHint !== activity || previousEvidence?.kind !== entry.activityEvidence?.kind || previousEvidence?.turnId !== entry.activityEvidence?.turnId) { entry.activityHint = activity; this.publish(entry); }
           // Private token payloads do not change canonical messages or pending requests.
           continue;
         }
@@ -281,6 +287,10 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
         if (text) entry.activityHint = "outputting";
         else if (event.type.startsWith("session.tool.") || event.type.startsWith("session.shell.")) entry.activityHint = "working";
         else if (event.type.startsWith("session.reasoning.") || event.type === "session.step.started") entry.activityHint = "thinking";
+        const observed = text ? "outputting" : ["session.tool.input.delta", "session.tool.started", "session.shell.started"].includes(event.type) ? "working"
+          : ["session.reasoning.started", "session.step.started"].includes(event.type) ? "thinking" : null;
+        if (observed) this.observeActivity(entry, event, observed);
+        if (["session.tool.completed", "session.shell.completed", "session.step.completed", "session.reasoning.completed"].includes(event.type)) entry.activityEvidence = null;
         if (text && event.type === "session.text.delta") {
           // No REST polling per token. At most 25 downstream updates per second.
           if (!entry.textTimer) entry.textTimer = setTimeout(() => { entry.textTimer = undefined; this.publish(entry); }, 40);
@@ -289,6 +299,13 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
       } catch { this.invalidate(entry); continue; }
       this.schedule(entry);
     }
+  }
+  private observeActivity(entry: Entry, event: OpenCodeEvent, kind: ActivityEvidence["kind"]) {
+    // v2 has no native turn ID: use the first input after the last idle boundary.
+    // Unattributed or undated events cannot prove membership in that run.
+    if (event.data?.sessionID !== entry.id || entry.snapshot?.status !== "running" || !entry.activityTurnId
+      || event.created === undefined || event.created < entry.activityStartedAt) return;
+    entry.activityEvidence = activityEvidence(kind, entry.activityTurnId);
   }
   private schedule(entry: Entry) {
     if (!this.current(entry)) return;
@@ -328,6 +345,11 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
       this.results.set(entry.id, result);
     }
     const view = messagesView(messages.data);
+    const boundary = terminal?.time.created ?? -1;
+    const firstInput = (terminal || !messages.cursor.next) ? [...messages.data].sort((a, b) => a.time.created - b.time.created).find(m => m.type === "user" && m.time.created > boundary) : undefined;
+    const activityTurnId = status === "running" && firstInput ? firstInput.id : null;
+    if (activityTurnId !== entry.activityTurnId || status === "idle") { entry.activityEvidence = null; entry.activityHint = null; }
+    entry.activityTurnId = activityTurnId; entry.activityStartedAt = firstInput?.time.created ?? 0;
     const runKey = `${status}:${view.filter(m => m.role === "user").at(-1)?.id ?? ""}`;
     if (entry.runKey && entry.runKey !== runKey) entry.token = randomUUID();
     entry.runKey = runKey;
@@ -348,10 +370,12 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
     const activeContent = latest?.type === "assistant" && !latest.time.completed ? latest.content ?? [] : [];
     const activity = activeContent.some(p => p.type === "tool" && ["running", "pending"].includes(p.state?.status ?? "")) ? "working"
       : activeContent.some(p => p.type === "text" && p.text) ? "outputting" : "thinking";
+    const evidenceKind = activeContent.some(p => p.type === "tool" && p.state?.status === "running") ? "working" : null;
+    if (evidenceKind && activityTurnId && latest!.time.created >= entry.activityStartedAt) entry.activityEvidence = activityEvidence(evidenceKind, activityTurnId);
     entry.rawMessages = messages.data;
     if (status === "idle") entry.activityHint = null;
     entry.snapshot = { agentId: "opencode", session, connected: true, updatedAt: new Date().toISOString(), status, activity,
-      lastTurn: this.results.get(entry.id),
+      lastTurn: this.results.get(entry.id), activeTurnId: activityTurnId, activityEvidence: entry.activityEvidence,
       messages: view, questions: [], permissions: [], historyCursor: messages.cursor.next ?? null, partialText: false, control: null, submission: null };
     this.publish(entry);
   }
@@ -375,7 +399,9 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
     const unresolved = Boolean(submission && submission.delivery !== "confirmed");
     let text: ReturnType<OpenCodeStreamText["project"]>;
     try { text = entry.text.project(entry.rawMessages); } catch { this.invalidate(entry); return; }
+    if (entry.questions.size || entry.permissions.size) entry.activityEvidence = null;
     const snapshot: AgentSessionSnapshot = { ...entry.snapshot, ...text, updatedAt: new Date().toISOString(),
+      activityEvidence: entry.snapshot.status === "running" ? entry.activityEvidence : null,
       activity: entry.snapshot.status === "running" ? entry.activityHint ?? entry.snapshot.activity : entry.snapshot.activity,
       questions: [...entry.questions.values()].map(q => q.view), permissions: [...entry.permissions.values()].map(p => p.view),
       control: { token: entry.token, canSend: !entry.writing && !unresolved, canSteer: !entry.writing && !unresolved,
@@ -390,7 +416,7 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
     clearTimeout(entry.textTimer);
     if (this.entries.get(entry.id) !== entry) return;
     this.entries.delete(entry.id);
-    if (entry.snapshot) for (const listener of entry.listeners) listener.snapshot({ ...entry.snapshot, connected: false, control: null, questions: [], permissions: [] });
+    if (entry.snapshot) for (const listener of entry.listeners) listener.snapshot({ ...entry.snapshot, connected: false, activityEvidence: null, control: null, questions: [], permissions: [] });
     for (const listener of entry.listeners) listener.disconnect();
     if (!this.entries.size) this.disconnect(false);
   }
@@ -408,7 +434,7 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
     for (const entry of entries) {
       clearTimeout(entry.timer);
       clearTimeout(entry.textTimer);
-      if (entry.snapshot) for (const listener of entry.listeners) listener.snapshot({ ...entry.snapshot, connected: false, control: null, questions: [], permissions: [] });
+      if (entry.snapshot) for (const listener of entry.listeners) listener.snapshot({ ...entry.snapshot, connected: false, activityEvidence: null, control: null, questions: [], permissions: [] });
       for (const listener of entry.listeners) listener.disconnect();
     }
   }

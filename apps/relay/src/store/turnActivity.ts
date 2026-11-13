@@ -1,6 +1,9 @@
+import { activityEvidence, itemActivity, type ActivityEvidence } from "./activityEvidence.js";
 import { makeLastTurn, codexReason, type LastTurn } from "./lastTurn.js";
 
 export type TurnProgress = {
+  activeTurnId?: string | null;
+  activityEvidence?: ActivityEvidence | null;
   turnStatus?: "inProgress" | "completed" | "interrupted" | "failed";
   activity?: "thinking" | "working" | "outputting";
   lastTurn?: LastTurn | null;
@@ -16,6 +19,13 @@ export function turnProgress(records: Array<{ value: unknown }>, previous?: Last
     const payload = line.payload;
     if (!payload) continue;
     const kind = payload.type;
+    const explicitTurn = payload.turn_id ?? payload.turnId;
+    if (line.type === "turn_context" || (line.type === "event_msg" && kind === "task_started")) {
+      turnId = explicitTurn;
+      progress.activeTurnId = typeof turnId === "string" ? turnId : null;
+      progress.activityEvidence = null;
+    }
+
     if (line.type === "turn_context" || (line.type === "event_msg" && kind === "task_started")) turnId = payload.turn_id ?? payload.turnId;
     if (line.type === "event_msg") {
       if (kind === "task_started") { progress.turnStatus = "inProgress"; progress.activity = "thinking"; }
@@ -41,7 +51,18 @@ export function turnProgress(records: Array<{ value: unknown }>, previous?: Last
       if (kind === "message" && payload.role === "assistant") progress.activity = "outputting";
       if (kind === "function_call" || kind === "custom_tool_call" || kind === "web_search_call") progress.activity = "working";
     }
+    const item = payload.item as { type?: string } | undefined;
+    const evidenceKind = line.type === "event_msg" && kind === "item_started" ? itemActivity(item?.type)
+      : line.type === "event_msg" && kind === "agent_message" ? "outputting"
+      : line.type === "response_item" && kind === "reasoning" ? "thinking"
+      : line.type === "response_item" && kind === "message" && payload.role === "assistant" ? "outputting"
+      : line.type === "response_item" && ["function_call", "custom_tool_call", "web_search_call"].includes(String(kind)) ? "working" : null;
+    if (evidenceKind) {
+      progress.activityEvidence = activityEvidence(evidenceKind, explicitTurn ?? turnId);
+      if (progress.activityEvidence) progress.activeTurnId = progress.activityEvidence.turnId;
+    }
+    if (line.type === "event_msg" && kind === "item_completed") progress.activityEvidence = null;
   }
-  if (progress.turnStatus && progress.turnStatus !== "inProgress") progress.activity = undefined;
+  if (progress.turnStatus && progress.turnStatus !== "inProgress") { progress.activity = undefined; progress.activityEvidence = null; progress.activeTurnId = null; }
   return progress;
 }

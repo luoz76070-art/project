@@ -880,3 +880,26 @@ test('dsh successful empty or tool-only later step cannot relabel an earlier ans
   close(); await sleep(30); close = await f.watch();
   assert.equal(current(f).messages[0].phase, 'commentary'); close();
 });
+
+test('S2 DeepSeek evidence is per-turn metadata, never default working or private tool content', async t => {
+  const f = await fixture(t, { running: true }); await f.watch();
+  await until(() => current(f).activityEvidence?.kind === 'thinking');
+  f.event('tool/call', { turn: 1, step: 1, callId: 'status-only', name: 'bash', arguments: 'PRIVATE' });
+  await until(() => current(f).activityEvidence?.kind === 'working');
+  const evidence = current(f).activityEvidence;
+  assert.deepEqual(Object.keys(evidence).sort(), ['kind', 'observedAt', 'turnId']);
+  assert.equal(evidence.turnId, '1'); assert.doesNotMatch(JSON.stringify(evidence), /PRIVATE|bash/);
+  const decoded = deepSeekSnapshot.parse({ ...current(f), activityEvidence: { ...evidence, command: 'PRIVATE' } });
+  assert.deepEqual(decoded.activityEvidence, evidence);
+  assert.equal(deepSeekSnapshot.safeParse({ ...current(f), activityEvidence: { ...evidence, turnId: 'x'.repeat(513) } }).success, false);
+  f.event('turn/end', { turn: 1, reason: { kind: 'completed' } });
+  await until(() => current(f).activityEvidence === null);
+  f.event('turn/start', { turn: 2 });
+  await until(() => current(f).activityEvidence?.turnId === '2');
+  f.event('tool/call', { turn: 1, step: 1, callId: 'late', name: 'bash', arguments: 'PRIVATE' });
+  await new Promise(resolve => setTimeout(resolve, 250));
+  assert.equal(current(f).activityEvidence.turnId, '2');
+  f.agent.status = 'idle'; f.emit('agent/status', { agent: f.agent });
+  await until(() => current(f).activeTurnId === null);
+  assert.equal(current(f).activityEvidence, null);
+});

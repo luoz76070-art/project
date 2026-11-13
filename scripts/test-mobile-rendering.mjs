@@ -1,3 +1,4 @@
+import { channels, evidence, input as statusInput, statusInputs } from './fixtures/session-status.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -11,10 +12,10 @@ import { turnResult } from '../plugins/mobile-deepseek/turnResult.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-rendering-'));
 const output = path.join(temp, 'render.cjs');
-await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { imageSource } from './apps/mobile/src/features/chat/imageSources';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
+await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
 const originalStorage = globalThis.localStorage;
 globalThis.localStorage = { getItem: () => null };
-const { default: { h, render, MessageContent, MessageTimeline, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice } } = await import(pathToFileURL(output).href);
+const { default: { h, render, MessageContent, MessageTimeline, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } } = await import(pathToFileURL(output).href);
 globalThis.localStorage = originalStorage;
 test.after(() => fs.rm(temp, { recursive: true, force: true }));
 const tool = index => ({ id: `t${index}`, role: 'tool', kind: 'commandExecution', text: `Command: rg query-${index}`, turnId: 'turn-a', timestamp: '2026-11-07T00:00:00Z' });
@@ -115,6 +116,58 @@ for (const result of turnResults) test(`S1 mobile renders ${result.status} in th
 test('S1 actual DeepSeek model failure is visible on mobile, and unknown results stay absent', () => {
   const result = turnResult({ type: 'turn/end', seq: 3, time: 1000, data: { turn: 1, reason: { kind: 'error', error: { code: 'INVALID_REQUEST', message: 'model is unavailable on every account (per-model cooldown) PRIVATE' } } } });
   const html = render(h(TurnResultNotice, { result }));
-  assert.match(html, /执行失败/); assert.match(html, /模型暂不可用/); assert.doesNotMatch(html, /PRIVATE/);
+  assert.match(html, /失败/); assert.match(html, /模型暂不可用/); assert.doesNotMatch(html, /PRIVATE/);
   for (const result of [undefined, null, { status: 'idle' }]) assert.equal(render(h(TurnResultNotice, { result })), '');
+});
+
+// Matrix checks the shared presentation contract, not upstream reachability.
+for (const channel of channels) for (const [kind, patch] of Object.entries(statusInputs)) test(`S2 ${channel}: ${kind} has one shared label and skin`, () => {
+  const status = deriveSessionStatus(statusInput(patch));
+  assert.equal(status.kind, kind);
+  const labels = { preparing: '准备中', thinking: '思考中', executing: '执行中', waiting: '等待', completed: '完成', failed: '失败', interrupted: '中断' };
+  for (const variant of ['inline', 'notice', 'composer']) {
+    const html = render(h(SessionStatus, { status, variant }));
+    assert.ok(html.includes(`data-session-status="${kind}"`));
+    assert.ok(html.includes(labels[kind]));
+    assert.ok(!html.includes(channel));
+  }
+});
+test('S2 evidence is whitelisted, bounded and attributed; unknown activity and receipts do not invent states', () => {
+  const base = statusInput({ phase: 'running', lastTurn: turnResults[0] });
+  assert.equal(deriveSessionStatus(base), null);
+  assert.equal(deriveSessionStatus({ ...base, activityEvidence: evidence('thinking', 'old') }), null);
+  assert.equal(deriveSessionStatus({ ...base, activityEvidence: evidence('new-kind') }), null);
+  assert.equal(readActivityEvidence(evidence('thinking', 'x'.repeat(513))), null);
+  assert.equal(readActivityEvidence({ ...evidence('thinking'), observedAt: 'invalid' }), null);
+  assert.deepEqual(readActivityEvidence({ ...evidence('thinking'), command: 'PRIVATE' }), evidence('thinking'));
+  assert.equal(deriveSessionStatus({ ...base, activityEvidence: evidence('outputting') }).kind, 'executing');
+  for (const status of ['submitting', 'submitted', 'uncertain']) {
+    assert.equal(deriveSessionStatus({ ...base, activityEvidence: evidence('working'), questions: [{ status }] }), null);
+  }
+  const waiting = deriveSessionStatus({ ...base, approvals: [{ status: 'pending' }], questions: [{ status: 'pending' }] });
+  assert.equal(waiting.kind, 'waiting'); assert.match(waiting.detail, /审批和回答/);
+  assert.equal(deriveSessionStatus({ ...base, online: false, approvals: [{ status: 'pending' }], activityEvidence: evidence('thinking') }), null);
+  assert.equal(deriveSessionStatus(statusInput({ phase: 'unknown', lastTurn: turnResults[0] })), null);
+  assert.equal(deriveSessionStatus(statusInput({ online: false, lastTurn: turnResults[0] })).kind, 'completed');
+  assert.equal(deriveSessionStatus({ ...base, turnId: turnResults[0].turnId, approvals: [{ status: 'pending' }] }).kind, 'completed');
+  assert.equal(render(h(SessionStatus, { status: null })), '');
+});
+test('S2 real channel normalizers require evidence, retain result reasons and leave unsupported preparation absent', () => {
+  const runtime = { turnStatus: 'inProgress', statusTurnId: 'current', activity: 'thinking', approvals: [], userInputs: [], messages: [] };
+  for (const watchMode of ['none', 'desktop-tail']) {
+    assert.equal(codexSessionStatus({ ...runtime, watchMode }, true), null);
+    assert.equal(codexSessionStatus({ ...runtime, watchMode, activityEvidence: evidence('working') }, true).kind, 'executing');
+    assert.equal(codexSessionStatus({ ...runtime, watchMode, sourceConnected: false, activityEvidence: evidence('thinking') }, true), null);
+  }
+  for (const agentId of ['claude', 'deepseek', 'opencode']) {
+    const snapshot = { agentId, status: 'running', connected: true, activeTurnId: 'current', activity: 'thinking', permissions: [], questions: [] };
+    assert.equal(agentSessionStatus(snapshot, true), null);
+    assert.equal(agentSessionStatus({ ...snapshot, activityEvidence: evidence('thinking') }, true).kind, 'thinking');
+    assert.equal(agentSessionStatus({ ...snapshot, questions: [{ status: 'pending' }] }, true).kind, 'waiting');
+    assert.equal(agentSessionStatus({ ...snapshot, status: 'idle', lastTurn: null }, true), null);
+  }
+  const failed = turnResult({ type: 'turn/end', seq: 20, data: { turn: 4, reason: { kind: 'error', error: { code: 'INVALID_REQUEST', message: 'model is unavailable on every account (per-model cooldown) PRIVATE' } } } });
+  const status = agentSessionStatus({ status: 'idle', connected: true, permissions: [], questions: [], lastTurn: failed }, true);
+  const html = render(h(SessionStatus, { status, variant: 'notice' }));
+  assert.match(html, /失败/); assert.match(html, /模型暂不可用/); assert.doesNotMatch(html, /PRIVATE/);
 });
