@@ -1,6 +1,0 @@
-app:
-  env: dev
-
-logger:
-  level: debug
-  console: true
