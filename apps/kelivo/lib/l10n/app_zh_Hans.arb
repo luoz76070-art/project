@@ -1857,9 +1857,9 @@
   "aboutPageEasterEggButton": "好的",
   "aboutPageKelivoSearchUnlocked": "有扇没有名字的门开了一条缝。去设置里找找看。",
   "aboutPageKelivoSearchAlreadyUnlocked": "这扇门你已经推开过了。",
-  "aboutPageUpstreamSource": "上游开源项目",
+  "aboutPageUpstreamSource": "基于开源项目 Kelivo（AGPL-3.0）",
   "aboutPageAppName": "MobiCodex",
-  "aboutPageAppDescription": "开源 AI 助手",
+  "aboutPageAppDescription": "MobiCodex · AI 助手与电脑工作台",
   "aboutPageNoQQGroup": "暂无QQ群",
   "aboutPageVersion": "版本",
   "aboutPageVersionDetail": "{version} / {buildNumber}",
@@ -5748,5 +5748,78 @@
   "recoveryCopyPreview": "副本预览",
   "recoveryRestoreRetryBody": "这次恢复尚未完成，选中的副本已保留。可以重新检查本地副本，或重新打开 MobiCodex 继续。",
   "recoverySpaceAmount": "上次检查：可用空间 {available}，安全准备数据至少需要预留 {required}。",
-  "recoveryCopiesNeedUpdate": "部分副本来自更新版本的 MobiCodex，请升级 App 后再恢复。这些副本仍然保留。"
+  "recoveryCopiesNeedUpdate": "部分副本来自更新版本的 MobiCodex，请升级 App 后再恢复。这些副本仍然保留。",
+  "ttsServicesFieldWorkspaceIdLabel": "业务空间 ID",
+  "ttsServicesFieldRegionLabel": "地域",
+  "ttsServicesFieldFormatLabel": "音频格式",
+  "ttsServicesFieldOutputFormatLabel": "输出格式",
+  "ttsServicesFieldSampleRateLabel": "采样率",
+  "ttsServicesFieldVolumeLabel": "音量",
+  "ttsServicesFieldPitchLabel": "音调",
+  "ttsServicesFieldLanguageBoostLabel": "语言增强",
+  "ttsServicesFieldBitrateLabel": "比特率",
+  "ttsServicesFieldChannelLabel": "声道数",
+  "ttsServicesFieldSubtitlesLabel": "生成字幕",
+  "ttsServicesFieldPronunciationDictionaryLabel": "发音词典（每行一项）",
+  "ttsServicesFieldInstructionLabel": "风格／音色描述",
+  "ttsServicesFieldStreamingLabel": "流式输出",
+  "ttsServicesFieldOptimizeTextPreviewLabel": "优化播报文本",
+  "ttsServicesFieldReferenceAudioLabel": "参考音频（WAV/MP3 数据 URI）",
+  "ttsServicesFieldChooseReferenceAudioButton": "选择参考音频",
+  "ttsServicesFieldTemperatureLabel": "随机度",
+  "ttsServicesFieldTopPLabel": "Top P",
+  "ttsServicesFieldLatencyLabel": "延迟模式",
+  "ttsServicesEmotionAutoLabel": "自动匹配",
+  "ttsServicesValidationReferenceIdRequired": "音色／参考 ID 不能为空",
+  "ttsServicesValidationInstructionRequired": "音色描述不能为空",
+  "ttsServicesValidationSampleRate": "{format} 格式要求使用 {rates} Hz。",
+  "@ttsServicesValidationSampleRate": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      },
+      "rates": {
+        "type": "String"
+      }
+    }
+  },
+  "imageContextTitle": "图片上下文",
+  "imageContextAutomatic": "自动管理历史图片",
+  "imageContextDescription": "管理本轮使用的图片，原图仍保留在聊天中。",
+  "imageContextIncluded": "本轮发送",
+  "imageContextOmitted": "本轮不发送",
+  "imageContextPin": "固定图片",
+  "imageContextUnpin": "取消固定",
+  "imageContextAttachAgain": "再次添加到输入框",
+  "imageContextEmpty": "还没有图片",
+  "imageContextUnavailable": "当前上下文无法读取这张图片。",
+  "imageContextEntryDescription": "查看和管理本轮使用的图片",
+  "imageContextAutomaticDescription": "优先保留你上传的图片，分批收起较早的工具图片。",
+  "imageContextActionsHint": "固定以优先保留，或再次添加到输入框。",
+  "imageContextEmptyDescription": "发送图片或让工具读取图片后，会显示在这里。",
+  "imageContextUserImages": "你上传的图片",
+  "imageContextToolImages": "工具图片",
+  "imageContextAssistantImages": "生成的图片",
+  "imageContextImageNumber": "图片 {index}",
+  "@imageContextImageNumber": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
+  "imageContextIncludedCount": "本轮发送 {included} / {total} 张",
+  "@imageContextIncludedCount": {
+    "placeholders": {
+      "included": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "imageContextMissing": "图片不可用",
+  "imageContextLoadFailed": "暂时无法加载图片，请重试。",
+  "imageContextUpdateFailed": "未能保存修改，请重试。"
 }

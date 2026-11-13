@@ -523,7 +523,7 @@ class _AboutPageState extends State<AboutPage> {
                 label: l10n.aboutPageWebsite,
                 onTap: () async {
                   final uri = Uri.parse(
-                    'https://github.com/luoz76070-art/project',
+                    'https://github.com/luoz76070-art/MobiCodex',
                   );
                   if (!await launchUrl(uri, mode: LaunchMode.platformDefault)) {
                     await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -536,7 +536,7 @@ class _AboutPageState extends State<AboutPage> {
                 svgAsset: 'assets/icons/github.svg',
                 label: l10n.aboutPageGithub,
                 onTap: () => _openUrl(
-                  'https://github.com/luoz76070-art/project',
+                  'https://github.com/luoz76070-art/MobiCodex',
                 ),
               ),
               _iosDivider(context),
@@ -544,6 +544,7 @@ class _AboutPageState extends State<AboutPage> {
                 context,
                 icon: Lucide.Code,
                 label: l10n.aboutPageUpstreamSource,
+                labelMaxLines: null,
                 onTap: () => _openUrl('https://github.com/Chevey339/kelivo'),
               ),
               _iosDivider(context),
@@ -672,6 +673,7 @@ Widget _iosNavRow(
   BuildContext context, {
   required IconData icon,
   required String label,
+  int? labelMaxLines = 1,
   VoidCallback? onTap,
   String? detailText,
   Widget Function(BuildContext ctx)? detailBuilder,
@@ -698,8 +700,10 @@ Widget _iosNavRow(
                   child: Text(
                     label,
                     style: TextStyle(fontSize: 15, color: c),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: labelMaxLines,
+                    overflow: labelMaxLines == null
+                        ? TextOverflow.visible
+                        : TextOverflow.ellipsis,
                   ),
                 ),
                 if (detailBuilder != null)

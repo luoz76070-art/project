@@ -1819,9 +1819,9 @@
   "aboutPageEasterEggButton": "好的",
   "aboutPageKelivoSearchUnlocked": "有扇沒有名字的門開了一條縫。去設定裡找找看。",
   "aboutPageKelivoSearchAlreadyUnlocked": "這扇門你已經推開過了。",
-  "aboutPageUpstreamSource": "上游開源專案",
+  "aboutPageUpstreamSource": "基於開源專案 Kelivo（AGPL-3.0）",
   "aboutPageAppName": "MobiCodex",
-  "aboutPageAppDescription": "開源 AI 助理",
+  "aboutPageAppDescription": "MobiCodex · AI 助理與電腦工作台",
   "aboutPageNoQQGroup": "暫無QQ群",
   "aboutPageVersion": "版本",
   "aboutPageVersionDetail": "{version} / {buildNumber}",
@@ -5772,5 +5772,44 @@
   "recoveryCopyPreview": "副本預覽",
   "recoveryRestoreRetryBody": "這次還原尚未完成，選取的副本已保留。可以重新檢查本機副本，或重新開啟 MobiCodex 繼續。",
   "recoverySpaceAmount": "上次檢查：可用空間 {available}，安全準備資料至少需要預留 {required}。",
-  "recoveryCopiesNeedUpdate": "部分副本來自更新版本的 MobiCodex，請升級 App 後再還原。這些副本仍然保留。"
+  "recoveryCopiesNeedUpdate": "部分副本來自更新版本的 MobiCodex，請升級 App 後再還原。這些副本仍然保留。",
+  "imageContextTitle": "圖片上下文",
+  "imageContextAutomatic": "自動管理歷史圖片",
+  "imageContextDescription": "管理本輪使用的圖片，原圖仍保留在聊天中。",
+  "imageContextIncluded": "本輪傳送",
+  "imageContextOmitted": "本輪不傳送",
+  "imageContextPin": "固定圖片",
+  "imageContextUnpin": "取消固定",
+  "imageContextAttachAgain": "再次新增到輸入框",
+  "imageContextEmpty": "還沒有圖片",
+  "imageContextUnavailable": "目前上下文無法讀取這張圖片。",
+  "imageContextEntryDescription": "檢視和管理本輪使用的圖片",
+  "imageContextAutomaticDescription": "優先保留你上傳的圖片，分批收起較早的工具圖片。",
+  "imageContextActionsHint": "固定以優先保留，或再次新增到輸入框。",
+  "imageContextEmptyDescription": "傳送圖片或讓工具讀取圖片後，會顯示在這裡。",
+  "imageContextUserImages": "你上傳的圖片",
+  "imageContextToolImages": "工具圖片",
+  "imageContextAssistantImages": "產生的圖片",
+  "imageContextImageNumber": "圖片 {index}",
+  "@imageContextImageNumber": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
+  "imageContextIncludedCount": "本輪傳送 {included} / {total} 張",
+  "@imageContextIncludedCount": {
+    "placeholders": {
+      "included": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "imageContextMissing": "圖片無法使用",
+  "imageContextLoadFailed": "暫時無法載入圖片，請重試。",
+  "imageContextUpdateFailed": "未能儲存修改，請重試。"
 }

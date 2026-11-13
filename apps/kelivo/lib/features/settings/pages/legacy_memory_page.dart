@@ -141,7 +141,7 @@ class LegacyMemoryContent extends StatefulWidget {
     );
     final dir = await getTemporaryDirectory();
     final file = File(
-      '${dir.path}/kelivo-legacy-memory-${DateTime.now().millisecondsSinceEpoch}.txt',
+      '${dir.path}/MobiCodex-legacy-memory-${DateTime.now().millisecondsSinceEpoch}.txt',
     );
     await file.writeAsString(text);
     await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));

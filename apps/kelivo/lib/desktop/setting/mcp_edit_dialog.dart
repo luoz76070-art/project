@@ -85,7 +85,7 @@ class _DesktopMcpEditDialogState extends State<_DesktopMcpEditDialog>
       _icon = presentation.icon;
       _groupId = presentation.groupId;
       _enabled = server.enabled;
-      _nameCtrl.text = server.name;
+      _nameCtrl.text = server.displayName;
       _transport = server.transport;
       _urlCtrl.text = server.url;
       server.headers.forEach((k, v) {

@@ -213,7 +213,7 @@ class _DesktopAboutPaneState extends State<DesktopAboutPane> {
                     icon: lucide.Lucide.Earth,
                     label: l10n.aboutPageWebsite,
                     onTap: () => _openUrl(
-                      'https://github.com/luoz76070-art/project',
+                      'https://github.com/luoz76070-art/MobiCodex',
                     ),
                   ),
                   const _DeskRowDivider(),
@@ -221,7 +221,7 @@ class _DesktopAboutPaneState extends State<DesktopAboutPane> {
                     svgAsset: 'assets/icons/github.svg',
                     label: l10n.aboutPageGithub,
                     onTap: () => _openUrl(
-                      'https://github.com/luoz76070-art/project',
+                      'https://github.com/luoz76070-art/MobiCodex',
                     ),
                   ),
                   const _DeskRowDivider(),

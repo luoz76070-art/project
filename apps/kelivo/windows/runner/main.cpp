@@ -19,7 +19,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (instance_mutex != nullptr && ::GetLastError() == ERROR_ALREADY_EXISTS) {
     // Another instance is already running; try to bring its window to front
     // instead of creating a new one.
-    Win32Window::SendAppLinkToInstance(L"kelivo");
+    Win32Window::SendAppLinkToInstance(L"MobiCodex");
     return 0;
   }
 
@@ -40,7 +40,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"kelivo", origin, size)) {
+  if (!window.Create(L"MobiCodex", origin, size)) {
     ::CoUninitialize();
     return EXIT_FAILURE;
   }
