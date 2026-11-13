@@ -7,11 +7,13 @@ import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-credentials-test-'));
 test.after(() => fs.rm(directory, { recursive: true, force: true }));
+const authorizationSource = await fs.readFile(new URL('../apps/mobile/src/features/connection/authorization.ts', import.meta.url), 'utf8');
+await fs.writeFile(path.join(directory, 'authorization.mjs'), ts.transpileModule(authorizationSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText);
 let sequence = 0;
 async function load(file, setup) {
   globalThis.__credentialFixture = setup;
   let source = await fs.readFile(new URL(`../apps/mobile/src/features/connection/${file}.ts`, import.meta.url), 'utf8');
-  source = source.replace(/import \{ Capacitor, registerPlugin \} from "@capacitor\/core";/, 'const { Capacitor, registerPlugin } = globalThis.__credentialFixture;')
+  source = source.replace('"./authorization"', '"./authorization.mjs"').replace(/import \{ Capacitor, registerPlugin \} from "@capacitor\/core";/, 'const { Capacitor, registerPlugin } = globalThis.__credentialFixture;')
     .replace(/import \{ Capacitor, CapacitorHttp \} from "@capacitor\/core";/, 'const { Capacitor, CapacitorHttp } = globalThis.__credentialFixture;')
     .replace('import { normalizeEndpoint } from "./http";', 'const normalizeEndpoint = value => value.trim().replace(/\\/+$/, "");');
   const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });

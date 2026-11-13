@@ -1,3 +1,4 @@
+import { relayAuthorization } from "../connection/authorization";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { voiceApi } from "./api";
 import { createVoiceRecovery, recoveredVoiceDraft, type VoicePending, type VoiceRecovery } from "./recovery";
@@ -34,11 +35,15 @@ export function useVoiceRecovery(scope: string, endpoint: string, token: string)
     try { storage = localStorage; } catch { setNotice({ text: "", message: "语音恢复存储不可用，请检查应用存储权限。" }); return; }
     const recovery = createVoiceRecovery({ scope, storage, query: api.result, restore });
     instance.current = recovery;
-    const visibility = () => recovery.setVisible(!document.hidden);
+    const authorization = relayAuthorization(endpoint, token);
+    const revoked = () => { active = false; recovery.stop(); };
+    const detachAuthorization = authorization.subscribe(revoked);
+    const visibility = () => { if (authorization.isRevoked()) revoked(); else recovery.setVisible(!document.hidden); };
     document.addEventListener("visibilitychange", visibility);
     window.addEventListener("online", visibility);
     visibility();
     return () => {
+      detachAuthorization();
       active = false; recovery.stop(); if (instance.current === recovery) instance.current = null;
       document.removeEventListener("visibilitychange", visibility); window.removeEventListener("online", visibility);
     };

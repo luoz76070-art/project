@@ -46,6 +46,8 @@ export function driver(seed = defaultRuntime()) {
  const selected = { id: 'thread' }, selectedRef = { current: selected }, activeThreadKey = 'thread';
  const desktopPollRef = { current: null }, livePollRef = { current: null };
  const diagnosticJournalRef = { current: { subscribe: () => () => {} } };
+ let deviceRevoked = false;
+ const deviceRevokedMessage = '此设备已被撤销，请重新配对';
  const streamState = 'recovering', liveStreamFallbackTurnId = seed.activeTurnId;
  const canUseEventSource = () => true;
  const desktopPollActiveMs = 1, desktopPollIdleMs = 1, livePollFallbackMs = 1, liveSnapshotThrottleMs = 1;
@@ -64,6 +66,7 @@ export function driver(seed = defaultRuntime()) {
    read: (route, signal) => apiGet(route, token, signal),
  });
  return { state: () => state, statuses, requests, subscriptions, timers, listeners,
+ revoke: () => { deviceRevoked = true; },
  queue: () => { queueUpdates = true; }, flush: () => { queueUpdates = false; for (const fn of updates.splice(0)) state = fn(state); },
  patch: patch => patchRuntime('thread', patch), disposeScope: () => scopeAbortRef.current.abort(),
  start: data => { const baseMessages = state.messages; patchRuntime('thread', ${startResponsePatch}); },
@@ -401,4 +404,14 @@ test('S2 live, desktop and delta sync keep one whitelisted observation and clear
  assert.equal(d.state().activityEvidence, null); assert.equal(d.state().statusTurnId, null);
  d.desktop({ threadId: 'thread', status: 'inProgress', activeTurnId: 'd', messages: [], eventCount: 3, activityEvidence: evidence('d'), changeType: 'disconnected' });
  assert.equal(d.state().activityEvidence, null); assert.equal(d.state().sourceConnected, false);
+});
+
+test('revoked connection does not start either poll or SSE effect on rerender', () => {
+  for (const mode of ['desktop-tail', 'live-turn']) {
+    const d = driver({ ...defaultRuntime(), watchMode: mode, activeTurnId: 'turn', turnStatus: 'inProgress' });
+    d.revoke();
+    d.desktopPoll(); d.livePoll(); d.desktopStream(); d.liveStream();
+    assert.equal(d.requests.length, 0); assert.equal(d.subscriptions.length, 0);
+    assert.equal(d.timers.size, 0); assert.equal(d.listeners.size, 0);
+  }
 });

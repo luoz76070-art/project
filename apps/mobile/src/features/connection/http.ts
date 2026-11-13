@@ -1,3 +1,4 @@
+import { requestAuthorization, deviceRevokedMessage } from "./authorization";
 import { type RequestJsonOptions } from "../../app/types";
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
 
@@ -28,6 +29,8 @@ export async function requestJson<T>(url: string, options: RequestJsonOptions = 
   options.signal?.throwIfAborted();
   const normalizedUrl = normalizeUrl(url);
   assertSecureEndpoint(normalizedUrl);
+  const authorization = requestAuthorization(normalizedUrl, options.headers);
+  authorization?.assertValid();
   if (Capacitor.isNativePlatform()) {
     const response = await CapacitorHttp.request({
       url: normalizedUrl,
@@ -39,6 +42,8 @@ export async function requestJson<T>(url: string, options: RequestJsonOptions = 
       responseType: "json",
       disableRedirects: true,
     });
+    if (response.status === 401) authorization?.revoke();
+    authorization?.assertValid();
     options.signal?.throwIfAborted();
     ensureHttpOk(response.status, response.data);
     return parseJsonData<T>(response.data);
@@ -57,12 +62,15 @@ export async function requestJson<T>(url: string, options: RequestJsonOptions = 
       redirect: "error",
       signal: controller.signal,
     });
+    if (response.status === 401) authorization?.revoke();
+    authorization?.assertValid();
     if (response.status < 200 || response.status >= 300) {
       let errorData: unknown;
       try { errorData = await response.json(); } catch { /* Non-JSON proxy errors keep the HTTP status. */ }
       ensureHttpOk(response.status, errorData);
     }
     const result = await response.json() as T;
+    authorization?.assertValid();
     options.signal?.throwIfAborted();
     return result;
   } finally {
@@ -129,7 +137,7 @@ export function ensureHttpOk(status: number, data?: unknown) {
   const voiceCode = typeof reason === "string" && Object.hasOwn(voiceErrors, reason) ? reason : undefined;
   const code = voiceCode ?? (status === 409 && typeof reason === "string" && Object.hasOwn(desktopErrors, reason) ? reason : undefined);
   const detail = voiceCode ? voiceErrors[voiceCode] : code ? desktopErrors[code] : status === 409 ? "会话或提交状态发生冲突，请刷新会话并核对消息记录。" : undefined;
-  throw Object.assign(new Error(status === 401 ? "HTTP 401 token 不正确" : detail ? `HTTP ${status}：${detail}` : `HTTP ${status}`), { status, ...(code ? { code } : {}) });
+  throw Object.assign(new Error(status === 401 ? deviceRevokedMessage : detail ? `HTTP ${status}：${detail}` : `HTTP ${status}`), { status, ...(code ? { code } : {}) });
 }
 
 export function authHeaders(token: string) {

@@ -1,3 +1,5 @@
+import { useDeviceRevoked } from "../connection/useDeviceRevoked";
+import { deviceRevokedMessage } from "../connection/authorization";
 import { SessionStatus } from "../chat/SessionStatus";
 import { agentSessionStatus, isActiveSessionStatus } from "../chat/sessionStatusModel";
 import { loadReadingPositions, saveReadingPositions } from "../chat/readingPositions";
@@ -31,11 +33,12 @@ import { SessionRangeControl } from "../threads/SessionRangeControl";
 type Agent = { id: string; label: string; transport: string; sessionApi?: 1 };
 const friendlyError = (error: unknown) => {
   const status = (error as { status?: number })?.status;
-  return status === 401 ? "设备凭证已失效，请返回设置重新配对。" : status === 410 ? "电脑会话暂时离线，请返回会话列表并等待重新连接。" : status === 404 ? "电脑端尚未提供此 Agent，请更新或检查插件配置。"
+  return status === 401 ? deviceRevokedMessage : status === 410 ? "电脑会话暂时离线，请返回会话列表并等待重新连接。" : status === 404 ? "电脑端尚未提供此 Agent，请更新或检查插件配置。"
     : status === 409 ? "会话状态已变化，请等待重新同步后再操作。" : "无法连接 Agent，请确认电脑上的网关与 Agent 服务正在运行。";
 };
 
 export default function AgentWorkspace({ endpoint, token, scope, onBack, voiceRecovery }: { endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
+  const deviceRevoked = useDeviceRevoked(endpoint, token);
   const restoreView = useRef(isKelivoHost ? loadAgentView(scope) : null);
   const [agents, setAgents] = useState<Agent[]>([]), [agent, setAgent] = useState<Agent | null>(null);
   const [sessions, setSessions] = useState<AgentSession[]>([]), [selected, setSelected] = useState<AgentSession | null>(null);
@@ -98,12 +101,12 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack, voiceRe
     finally { if (!request.signal.aborted) setLoading(false); }
   }
   useEffect(() => {
-    if (agent?.id !== "deepseek" || selected || loading) return;
+    if (deviceRevoked || agent?.id !== "deepseek" || selected || loading) return;
     const refresh = () => { if (!document.hidden) void loadSessions(agent, false, range, true); };
     const timer = setInterval(refresh, sessionListRefreshMs);
     document.addEventListener("visibilitychange", refresh);
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
-  }, [agent?.id, selected?.id, loading, range, query, cursor, sessions.length, endpoint, token]);
+  }, [agent?.id, selected?.id, loading, range, query, cursor, sessions.length, endpoint, token, deviceRevoked]);
   function back() {
     if (!window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) return;
     if (isKelivoHost) saveAgentView(scope, selected ? agent?.id ?? null : null, null);
@@ -117,7 +120,7 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack, voiceRe
       <div className="workspace-title"><div><h1>{selected?.title || agent?.label || "选择 Agent"}</h1><p>{selected ? `${agent?.label} · 原服务会话` : "同一连接，分别管理会话"}</p></div></div>
       {!selected && <button className="icon-button" aria-label="刷新 Agent 列表" disabled={loading} onClick={() => void (agent ? loadSessions(agent) : loadAgents())}><RefreshCcw size={18} className={loading ? "spin" : ""} /></button>}
     </header>
-    {error && <p className="connection-notice" role="status">{error}</p>}
+    {(deviceRevoked || error) && <p className="connection-notice" role="status">{deviceRevoked ? deviceRevokedMessage : error}</p>}
     {selected && agent ? <AgentChat voiceRecovery={voiceRecovery} key={`${agent.id}:${selected.id}`} endpoint={endpoint} token={token} agent={agent} session={selected}
       scopeKey={scope} draft={drafts[`${agent.id}:${selected.id}`] ?? ""} onDraft={value => setDrafts(current => {
         const key = `${agent.id}:${selected.id}`, next = { ...current };
@@ -208,6 +211,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
     const controller = new AbortController(); scope.current = controller;
     const reduce = createSnapshotReducer<AgentSessionSnapshot>();
     const unsubscribe = subscribeEvents({
+      authorization: { endpoint, token },
       getToken: signal => apiPost(buildUrl(endpoint, `${base}/stream-token`), token, {}, signal),
       url: streamToken => buildUrl(endpoint, `${base}/events?${new URLSearchParams({ streamToken, v: "1" })}`),
       events: { "agent-session": input => {
@@ -298,7 +302,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
   const sessionStatus = agentSessionStatus(snapshot, online);
   const progress = isActiveSessionStatus(sessionStatus) ? sessionStatus : null;
   return <section className="agent-chat">
-    <div className="agent-connection" role="status"><span className={`status-dot ${online ? "ok" : "error"}`} />{online ? `${agent.label} 已连接` : stream === "unauthorized" ? "凭证已失效，请重新配对" : stream === "paused" ? "连接已暂停，返回前台后恢复" : "正在恢复连接…"}</div>
+    <div className="agent-connection" role="status"><span className={`status-dot ${online ? "ok" : "error"}`} />{online ? `${agent.label} 已连接` : stream === "unauthorized" ? deviceRevokedMessage : stream === "paused" ? "连接已暂停，返回前台后恢复" : "正在恢复连接…"}</div>
     <div className="messages-viewport" ref={viewport} onScroll={() => { const element = viewport.current; if (element) { nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100; reading.current[draftSession] = element.scrollTop; } }}>
       {(snapshot?.partialText || agent.id === "claude" || agent.id === "deepseek") && <details className="agent-capabilities"><summary>会话能力与同步范围</summary>
         {snapshot?.partialText && <p>当前显示已同步的消息与工具记录，长内容可能截断；更早历史以本通道提供的加载入口为准。</p>}
