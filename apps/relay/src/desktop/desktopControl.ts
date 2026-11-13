@@ -7,6 +7,7 @@ import { DesktopNativeControl, type DesktopControlCapability, type DesktopTransp
 import { DesktopApprovals, type DesktopApproval, type DesktopApprovalDecision } from "./desktopApprovals.js";
 import { DesktopMessageQueue } from "./desktopMessageQueue.js";
 import type { DesktopThreadLoad } from "./desktopThreadLoader.js";
+import { codexLastTurn, type LastTurn } from "../store/lastTurn.js";
 
 type QuestionBinding = { candidate: DesktopQuestionCandidate; view: UserInputRequest; signature: string };
 type PendingQuestion = { threadId: string; status: Exclude<UserInputRequest["status"], "pending"> };
@@ -28,7 +29,8 @@ type DesktopStreamThread = {
 
 export type DesktopStreamSnapshot = {
   threadId: string;
-  status: "starting" | "inProgress" | "completed" | "interrupted" | "failed";
+  status: "idle" | "starting" | "inProgress" | "completed" | "interrupted" | "failed";
+  lastTurn?: LastTurn | null;
   messages: CodexMessage[];
   inputReplacements?: { turnId: string; replacesMessageId: string; nativeMessageId: string; clientMessageId?: string }[];
   messageCount: number;
@@ -608,7 +610,7 @@ export class DesktopControl {
     const conversationState = this.streamStates.get(conversationId);
     if (!conversationState) return;
     const streamThread = this.streamThreads.get(conversationId);
-    const snapshot = conversationToStreamSnapshot(conversationId, conversationState, changeType, streamThread?.eventCount ?? 0);
+    const snapshot = conversationToStreamSnapshot(conversationId, conversationState, changeType, streamThread?.eventCount ?? 0, this.streamSnapshots.get(conversationId)?.lastTurn);
     if (!snapshot) return;
     const session = this.followed.get(conversationId);
     snapshot.interactionsAvailable = Boolean(session?.owner && session.revision != null);
@@ -652,6 +654,7 @@ function conversationToStreamSnapshot(
   conversationState: unknown,
   changeType: string | null,
   eventCount: number,
+  previous?: LastTurn | null,
 ): DesktopStreamSnapshot | null {
   if (!conversationState || typeof conversationState !== "object") return null;
   const state = conversationState as Record<string, unknown>;
@@ -666,6 +669,7 @@ function conversationToStreamSnapshot(
   return {
     threadId: conversationId,
     status: normalizeStreamStatus(state),
+    lastTurn: desktopLastTurn(state, previous),
     messages,
     inputReplacements,
     messageCount: messages.length,
@@ -792,15 +796,20 @@ function isGeneratedContextText(trimmed: string): boolean {
   );
 }
 
+export function desktopLastTurn(state: Record<string, unknown>, previous?: LastTurn | null): LastTurn | null {
+  for (const turn of [...conversationTurns(state)].reverse()) {
+    if (turn.status === "inProgress" || turn.status === "starting") continue;
+    return codexLastTurn(turn, previous);
+  }
+  return conversationTurns(state).length ? previous ?? null : null;
+}
+
 function normalizeStreamStatus(state: Record<string, unknown>): DesktopStreamSnapshot["status"] {
   const turns = conversationTurns(state);
   const latest = [...turns].reverse().find((turn) => turn && typeof turn === "object") as Record<string, unknown> | undefined;
-  const raw = String(latest?.status ?? state.threadRuntimeStatus ?? "").toLowerCase();
-  if (/fail|error/.test(raw)) return "failed";
-  if (/interrupt|cancel|aborted/.test(raw)) return "interrupted";
-  if (/start|pending|queued/.test(raw)) return "starting";
-  if (/progress|running|stream|active|execut/.test(raw)) return "inProgress";
-  return "completed";
+  const raw = latest?.status ?? state.threadRuntimeStatus;
+  if (raw === "completed" || raw === "failed" || raw === "interrupted" || raw === "starting" || raw === "inProgress") return raw;
+  return "idle";
 }
 
 function timestampFromTurn(turn: Record<string, unknown>): string {

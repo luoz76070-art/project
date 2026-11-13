@@ -72,6 +72,7 @@ export class AppServerClient extends EventEmitter {
     });
 
     this.child.once("exit", (code, signal) => {
+      this.emit("engine-exit", { code, signal });
       this.disconnected(new Error(`app-server exited; code=${code} signal=${signal}`));
     });
 

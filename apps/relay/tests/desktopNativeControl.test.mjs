@@ -80,6 +80,28 @@ async function fixture(t, active = false) {
   return f;
 }
 
+test('S1 native canonical snapshots publish three results, preserve them on disconnect and leave unknown states null', async t => {
+  const f = await fixture(t, true); await f.follow();
+  const latest = () => f.control.getStreamSnapshot(threadId);
+  assert.equal(latest().lastTurn, null);
+  for (const [index, status] of ['completed', 'failed', 'interrupted'].entries()) {
+    turns(f).initial = { turnId: `result-${index}`, status, completedAtMs: 1000 + index, items: [], error: { message: 'PRIVATE', codexErrorInfo: 'usageLimitExceeded' } };
+    f.snapshot(); await until(() => latest().lastTurn?.turnId === `result-${index}`);
+    assert.equal(latest().lastTurn.status, status);
+    assert.equal(latest().lastTurn.reason.code, { completed: 'ok', failed: 'rate_limited', interrupted: 'cancelled' }[status]);
+    assert.equal(latest().lastTurn.endedAt, new Date(1000 + index).toISOString());
+    assert.doesNotMatch(JSON.stringify(latest().lastTurn), /PRIVATE/);
+  }
+  turns(f).initial = { turnId: 'running', status: 'inProgress', items: [] }; f.snapshot(); await until(() => latest().status === 'inProgress');
+  assert.equal(latest().lastTurn.status, 'interrupted');
+  turns(f).initial.status = 'unknown'; f.snapshot(); await until(() => latest().status === 'idle');
+  assert.equal(latest().lastTurn, null);
+  turns(f).initial.status = 'completed'; f.snapshot(); await until(() => latest().lastTurn?.status === 'completed');
+  const result = latest().lastTurn;
+  f.disconnect(); await until(() => latest().changeType === 'disconnected');
+  assert.deepEqual(latest().lastTurn, result);
+});
+
 test('ordinary role prompts remain visible in native provisional, canonical and accepted steering inputs', async t => {
   const f = await fixture(t, true), history = f.state.turnHistory.history;
   const texts = [...contextEnvelopes, ...ordinaryPrompts];

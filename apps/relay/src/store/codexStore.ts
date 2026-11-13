@@ -4,6 +4,7 @@ import { StringDecoder } from "node:string_decoder";
 import { RolloutIndex } from "./rolloutIndex.js";
 import { readJsonlWindow } from "./jsonl.js";
 import { turnProgress, type TurnProgress } from "./turnActivity.js";
+import { LastTurnCache, type LastTurn } from "./lastTurn.js";
 import { RolloutImageReferences } from "./imageReferences.js";
 
 export type CodexThreadSummary = {
@@ -62,6 +63,7 @@ type RolloutLine = {
 };
 
 export class CodexStore {
+  private readonly turnResults = new LastTurnCache();
   private readonly imageReferences = new RolloutImageReferences((value, offset) => this.toMessage(value as RolloutLine, offset));
   private readonly rolloutPathCache = new Map<string, string>();
 
@@ -74,7 +76,7 @@ export class CodexStore {
 
   constructor(private readonly codexHome: string) { this.index = new RolloutIndex(path.join(codexHome, "sessions")); }
 
-  close() { this.index.close(); }
+  close() { this.index.close(); this.turnResults.clear(); }
 
 
   async getThreadSummary(threadId: string): Promise<CodexThreadSummary | null> {
@@ -120,33 +122,37 @@ export class CodexStore {
     }));
   }
 
-  async readThread(threadId: string): Promise<{ thread: CodexThreadSummary | null; messages: CodexMessage[] }> {
+  async readThread(threadId: string): Promise<{ thread: CodexThreadSummary | null; messages: CodexMessage[]; lastTurn: LastTurn | null }> {
     const read = await this.readThreadWithCursor(threadId);
-    return { thread: read.thread, messages: read.messages };
+    return { thread: read.thread, messages: read.messages, lastTurn: read.lastTurn ?? null };
   }
 
   async readThreadWithCursor(threadId: string): Promise<CodexThreadRead> {
     const file = await this.findRolloutPath(threadId);
-    if (!file) return { thread: null, messages: [], cursor: 0, fileSize: 0 };
+    if (!file) return { thread: null, messages: [], cursor: 0, fileSize: 0, lastTurn: null };
     const stat = await fs.stat(file);
     let cursor = 0;
     let generation: string | undefined;
+    let lastTurn: LastTurn | null = null;
     const messages: CodexMessage[] = [];
     do {
       const page = await readJsonlWindow(file, { cursor, before: stat.size, maxBytes: 512_000, generation });
       if (page.reset) throw Object.assign(new Error("History changed during read; retry required"), { statusCode: 409 });
       generation = page.generation;
+      const progress = turnProgress(page.records, lastTurn);
+      if (progress.lastTurn !== undefined) lastTurn = progress.lastTurn;
       messages.push(...page.records.flatMap(({ value, offset }) => this.toMessage(value as RolloutLine, offset, `log-${generation}`)));
       if (page.cursor === cursor) break; // Incomplete final record is left for the next delta.
       cursor = page.cursor;
     } while (cursor < stat.size);
-    return { thread: await this.readThreadSummary(threadId, file, stat.mtimeMs), messages: dedupeMessages(messages), cursor, fileSize: stat.size, generation, windowStart: 0 };
+    this.turnResults.set(threadId, lastTurn, generation);
+    return { thread: await this.readThreadSummary(threadId, file, stat.mtimeMs), messages: dedupeMessages(messages), cursor, fileSize: stat.size, generation, windowStart: 0, lastTurn };
 
   }
 
   async readThreadLatest(threadId: string, maxBytes = 262_144, maxMessages = 80, before?: number, generation?: string): Promise<CodexThreadRead> {
     const rolloutPath = await this.findRolloutPath(threadId);
-    if (!rolloutPath) return { thread: null, messages: [], cursor: 0, fileSize: 0, windowStart: 0 };
+    if (!rolloutPath) return { thread: null, messages: [], cursor: 0, fileSize: 0, windowStart: 0, lastTurn: null };
     const [window, stat] = await Promise.all([readJsonlWindow(rolloutPath, { before, maxBytes }), fs.stat(rolloutPath)]);
     if (before !== undefined && generation && window.generation !== generation) {
       return { ...await this.readThreadLatest(threadId, maxBytes, maxMessages), reset: true };
@@ -154,7 +160,7 @@ export class CodexStore {
     const { records, ...metadata } = window;
     const thread = await this.readThreadSummary(threadId, rolloutPath, stat.mtimeMs);
     const messages = dedupeMessages(records.flatMap(({ value, offset }) => this.toMessage(value as RolloutLine, offset, `log-${window.generation}`)));
-    const progress = turnProgress(records);
+    const progress = turnProgress(records, before === undefined ? this.turnResults.get(threadId, window.generation) : null);
     let statusBefore = window.windowStart;
     let scanned = window.cursor - statusBefore;
     // A phone can join after task_started. Restore lifecycle without changing its history page.
@@ -165,10 +171,15 @@ export class CodexStore {
       const older = turnProgress(page.records);
       progress.turnStatus ??= older.turnStatus;
       progress.activity ??= older.activity;
+      if (progress.lastTurn === undefined) progress.lastTurn = older.lastTurn;
       scanned += statusBefore - page.windowStart;
       statusBefore = page.windowStart;
     }
     if (progress.turnStatus && progress.turnStatus !== "inProgress") progress.activity = undefined;
+    if (before === undefined) {
+      if (progress.lastTurn !== undefined) this.turnResults.set(threadId, progress.lastTurn, window.generation);
+      else progress.lastTurn = this.turnResults.get(threadId, window.generation);
+    }
     // Pagination advances to the earliest returned record, not past omitted messages.
     const kept = messages.slice(-maxMessages);
     const firstOffset = kept.length < messages.length ? Number(kept[0]?.id.split("-").at(-1)) : window.windowStart;
@@ -177,11 +188,14 @@ export class CodexStore {
 
   async readThreadDelta(threadId: string, cursor = 0, maxBytes = 512_000, generation?: string): Promise<CodexThreadDelta> {
     const rolloutPath = await this.findRolloutPath(threadId);
-    if (!rolloutPath) return { messages: [], cursor: 0, fileSize: 0, truncated: false, reset: cursor > 0 };
+    if (!rolloutPath) return { messages: [], cursor: 0, fileSize: 0, truncated: false, reset: cursor > 0, lastTurn: null };
     const window = await readJsonlWindow(rolloutPath, { cursor, maxBytes, generation });
     const { records, ...metadata } = window;
     const messages = records.flatMap(({ value, offset }) => this.toMessage(value as RolloutLine, offset, `log-${window.generation}`));
-    return { ...metadata, ...turnProgress(records), messages: dedupeMessages(messages) };
+    if (window.reset) this.turnResults.set(threadId, null, window.generation);
+    const progress = turnProgress(records, this.turnResults.get(threadId, window.generation));
+    if (progress.lastTurn !== undefined) this.turnResults.set(threadId, progress.lastTurn, window.generation);
+    return { ...metadata, ...progress, lastTurn: progress.lastTurn, messages: dedupeMessages(messages) };
   }
 
   async getActiveDesktopThread(): Promise<CodexThreadSummary | null> {
