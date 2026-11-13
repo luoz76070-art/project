@@ -27,10 +27,13 @@ assert hashlib.sha256(APK.read_bytes()).hexdigest() == APK_SHA
 assert APK.stat().st_size == metadata['bytes']
 version = metadata['versionName'].replace('-native-preview', '-preview')
 prefix = 'mobile-codex-kelivo-' + version + '-source'
-paths = subprocess.check_output([
-    'rg', '--files', '--hidden', '-g', '!.git',
+source_roots = [
     'apps/kelivo', 'apps/mobile', 'apps/relay', 'generated-protocol',
     'integrations/kelivo', 'scripts', 'plugins',
+]
+paths = subprocess.check_output([
+    'git', 'ls-files', '--cached', '--others', '--exclude-standard', '--',
+    *source_roots,
 ], cwd=ROOT, text=True).splitlines()
 paths += ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'eslint.config.mjs', '.gitignore']
 for name in ['.npmrc']:
