@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { build } from 'esbuild';
 import { ordinaryPrompts, contextEnvelopes } from './fixtures/user-prompts.mjs';
 import { messageOf as deepSeekMessageOf } from '../plugins/mobile-deepseek/messages.mjs';
+import { turnResults } from './fixtures/last-turn.mjs';
 
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-connection-test-'));
 async function moduleFrom(file) {
@@ -16,6 +17,7 @@ async function moduleFrom(file) {
   return import(pathToFileURL(outputPath).href);
 }
 const { subscribeEvents } = await moduleFrom('features/connection/subscription.ts');
+const { mergeLastTurn } = await moduleFrom('features/chat/lastTurn.ts');
 const { saveThreadRuntimeCache, loadThreadRuntimeCache, readThreadMessageCacheForDiagnostics, defaultRuntime, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, desktopApprovalsPatch, approvalResponsePatch } = await moduleFrom('features/chat/runtime.ts');
 const { makeMessageDiagnostics } = await moduleFrom('features/chat/messageDiagnostics.ts');
 const { offlineAgent, agentDelivery, agentHistoryWindow, reconcileAgentDraft, verifyAgentSnapshot, loadAgentDrafts, saveAgentDrafts } = await moduleFrom('features/agents/runtime.ts');
@@ -31,6 +33,32 @@ try { ({ messagesForRender } = await moduleFrom('features/chat/messages.ts')); }
 const tick = () => new Promise(resolve => setTimeout(resolve, 10));
 
 const processMessage = (id, phase, extra = {}) => ({ id, role: 'assistant', text: id, phase, kind: 'agent_message', timestamp: '2026-10-23T06:00:00Z', ...extra });
+
+test('S1 mobile accepts three results and legacy fields while refusing stale times and clearing explicit unknowns', () => {
+  for (const result of turnResults) {
+    assert.deepEqual(turnProgressPatch(defaultRuntime(), { lastTurn: result }).lastTurn, result);
+    const snapshot = { ...agentSnapshot(), lastTurn: result };
+    assert.equal(verifyAgentSnapshot(snapshot, 'opencode', 'ses_synthetic').lastTurn, result);
+    assert.equal(offlineAgent(snapshot).lastTurn, result, 'disconnect cannot settle or erase a result');
+  }
+  const previous = turnResults[1];
+  assert.equal(mergeLastTurn(previous, undefined), previous);
+  assert.equal(mergeLastTurn(previous, null), null);
+  assert.equal(mergeLastTurn(previous, turnResults[0]), previous);
+  const observed = { ...previous, endedAt: '2026-11-13T02:00:00.000Z', timeSource: 'observed' };
+  assert.deepEqual(mergeLastTurn(observed, previous), previous);
+  assert.deepEqual(mergeLastTurn(previous, observed), previous);
+  const next = { ...previous, turnId: 'next-turn' };
+  assert.deepEqual(mergeLastTurn(observed, next), next, 'host and observation clocks cannot order distinct turns');
+  assert.throws(() => verifyAgentSnapshot({ ...agentSnapshot(), lastTurn: { ...previous, status: 'idle' } }, 'opencode', 'ses_synthetic'));
+  const original = globalThis.localStorage, values = new Map();
+  globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  try {
+    saveThreadRuntimeCache({ thread: { ...defaultRuntime(), draft: '保留草稿', lastTurn: previous } }, 's1');
+    assert.equal(loadThreadRuntimeCache('s1').thread.lastTurn, undefined);
+    assert.doesNotMatch([...values.values()].join(''), /synthetic-failed|lastTurn/);
+  } finally { globalThis.localStorage = original; }
+});
 
 test('agent attachment drafts retain whitespace, restore file references and preserve a newer draft on receipt', () => {
   const file = { id: 'a', fileName: 'test (1).png', path: '/synthetic/test (1).png' };

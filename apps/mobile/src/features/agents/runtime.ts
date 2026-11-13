@@ -1,5 +1,6 @@
 import type { AgentDelivery, AgentSessionSnapshot } from "./types";
 import type { CodexMessage } from "../../app/types";
+import { validLastTurn } from "../chat/lastTurn";
 
 /** Keep the older end while paging, so reaching the render budget never blocks history. */
 export function agentHistoryWindow(current: CodexMessage[], older: CodexMessage[], limit: number) {
@@ -34,6 +35,7 @@ export function verifyAgentSnapshot(snapshot: AgentSessionSnapshot, agentId: str
   if (snapshot.agentId !== agentId || snapshot.session?.id !== sessionId || !Array.isArray(snapshot.messages)
     || !Array.isArray(snapshot.questions) || !Array.isArray(snapshot.permissions)
     || !["idle", "running"].includes(snapshot.status)
+    || (snapshot.lastTurn != null && !validLastTurn(snapshot.lastTurn))
     || (snapshot.connected && !snapshot.control?.token)) throw new Error("Agent 会话状态不匹配");
   return snapshot;
 }
