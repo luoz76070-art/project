@@ -263,7 +263,7 @@ class BackgroundOverlay(
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.TRANSPARENT) }
                 clipToOutline = true
-                setImageResource(R.mipmap.ic_launcher)
+                setImageResource(R.mipmap.ic_launcher_mc)
             }
             if (kind == "image") {
                 val file = File(value)

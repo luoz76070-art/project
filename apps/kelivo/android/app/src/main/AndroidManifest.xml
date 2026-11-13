@@ -45,7 +45,8 @@
         android:fullBackupContent="false"
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher_mc"
+        android:roundIcon="@mipmap/ic_launcher_mc_round">
         <!-- Shares from another task must reach the existing chat composer. -->
         <activity
             android:name=".MainActivity"

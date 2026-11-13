@@ -18,7 +18,7 @@ AAPT = 'http://schemas.android.com/aapt'
 SVG = 'http://www.w3.org/2000/svg'
 ET.register_namespace('android', ANDROID)
 ET.register_namespace('aapt', AAPT)
-LAUNCHER = 'ic_launcher'
+LAUNCHER = 'ic_launcher_mc'
 DENSITIES = {'mdpi': 1, 'hdpi': 1.5, 'xhdpi': 2, 'xxhdpi': 3, 'xxxhdpi': 4}
 
 
@@ -126,6 +126,18 @@ def finalize_splash():
         path.write_text(path.read_text().replace('@drawable/splash', '@drawable/android12splash'))
 
 
+def notification_vector():
+    # Only the M silhouette, centered in a 24dp canvas with transparent margins.
+    source = ET.parse(SOURCE / 'A1-adaptive-monochrome.svg').getroot()
+    mark = source.find(f'{{{SVG}}}path')
+    root = ET.Element('vector', attrs(width='24dp', height='24dp', viewportWidth=512, viewportHeight=512))
+    group = ET.SubElement(root, 'group', attrs(translateX=-256, translateY=-286))
+    ET.SubElement(group, 'path', attrs(pathData=mark.attrib['d'], fillColor='#00000000',
+                                     strokeColor='#FFFFFF', strokeWidth=mark.attrib['stroke-width'],
+                                     strokeLineCap='round', strokeLineJoin='round'))
+    return root
+
+
 def generate(preview):
     jobs = []
     with tempfile.TemporaryDirectory(prefix='mobicodex-branding-') as temp:
@@ -144,6 +156,11 @@ def generate(preview):
         foreground = SOURCE / 'A1-adaptive-foreground.svg'
         dark = mark(foreground, 'dark.svg')
         mono = mark(SOURCE / 'A1-adaptive-monochrome.svg', 'mono.svg')
+        round_icon = ET.parse(icon).getroot()
+        for rectangle in round_icon.findall(f'{{{SVG}}}rect'):
+            rectangle.set('rx', str(float(rectangle.attrib['width']) / 2))
+        round_source = temp / 'round.svg'
+        write_xml(round_source, round_icon)
         for name, source, size in [('app_icon.png', icon, 1254), ('app_icon_2.png', icon, 1254),
                                    ('app_icon_macos.png', icon, 1024), ('app_icon_macos2.png', icon, 1024),
                                    ('app_icon_foreground.png', foreground, 1024), ('start.png', light, 512),
@@ -156,12 +173,20 @@ def generate(preview):
                 preview_source = preview / f'adaptive-{layer}.svg'
                 write_xml(preview_source, preview_svg(ET.parse(drawable).getroot()))
                 render(preview_source, preview / f'adaptive-{layer}.png', 512)
+        notification = RES / 'drawable/ic_background_generation.xml'
+        write_xml(notification, notification_vector())
+        if preview:
+            preview_source = preview / 'notification.svg'
+            write_xml(preview_source, preview_svg(ET.parse(notification).getroot()))
+            render(preview_source, preview / 'notification.png', 512)
         adaptive = ET.Element('adaptive-icon')
         for layer in ['background', 'foreground', 'monochrome']:
             ET.SubElement(adaptive, layer, attrs(drawable=f'@drawable/brand_a1_{layer}'))
         write_xml(RES / 'mipmap-anydpi-v26' / f'{LAUNCHER}.xml', adaptive)
+        write_xml(RES / 'mipmap-anydpi-v26' / f'{LAUNCHER}_round.xml', adaptive)
         for density, scale in DENSITIES.items():
             render(icon, RES / f'mipmap-{density}' / f'{LAUNCHER}.png', int(48 * scale))
+            render(round_source, RES / f'mipmap-{density}' / f'{LAUNCHER}_round.png', int(48 * scale))
             for mode, source in [('', light), ('-night', dark)]:
                 for name in ['splash', 'android12splash']:
                     render(source, RES / f'drawable{mode}-{density}' / f'{name}.png', int(128 * scale))
@@ -181,6 +206,10 @@ def generate(preview):
         if preview:
             (preview / 'render-manifest.json').write_text(json.dumps(jobs, indent=2))
     finalize_splash()
+    # Exact obsolete host resource names; never touch the separate remote app.
+    for name in ['ic_launcher.xml', 'ic_launcher.png', 'ic_launcher_foreground.png', 'ic_launcher_monochrome.png']:
+        for obsolete in RES.glob(f'*/{name}'):
+            obsolete.unlink()
 
 
 if __name__ == '__main__':

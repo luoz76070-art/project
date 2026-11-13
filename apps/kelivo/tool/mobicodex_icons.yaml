@@ -1,9 +1,6 @@
-# Android-only branding for the existing integrated app identity.
+# Android icons are VectorDrawables; use prepare_mobicodex_branding.py instead.
+# Keep this compatibility configuration from regenerating legacy launcher names.
 flutter_launcher_icons:
-  android: true
+  android: false
   ios: false
   image_path: assets/app_icon.png
-  adaptive_icon_background: "#F8F7F1"
-  adaptive_icon_foreground: assets/app_icon_foreground.png
-  adaptive_icon_foreground_inset: 16
-  adaptive_icon_monochrome: assets/app_icon_foreground.png
