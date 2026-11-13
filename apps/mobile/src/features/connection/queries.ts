@@ -33,7 +33,7 @@ export function threadFromLiveTurn(turn: LiveTurnSnapshot): ThreadSummary | null
   };
 }
 
-export async function readThread(endpoint: string, token: string, thread: ThreadSummary, signal?: AbortSignal): Promise<{ messages: CodexMessage[]; cursor?: number; generation?: string; windowStart?: number; turnStatus?: "inProgress" | "completed" | "interrupted" | "failed"; activity?: "thinking" | "working" | "outputting"; lastTurn?: import("../chat/lastTurn").LastTurn | null }> {
+export async function readThread(endpoint: string, token: string, thread: ThreadSummary, signal?: AbortSignal): Promise<{ activeTurnId?: string | null; activityEvidence?: import("../chat/sessionStatusModel").ActivityEvidence | null; messages: CodexMessage[]; cursor?: number; generation?: string; windowStart?: number; turnStatus?: "inProgress" | "completed" | "interrupted" | "failed"; activity?: "thinking" | "working" | "outputting"; lastTurn?: import("../chat/lastTurn").LastTurn | null }> {
   if (isDesktopSource(thread)) {
     return await apiGet<Awaited<ReturnType<typeof readThread>>>(
       buildUrl(

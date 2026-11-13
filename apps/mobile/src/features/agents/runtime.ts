@@ -1,3 +1,4 @@
+import { readActivityEvidence } from "../chat/sessionStatusModel";
 import type { AgentDelivery, AgentSessionSnapshot } from "./types";
 import type { CodexMessage } from "../../app/types";
 import { validLastTurn } from "../chat/lastTurn";
@@ -8,7 +9,7 @@ export function agentHistoryWindow(current: CodexMessage[], older: CodexMessage[
 }
 
 export function offlineAgent(snapshot: AgentSessionSnapshot | null): AgentSessionSnapshot | null {
-  return snapshot ? { ...snapshot, connected: false, control: null, questions: [], permissions: [],
+  return snapshot ? { ...snapshot, connected: false, activityEvidence: null, control: null, questions: [], permissions: [],
     ...(snapshot.queue ? { queue: { ...snapshot.queue, available: false } } : {}),
   } : null;
 }
@@ -37,7 +38,7 @@ export function verifyAgentSnapshot(snapshot: AgentSessionSnapshot, agentId: str
     || !["idle", "running"].includes(snapshot.status)
     || (snapshot.lastTurn != null && !validLastTurn(snapshot.lastTurn))
     || (snapshot.connected && !snapshot.control?.token)) throw new Error("Agent 会话状态不匹配");
-  return snapshot;
+  return { ...snapshot, activityEvidence: snapshot.connected && snapshot.status === "running" ? readActivityEvidence(snapshot.activityEvidence) : null };
 }
 
 const draftKey = (scope: string) => `mobile-codex:agent-drafts:${scope}`;

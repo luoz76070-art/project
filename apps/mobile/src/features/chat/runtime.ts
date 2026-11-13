@@ -1,3 +1,4 @@
+import { readActivityEvidence, type ActivityEvidence } from "./sessionStatusModel";
 import { type ThreadRuntime, type CodexMessage, type DesktopControlCapability, type DesktopControlResponse, type LiveApproval, type PendingAttachment } from "../../app/types";
 import { composeMessageWithAttachments } from "./attachments";
 import { reconcileMessages } from "./messageReconciliation";
@@ -47,7 +48,7 @@ export function defaultRuntime(): ThreadRuntime {
 
 export function turnProgressPatch(
   runtime: ThreadRuntime,
-  progress: { turnStatus?: ThreadRuntime["turnStatus"]; activity?: ThreadRuntime["activity"]; lastTurn?: LastTurn | null },
+  progress: { activeTurnId?: string | null; activityEvidence?: ActivityEvidence | null; turnStatus?: ThreadRuntime["turnStatus"]; activity?: ThreadRuntime["activity"]; lastTurn?: LastTurn | null },
 ) {
   const turnStatus = progress.turnStatus ?? runtime.turnStatus;
   const active = turnStatus === "starting" || turnStatus === "inProgress";
@@ -55,6 +56,10 @@ export function turnProgressPatch(
   return {
     lastTurn: mergeLastTurn(runtime.lastTurn, progress.lastTurn),
     turnStatus,
+    statusTurnId: ended ? null : progress.activeTurnId === undefined ? runtime.statusTurnId : progress.activeTurnId,
+    activityEvidence: !active ? null : (progress.activeTurnId !== undefined && progress.activeTurnId !== runtime.statusTurnId)
+      ? readActivityEvidence(progress.activityEvidence)
+      : progress.activityEvidence === undefined ? runtime.activityEvidence : readActivityEvidence(progress.activityEvidence),
     activity: active ? progress.activity ?? runtime.activity : undefined,
     sending: ended ? false : active ? true : runtime.sending,
     activeTurnId: ended ? null : runtime.activeTurnId,

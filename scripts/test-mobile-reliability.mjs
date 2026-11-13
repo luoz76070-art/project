@@ -35,6 +35,7 @@ import { defaultRuntime, desktopControlOfflinePatch, saveThreadRuntimeCache, loa
 import { createSnapshotReducer } from ${JSON.stringify(path.join(mobile, 'features/connection/snapshotPatch.ts'))};
 export { defaultRuntime, saveThreadRuntimeCache, loadThreadRuntimeCache, threadCacheSaveNotice };
 import { createRuntimeSync } from ${JSON.stringify(path.join(mobile, 'features/chat/runtimeSync.ts'))};
+import { readActivityEvidence } from ${JSON.stringify(path.join(mobile, 'features/chat/sessionStatusModel.ts'))};
 import { capMessages, mergeMessagesById, turnStatusText } from ${JSON.stringify(path.join(mobile, 'features/chat/messages.ts'))};
 export function driver(seed = defaultRuntime()) {
  let state = seed, response, queueUpdates = false;
@@ -381,3 +382,23 @@ test('body budget and recent access bound history without merging genuine repeat
 });
 
 test.after(async () => { globalThis.localStorage = previousStorage; await fs.rm(temp, { recursive: true, force: true }); });
+
+test('S2 live, desktop and delta sync keep one whitelisted observation and clear on end/reset/disconnect', () => {
+ const evidence = (turnId, kind = 'thinking') => ({ kind, turnId, observedAt: '2026-11-13T12:00:00.000Z' });
+ const d = driver({ ...defaultRuntime(), activeTurnId: 'a', turnStatus: 'inProgress' });
+ d.live({ ...turn('a', 'inProgress'), activityEvidence: { ...evidence('a'), command: 'PRIVATE' }, connected: true });
+ assert.deepEqual(d.state().activityEvidence, evidence('a')); assert.equal(d.state().statusTurnId, 'a');
+ d.live({ ...turn('a', 'inProgress'), activityEvidence: evidence('a'), connected: false });
+ assert.equal(d.state().activityEvidence, null); assert.equal(d.state().sourceConnected, false);
+ d.live({ ...turn('a', 'completed'), activityEvidence: evidence('a') }); assert.equal(d.state().activityEvidence, null);
+ d.desktop({ threadId: 'thread', status: 'inProgress', activeTurnId: 'b', messages: [], eventCount: 1, activityEvidence: evidence('b', 'working') });
+ assert.equal(d.state().statusTurnId, 'b'); assert.equal(d.state().activityEvidence.kind, 'working');
+ d.desktop({ threadId: 'thread', status: 'inProgress', activeTurnId: 'c', messages: [], eventCount: 2 });
+ assert.equal(d.state().activityEvidence, null, 'new or legacy snapshot never inherits the old phase');
+ d.delta({ messages: [], cursor: 1, activeTurnId: 'c', turnStatus: 'inProgress', activityEvidence: evidence('c') });
+ assert.equal(d.state().activityEvidence.turnId, 'c');
+ d.delta({ messages: [], cursor: 0, reset: true, generation: 'rotated', turnStatus: 'inProgress' });
+ assert.equal(d.state().activityEvidence, null); assert.equal(d.state().statusTurnId, null);
+ d.desktop({ threadId: 'thread', status: 'inProgress', activeTurnId: 'd', messages: [], eventCount: 3, activityEvidence: evidence('d'), changeType: 'disconnected' });
+ assert.equal(d.state().activityEvidence, null); assert.equal(d.state().sourceConnected, false);
+});
