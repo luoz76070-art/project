@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { ProductRemoteShell } from "../features/product/ProductRemoteShell";
 import { isKelivoHost, navigateProduct, productBeforeNavigate, productOpenUpdates, takeProductSettingsLaunch, ProductHost } from "../features/product/host";
 import { productVersionCode, productVersionLabel } from "../features/product/identity";
@@ -39,6 +40,9 @@ import { MessageMediaProvider } from "../features/chat/MessageImage";
 import { ComputerComposer } from "../features/chat/ComputerComposer";
 import { uploadAttachments } from "../features/chat/uploadAttachments";
 import { writeClipboard } from "../shared/clipboard";
+import { registerVoiceCodexDrafts } from "../features/voice/draftRecovery";
+import type { VoiceRecoveryPort } from "../features/voice/useVoiceRecovery";
+import { useVoiceRecovery } from "../features/voice/useVoiceRecovery";
 import { VoiceInput } from "../features/voice/VoiceInput";
 import { VoiceSettings } from "../features/voice/VoiceSettings";
 
@@ -54,6 +58,7 @@ export function App() {
     return profiles.find((profile) => profile.id === defaultProfileId) ?? profiles[0];
   });
   const scope = `${connection.id}:${connection.cacheNamespace ?? connection.updatedAt}:${normalizeEndpoint(connection.endpoint)}`;
+  const recoveredVoice = useVoiceRecovery(scope, normalizeEndpoint(connection.endpoint), connection.token);
   const [agentMode, setAgentMode] = useState(() => { try { return isKelivoHost && localStorage.getItem("productRemoteMode") === "agent"; } catch { return false; } });
   const [handoff, setHandoff] = useState<ProductHandoff | null>(null);
   const receiveHandoff = useCallback((value: ProductHandoff | null) => {
@@ -69,11 +74,17 @@ export function App() {
     try { localStorage.setItem("productRemoteMode", "codex"); } catch { /* The current settings page is still usable. */ }
   }, []);
   return <ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff}>{agentMode
-    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => selectAgentMode(false)} /></React.Suspense>
-    : <Workspace key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}</ProductRemoteShell>;
+    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace voiceRecovery={recoveredVoice.recovery} key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => selectAgentMode(false)} /></React.Suspense>
+    : <Workspace voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}
+    {recoveredVoice.notice && createPortal(<div className="voice-scrim"><section className="voice-sheet" role="dialog" aria-modal="true" aria-label="语音结果已取回">
+        <header><strong>语音结果已取回</strong></header>
+        <p>{recoveredVoice.notice.message}</p>
+        {recoveredVoice.notice.text && <textarea aria-label="取回的语音结果" readOnly value={recoveredVoice.notice.text} rows={4} />}
+        <button type="button" className="action-button" onClick={recoveredVoice.dismiss}>关闭提示</button>
+      </section></div>, document.body)}</ProductRemoteShell>;
 }
 
-function Workspace({ connection, scope, onApply, onOpenAgents, handoff, onHandoff }: { connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
+function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, handoff, onHandoff }: { voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
   const scopeAbortRef = useRef(new AbortController());
   const diagnosticJournalRef = useRef(createConnectionJournal());
   const diagnosticEpochRef = useRef(0);
@@ -1349,6 +1360,18 @@ function Workspace({ connection, scope, onApply, onOpenAgents, handoff, onHandof
   const cacheTimerRef = useRef<number | null>(null);
   const uploadBusyRef = useRef(uploading); uploadBusyRef.current = uploading;
   cacheStateRef.current = threadState;
+  useEffect(() => registerVoiceCodexDrafts(scope, {
+    read: thread => getRuntime(cacheStateRef.current, thread).draft,
+    write: (thread, expected, next) => {
+      const current = cacheStateRef.current, runtime = getRuntime(current, thread);
+      if (runtime.draft !== expected) return false;
+      const updated = { ...current, [thread]: { ...runtime, draft: next } };
+      if (saveThreadRuntimeCache(updated, scope).status === "input-failed") return false;
+      cacheStateRef.current = updated;
+      setThreadState(value => getRuntime(value, thread).draft === expected ? { ...value, [thread]: { ...getRuntime(value, thread), draft: next } } : value);
+      return true;
+    },
+  }), [scope]);
   function persistWorkspaceCache() {
     const result = saveThreadRuntimeCache(cacheStateRef.current, scope);
     setCacheSaveResult(current => current.status === result.status ? current : result);
@@ -1920,7 +1943,7 @@ function Workspace({ connection, scope, onApply, onOpenAgents, handoff, onHandof
               deliveries={nativeDesktop ? { steer: canSubmitMessage, queue: canSend } : undefined}
               status={!activeRuntime.desktopSubmission && activeRuntime.desktopSendFeedback ? activeRuntime.desktopSendFeedback : isLiveTurnActive ? turnActivity.label : `${isDesktopWatch ? "电脑" : "Relay"} · ${isDesktopHistoryOnly ? "历史会话" : "当前会话"}`}
               statusTitle={activeRuntime.desktopSendFeedback || (isLiveTurnActive ? turnActivity.label : controlText)} placeholder="向 Codex 发送消息"
-              voice={<VoiceInput key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
+              voice={<VoiceInput scope={scope} thread={`codex:${activeThreadKey || newThreadId}`} recovery={voiceRecovery} key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
                 onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }} />} />
           </footer>
         </section>

@@ -1,6 +1,8 @@
 import { loadReadingPositions, saveReadingPositions } from "../chat/readingPositions";
 import { productBeforeNavigate, isKelivoHost } from "../product/host";
 import { useEffect, useRef, useState } from "react";
+import { registerVoiceAgentDrafts } from "../voice/draftRecovery";
+import type { VoiceRecoveryPort } from "../voice/useVoiceRecovery";
 import { VoiceInput } from "../voice/VoiceInput";
 import { ChevronLeft, Loader2, RefreshCcw } from "lucide-react";
 import type { CodexMessage, PendingAttachment } from "../../app/types";
@@ -30,7 +32,7 @@ const friendlyError = (error: unknown) => {
     : status === 409 ? "会话状态已变化，请等待重新同步后再操作。" : "无法连接 Agent，请确认电脑上的网关与 Agent 服务正在运行。";
 };
 
-export default function AgentWorkspace({ endpoint, token, scope, onBack }: { endpoint: string; token: string; scope: string; onBack: () => void }) {
+export default function AgentWorkspace({ endpoint, token, scope, onBack, voiceRecovery }: { endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
   const restoreView = useRef(isKelivoHost ? loadAgentView(scope) : null);
   const [agents, setAgents] = useState<Agent[]>([]), [agent, setAgent] = useState<Agent | null>(null);
   const [sessions, setSessions] = useState<AgentSession[]>([]), [selected, setSelected] = useState<AgentSession | null>(null);
@@ -39,6 +41,10 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
   const [error, setError] = useState(""), [loading, setLoading] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>(() => loadAgentDrafts(scope));
   const draftsRef = useRef(drafts); draftsRef.current = drafts;
+  useEffect(() => registerVoiceAgentDrafts(scope, {
+    read: () => draftsRef.current,
+    write: value => { if (!saveAgentDrafts(scope, value)) return false; draftsRef.current = value; setDrafts(value); return true; },
+  }), [scope]);
   const controller = useRef<AbortController | null>(null), requestId = useRef(0);
   useEffect(() => {
     const flush = () => saveAgentDrafts(scope, draftsRef.current);
@@ -109,7 +115,7 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
       {!selected && <button className="icon-button" aria-label="刷新 Agent 列表" disabled={loading} onClick={() => void (agent ? loadSessions(agent) : loadAgents())}><RefreshCcw size={18} className={loading ? "spin" : ""} /></button>}
     </header>
     {error && <p className="connection-notice" role="status">{error}</p>}
-    {selected && agent ? <AgentChat key={`${agent.id}:${selected.id}`} endpoint={endpoint} token={token} agent={agent} session={selected}
+    {selected && agent ? <AgentChat voiceRecovery={voiceRecovery} key={`${agent.id}:${selected.id}`} endpoint={endpoint} token={token} agent={agent} session={selected}
       scopeKey={scope} draft={drafts[`${agent.id}:${selected.id}`] ?? ""} onDraft={value => setDrafts(current => {
         const key = `${agent.id}:${selected.id}`, next = { ...current };
         delete next[key];
@@ -135,7 +141,8 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack }: { end
   </main>;
 }
 
-function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey }: {
+function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, voiceRecovery }: {
+  voiceRecovery: VoiceRecoveryPort;
   scopeKey: string; endpoint: string; token: string; agent: Agent; session: AgentSession; draft: string; onDraft: (value: string) => void;
 }) {
   const [snapshot, setSnapshot] = useState<AgentSessionSnapshot | null>(null), snapshotRef = useRef(snapshot); snapshotRef.current = snapshot;
@@ -314,7 +321,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey }
       {attachments.length > 0 && <AttachmentTray attachments={attachments} onRemove={id => onDraft(composeAgentDraft(input.text, attachments.filter(item => item.id !== id)))} />}
       <input ref={uploadInput} type="file" multiple className="hidden-file-input" onChange={event => void uploadFiles(event.target.files)} />
       <ComputerComposer draft={input.text} onDraft={editText} onSend={send} onStop={() => void operate("interrupt", "/interrupt", {})} onUpload={() => uploadInput.current?.click()}
-        voice={<VoiceInput endpoint={endpoint} token={token} draft={input.text} onDraft={editText} />} label="发送给当前 Agent 会话"
+        voice={<VoiceInput scope={scopeKey} thread={draftSession} recovery={voiceRecovery} endpoint={endpoint} token={token} draft={input.text} onDraft={editText} />} label="发送给当前 Agent 会话"
         placeholder={online ? `向 ${agent.label} 发送消息` : "草稿已保留，等待恢复连接…"} status={snapshot?.status === "running" ? progress : `${agent.label} · 当前会话`}
         uploading={uploading} uploadDisabled={!token} busy={busy} running={snapshot?.status === "running"} hasContent={Boolean(input.text.trim() || attachments.length)}
         canSend={sendEnabled} canStop={Boolean(control?.canInterrupt)} deliveries={{ steer: sendEnabled && Boolean(control?.canSteer), queue: sendEnabled }}

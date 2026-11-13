@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { VoiceCredentials } from "./credentials.js";
 import { DEFAULT_DEEPSEEK_BASE_URL, DEFAULT_DEEPSEEK_MODEL, DEFAULT_QWEN_MODEL, defaultQwenBaseUrl } from "./credentials.js";
@@ -34,20 +35,31 @@ const instruction = `你是语音任务提示词编辑器。只整理用户提�
 // Inline vocabulary is supported by the native 3.1 API, not the Qwen3 chat API.
 const asrVocabulary = { "手机会话": 1, "聊天会话": 1, Codex: 1, DeepSeek: 1 };
 
+export const VOICE_RESULT_TTL = 15 * 60_000;
+const RESULT_RESERVATION = 64 * 1024;
+const METADATA_BYTES = 512;
+type Stage = "asr" | "refine";
+export type VoiceResult = { status: "not_found" } | { status: "processing"; requestId: string } | {
+  status: "completed"; requestId: string; outcome: "succeeded" | "failed" | "cancelled";
+  text?: string; errorCode?: string; expiresAt: number;
+};
+type Entry = { owner: string; id: string; stage?: Stage; fingerprint?: string; controller: AbortController;
+  bytes: number; expiresAt: number; result: VoiceResult; promise?: Promise<{ text: string }>; error?: VoiceError };
+
 export class VoiceService {
-  private readonly active = new Map<string, { id: string; controller: AbortController }>();
-  private readonly seen = new Map<string, number>();
+  private readonly active = new Map<string, Entry>();
+  private readonly entries = new Map<string, Entry>();
   private closed = false;
   constructor(private readonly fetcher: typeof fetch = fetch) {}
 
   async transcribe(owner: string, input: z.infer<typeof transcribeSchema>, config: VoiceCredentials, signal: AbortSignal) {
-    const bytes = Buffer.from(input.dataBase64, "base64");
-    if (bytes.length > MAX_AUDIO_BYTES || bytes.toString("base64") !== input.dataBase64) throw new VoiceError("voice_audio_invalid");
-    const format = audioFormat(bytes);
-    if (!config.qwenKey) throw new VoiceError("voice_qwen_key_required", 409);
-    const model = config.qwenModel ?? DEFAULT_QWEN_MODEL;
-    if (model === "qwen3-asr-flash" && format === "m4a") throw new VoiceError("voice_audio_upgrade_required", 409);
-    return this.run(owner, input.requestId, signal, 55_000, "asr", async abort => {
+    return this.run(owner, input.requestId, signal, 55_000, "asr", this.fingerprint("asr", input), async abort => {
+      const bytes = Buffer.from(input.dataBase64, "base64");
+      if (bytes.length > MAX_AUDIO_BYTES || bytes.toString("base64") !== input.dataBase64) throw new VoiceError("voice_audio_invalid");
+      const format = audioFormat(bytes);
+      if (!config.qwenKey) throw new VoiceError("voice_qwen_key_required", 409);
+      const model = config.qwenModel ?? DEFAULT_QWEN_MODEL;
+      if (model === "qwen3-asr-flash" && format === "m4a") throw new VoiceError("voice_audio_upgrade_required", 409);
       const base = config.qwenBaseUrl ?? defaultQwenBaseUrl(config.region);
       const audio = { type: "input_audio", input_audio: { data: `data:${format === "aac" ? "audio/aac" : "audio/mp4"};base64,${input.dataBase64}` } };
       const messages = [{ role: "user", content: [audio] }];
@@ -74,8 +86,8 @@ export class VoiceService {
   }
 
   async refine(owner: string, input: z.infer<typeof refineSchema>, config: VoiceCredentials, signal: AbortSignal) {
-    if (!config.deepseekKey) throw new VoiceError("voice_deepseek_key_required", 409);
-    return this.run(owner, input.requestId, signal, 40_000, "refine", async abort => {
+    return this.run(owner, input.requestId, signal, 40_000, "refine", this.fingerprint("refine", input), async abort => {
+      if (!config.deepseekKey) throw new VoiceError("voice_deepseek_key_required", 409);
       const base = config.deepseekBaseUrl ?? DEFAULT_DEEPSEEK_BASE_URL;
       const official = base === DEFAULT_DEEPSEEK_BASE_URL || base === `${DEFAULT_DEEPSEEK_BASE_URL}/v1`;
       const data = await this.json(`${base}/chat/completions`, config.deepseekKey!, {
@@ -88,40 +100,104 @@ export class VoiceService {
     });
   }
 
-  cancel(owner: string, id: string) {
-    // Remember a cancel even if it overtakes a slow native POST on the tunnel.
-    this.prune();
-    if (!this.seen.has(`${owner}:${id}`) && this.seen.size < 1024) this.seen.set(`${owner}:${id}`, Date.now());
-    const current = this.active.get(owner);
-    if (current?.id === id) current.controller.abort();
+  private fingerprint(stage: Stage, input: { dataBase64?: string; durationMs?: number; text?: string }) {
+    return createHash("sha256").update(JSON.stringify([stage, input.dataBase64, input.durationMs, input.text])).digest("hex");
   }
-  revoke(owner: string) { this.active.get(owner)?.controller.abort(); }
-  stop() { this.closed = true; for (const current of this.active.values()) current.controller.abort(); }
 
-  private prune() { for (const [id, at] of this.seen) if (Date.now() - at > 15 * 60_000) this.seen.delete(id); }
+  lookup(owner: string, id: string): VoiceResult {
+    this.prune();
+    return this.entries.get(`${owner}:${id}`)?.result ?? { status: "not_found" };
+  }
 
-  private async run<T>(owner: string, id: string, signal: AbortSignal, timeout: number, stage: "asr" | "refine", action: (signal: AbortSignal) => Promise<T>) {
+  replay(owner: string, id: string, stage: Stage, input: { dataBase64?: string; durationMs?: number; text?: string }): VoiceResult {
+    const result = this.lookup(owner, id);
+    const entry = this.entries.get(`${owner}:${id}`);
+    if (entry?.fingerprint && (entry.stage !== stage || entry.fingerprint !== this.fingerprint(stage, input))) throw new VoiceError("voice_request_conflict", 409);
+    if (entry?.error) throw entry.error;
+    return result;
+  }
+
+  cancel(owner: string, id: string) {
+    this.prune();
+    const key = `${owner}:${id}`;
+    let entry = this.entries.get(key);
+    if (entry?.result.status === "completed") return;
+    if (!entry) {
+      this.reserve(owner, METADATA_BYTES);
+      entry = { owner, id, controller: new AbortController(), bytes: METADATA_BYTES, expiresAt: Infinity, result: { status: "processing", requestId: id } };
+      this.entries.set(key, entry);
+    }
+    entry.controller.abort();
+    this.complete(entry, undefined, new VoiceError("voice_cancelled", 409));
+  }
+  revoke(owner: string) {
+    this.active.get(owner)?.controller.abort();
+    for (const [key, entry] of this.entries) if (entry.owner === owner) this.entries.delete(key);
+  }
+  stop() {
+    this.closed = true;
+    for (const entry of this.active.values()) entry.controller.abort();
+    this.entries.clear();
+  }
+
+  private prune() {
+    for (const [key, entry] of this.entries) if (entry.expiresAt <= Date.now()) this.entries.delete(key);
+  }
+  private reserve(owner: string, bytes: number) {
+    let total = 0, owned = 0, count = 0;
+    for (const entry of this.entries.values()) {
+      total += entry.bytes;
+      if (entry.owner === owner) { owned += entry.bytes; count++; }
+    }
+    if (this.entries.size >= 1024 || count >= 64 || total + bytes > 16 * 1024 * 1024 || owned + bytes > 1024 * 1024) throw new VoiceError("voice_busy", 429);
+  }
+  private complete(entry: Entry, text?: string, error?: VoiceError) {
+    if (this.entries.get(`${entry.owner}:${entry.id}`) !== entry || entry.result.status === "completed") return;
+    entry.expiresAt = Date.now() + VOICE_RESULT_TTL;
+    entry.error = error;
+    entry.bytes = METADATA_BYTES + Buffer.byteLength(text ?? "", "utf8");
+    entry.result = { status: "completed", requestId: entry.id, expiresAt: entry.expiresAt,
+      outcome: error ? error.code === "voice_cancelled" ? "cancelled" : "failed" : "succeeded",
+      ...(error ? { errorCode: error.code } : { text }) };
+  }
+
+  private async run(owner: string, id: string, signal: AbortSignal, timeout: number, stage: Stage, fingerprint: string, action: (signal: AbortSignal) => Promise<{ text: string }>) {
     signal.throwIfAborted(); this.prune();
     if (this.closed) throw new VoiceError("voice_unavailable", 503);
-    if (this.seen.has(`${owner}:${id}`)) throw new VoiceError("voice_request_used", 409);
-    if (this.active.has(owner) || this.active.size >= 4 || this.seen.size >= 1024) throw new VoiceError("voice_busy", 429);
-    const controller = new AbortController();
-    this.active.set(owner, { id, controller }); this.seen.set(`${owner}:${id}`, Date.now());
-    const cancel = () => controller.abort();
-    signal.addEventListener("abort", cancel, { once: true });
+    const key = `${owner}:${id}`, existing = this.entries.get(key);
+    if (existing) {
+      if (existing.fingerprint && (existing.stage !== stage || existing.fingerprint !== fingerprint)) throw new VoiceError("voice_request_conflict", 409);
+      if (existing.error) throw existing.error;
+      if (existing.result.status === "completed") return { text: existing.result.text! };
+      return existing.promise!;
+    }
+    if (this.active.has(owner) || this.active.size >= 4) throw new VoiceError("voice_busy", 429);
+    this.reserve(owner, RESULT_RESERVATION);
+    const entry: Entry = { owner, id, stage, fingerprint, controller: new AbortController(), bytes: RESULT_RESERVATION,
+      expiresAt: Infinity, result: { status: "processing", requestId: id } };
+    this.entries.set(key, entry); this.active.set(owner, entry);
+    // Reserve synchronously before any provider code or await; HTTP abort only detaches the caller.
+    entry.promise = this.execute(entry, timeout, stage, action);
+    return entry.promise;
+  }
+
+  private async execute(entry: Entry, timeout: number, stage: Stage, action: (signal: AbortSignal) => Promise<{ text: string }>) {
+    const { controller } = entry;
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeout);
     try {
       const result = await action(controller.signal);
       controller.signal.throwIfAborted();
+      this.complete(entry, result.text);
       return result;
-    } catch (error) {
-      if (controller.signal.aborted) throw new VoiceError(timedOut ? `voice_${stage}_timeout` : "voice_cancelled", timedOut ? 504 : 409);
-      if (error instanceof VoiceError) throw error;
-      throw new VoiceError(`voice_${stage}_unavailable`, 502);
+    } catch (caught) {
+      const error = controller.signal.aborted ? new VoiceError(timedOut ? `voice_${stage}_timeout` : "voice_cancelled", timedOut ? 504 : 409)
+        : caught instanceof VoiceError ? caught : new VoiceError(`voice_${stage}_unavailable`, 502);
+      this.complete(entry, undefined, error);
+      throw error;
     } finally {
-      clearTimeout(timer); signal.removeEventListener("abort", cancel);
-      this.active.delete(owner);
+      clearTimeout(timer);
+      if (this.active.get(entry.owner) === entry) this.active.delete(entry.owner);
     }
   }
 
