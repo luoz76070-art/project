@@ -26,6 +26,22 @@ const { parseVoiceResult } = await import(path.join(root, 'model.mjs'));
 const guardSource = await fs.readFile(new URL('../apps/mobile/src/features/voice/refineGuard.ts', import.meta.url), 'utf8');
 await fs.writeFile(path.join(root, 'refineGuard.mjs'), ts.transpileModule(guardSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText);
 const { findMissingVoiceDetails } = await import(path.join(root, 'refineGuard.mjs'));
+for (const name of ['asrContext', 'preferences']) {
+  const text = await fs.readFile(new URL(`../apps/mobile/src/features/voice/${name}.ts`, import.meta.url), 'utf8');
+  await fs.writeFile(path.join(root, `${name}.mjs`), ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText);
+}
+const { buildAsrHints } = await import(path.join(root, 'asrContext.mjs'));
+const { voiceContextEnabled, setVoiceContextEnabled } = await import(path.join(root, 'preferences.mjs'));
+const apiSource = await fs.readFile(new URL('../apps/mobile/src/features/voice/api.ts', import.meta.url), 'utf8');
+await fs.writeFile(path.join(root, 'api.mjs'), ts.transpileModule(apiSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText.replace('"../connection/http"', '"./http.mjs"').replace('"./model"', '"./model.mjs"'));
+const { voiceApi } = await import(path.join(root, 'api.mjs'));
+
+const settingsSource = await fs.readFile(new URL('../apps/mobile/src/features/voice/VoiceSettings.tsx', import.meta.url), 'utf8');
+const settingsAst = ts.createSourceFile('VoiceSettings.tsx', settingsSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const settingsBody = settingsAst.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(settingsAst)).join('\n').replace('export function VoiceSettings', 'function VoiceSettings');
+const settingsJs = ts.transpileModule(settingsBody, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, jsxFactory: 'h', jsxFragmentFactory: 'Fragment' } }).outputText;
+const settingsFactory = new Function('useState', 'useRef', 'useEffect', 'voiceContextEnabled', 'setVoiceContextEnabled', 'h', 'Fragment', settingsJs + ';return VoiceSettings');
+
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function storage() { const data = new Map(); return { data, getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: k => data.delete(k) }; }
 async function pending(overrides = {}) { return { requestId: crypto.randomUUID(), stage: 'asr', scope: 'connection-one', thread: 'codex:original-thread', createdAt: Date.now(), draftHash: await voiceDraftHash('原草稿'), ...overrides }; }
@@ -40,6 +56,106 @@ function coordinator(t, store, overrides = {}) {
 const adapterBundle = path.join(root, 'adapters.mjs');
 await build({ stdin: { contents: `export * from './apps/mobile/src/features/voice/draftRecovery'; export { saveAgentDrafts, loadAgentDrafts } from './apps/mobile/src/features/agents/runtime'; export { saveThreadRuntimeCache, loadThreadRuntimeCache, defaultRuntime } from './apps/mobile/src/features/chat/runtime';`, resolveDir: process.cwd() }, outfile: adapterBundle, bundle: true, platform: 'node', format: 'esm' });
 const adapters = await import(adapterBundle);
+
+test('ASR hints prioritize project/title, retain only recent basenames and deduplicate', () => {
+  const messages = [{ text: 'old.ts' }, ...Array.from({ length: 20 }, (_, i) => ({ text: `修改 /private/project/file${i}.tsx 和 C:\\secret\\common.ts:12，不要发送这段正文 https://secret.example/private/leak.ts` }))];
+  const hints = buildAsrHints({ cwd: '/private/project/', title: '修改 /private/docs/readme.md', messages });
+  assert.deepEqual(hints.slice(0, 4), ['project', '修改 readme.md', 'file19.tsx', 'common.ts']);
+  assert.equal(hints.length, 12);
+  assert.equal(hints.filter(item => item === 'common.ts').length, 1);
+  assert.doesNotMatch(JSON.stringify(hints), /private|secret|old.ts|leak.ts|正文|[\\/]/);
+  assert.deepEqual(buildAsrHints({ cwd: 'C:\\work\\APP', title: 'app', messages: [{ text: '`readme.md` README.md' }] }), ['APP', 'readme.md']);
+  assert.deepEqual(buildAsrHints({}), []);
+});
+
+test('ASR hints enforce 500 UTF-16 units including separators without splitting Unicode', () => {
+  const hints = buildAsrHints({ cwd: '/work/project', title: '中'.repeat(600), messages: [{ text: 'extra.ts' }] });
+  assert.equal(hints.join('\n').length, 500);
+  assert.deepEqual(hints, ['project', '中'.repeat(492)]);
+  const unicode = buildAsrHints({ title: 'a'.repeat(499) + '😀' });
+  assert.equal(unicode[0], 'a'.repeat(499));
+  assert.deepEqual(buildAsrHints({ title: '看 https://host.invalid/private 和 /secret/a.ts' }), ['看 和 a.ts']);
+});
+
+test('ASR privacy preference defaults on, persists off and fails closed without storage', async () => {
+  const store = storage(), previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  try {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: store });
+    const fresh = await import(path.join(root, 'preferences.mjs') + '?preference');
+    assert.equal(fresh.voiceContextEnabled(), true);
+    fresh.setVoiceContextEnabled(false);
+    assert.equal(store.getItem('mobileCodexVoiceContextV1'), 'false');
+    const restarted = await import(path.join(root, 'preferences.mjs') + '?restart');
+    assert.equal(restarted.voiceContextEnabled(), false);
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('unavailable'); } });
+    const unavailable = await import(path.join(root, 'preferences.mjs') + '?unavailable');
+    assert.equal(unavailable.voiceContextEnabled(), false);
+    fresh.setVoiceContextEnabled(false);
+    assert.equal(fresh.voiceContextEnabled(), false);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'localStorage', previous); else delete globalThis.localStorage;
+  }
+});
+
+test('ASR HTTP body omits absent/disabled hints and sends only the supplied names', async () => {
+  const previous = globalThis.fetch, bodies = [];
+  globalThis.fetch = async (_url, options) => { bodies.push(JSON.parse(options.body)); return Response.json({ text: '转写' }); };
+  try {
+    const api = voiceApi('https://synthetic.invalid', 'synthetic'), signal = new AbortController().signal;
+    await api.transcribe(crypto.randomUUID(), 'audio', 1000, signal);
+    await api.transcribe(crypto.randomUUID(), 'audio', 1000, signal, []);
+    await api.transcribe(crypto.randomUUID(), 'audio', 1000, signal, ['项目', 'a.ts']);
+    assert.equal('asrHints' in bodies[0], false); assert.equal('asrHints' in bodies[1], false);
+    assert.deepEqual(bodies[2].asrHints, ['项目', 'a.ts']);
+  } finally { globalThis.fetch = previous; }
+});
+
+test('voice settings switch toggles the production privacy preference and discloses provider sharing', () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage'), store = storage();
+  const states = []; let cursor = 0;
+  const useState = initial => { const index = cursor++; if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial; return [states[index], value => { states[index] = value; }]; };
+  const h = (type, props, ...children) => ({ type, props, children });
+  const flatten = tree => !tree || typeof tree !== 'object' ? [] : [tree, ...(tree.children ?? []).flatMap(flatten)];
+  try {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: store });
+    setVoiceContextEnabled(true);
+    const Settings = settingsFactory(useState, () => ({ current: null }), () => {}, voiceContextEnabled, setVoiceContextEnabled, h, 'fragment');
+    const render = () => { cursor = 0; return Settings({ endpoint: 'https://synthetic.invalid', token: 'synthetic' }); };
+    const first = render(), toggle = flatten(first).find(node => node.props?.role === 'switch');
+    assert.equal(toggle.props['aria-checked'], true);
+    assert.match(JSON.stringify(first), /会发给语音识别服务商/);
+    toggle.props.onClick();
+    assert.equal(voiceContextEnabled(), false); assert.equal(store.getItem('mobileCodexVoiceContextV1'), 'false');
+    const off = flatten(render()).find(node => node.props?.role === 'switch');
+    assert.equal(off.props['aria-checked'], false);
+    off.props.onClick(); assert.equal(voiceContextEnabled(), true);
+  } finally {
+    setVoiceContextEnabled(false);
+    if (previous) Object.defineProperty(globalThis, 'localStorage', previous); else delete globalThis.localStorage;
+  }
+});
+
+test('VoiceInput snapshots names for retries, honors opt-out before POST and keeps recovery metadata clean', async t => {
+  const store = storage(), manager = coordinator(t, store), calls = [];
+  manager.setVisible(true);
+  setVoiceContextEnabled(true); t.after(() => setVoiceContextEnabled(false));
+  const driver = inputDriver(t, manager, { transcribe: async (id, audio, duration, signal, hints) => {
+    calls.push({ id, hints }); throw new Error('HTTP 502');
+  } });
+  driver.render({ context: { cwd: '/private/project', title: '会话', messages: [{ text: '修改 /private/a.ts' }] } });
+  await record(driver); await until(() => driver.button('重新转写'));
+  assert.deepEqual(calls[0].hints, ['project', '会话', 'a.ts']);
+  driver.render({ context: { cwd: '/different', title: '新标题', messages: [] } });
+  driver.click('重新转写'); await until(() => calls.length === 2 && driver.button('重新转写'));
+  assert.deepEqual(calls[1].hints, calls[0].hints); assert.notEqual(calls[1].id, calls[0].id);
+  setVoiceContextEnabled(false);
+  driver.click('重新转写'); await until(() => calls.length === 3 && driver.button('重新转写'));
+  assert.equal(calls[2].hints, undefined);
+  driver.click('重新录音'); await until(() => driver.calls.start === 2);
+  driver.recording(); await until(() => calls.length === 4 && driver.button('重新转写'));
+  assert.equal(calls[3].hints, undefined);
+  assert.doesNotMatch(JSON.stringify([...store.data]), /private|project|会话|a\.ts/);
+});
 
 test('voice adoption appends to the captured draft and rejects changed or excessive drafts', () => {
   assert.equal(mergeVoiceDraft('已有约束：不要发布', '已有约束：不要发布', '只分析 APK26'), '已有约束：不要发布\n\n只分析 APK26');
@@ -215,7 +331,7 @@ async function until(check) {
   while (!check()) { if (Date.now() >= deadline) assert.fail('voice state did not settle'); await tick(); }
 }
 function inputDriver(t, recovery, api = {}) {
-  const driver = voiceInputDriver({ recovery, mergeVoiceDraft, voiceError, voiceDraftHash, findMissingVoiceDetails, api: {
+  const driver = voiceInputDriver({ recovery, mergeVoiceDraft, voiceError, voiceDraftHash, findMissingVoiceDetails, buildAsrHints, voiceContextEnabled, api: {
     config: async () => ({ qwenConfigured: true, deepseekConfigured: true }),
     cancel: async () => {}, refine: async () => '整理结果', ...api,
   } });

@@ -58,6 +58,6 @@ export function registerVoiceRoutes(app: FastifyInstance, options: { owners: Wea
     if (!devices.has(owner)) throw new VoiceError("voice_cancelled", 409);
     return result;
   });
-  app.post("/api/voice/transcribe", { bodyLimit: 4 * Math.ceil(MAX_AUDIO_BYTES / 3) + 1024 }, operation("transcribe"));
+  app.post("/api/voice/transcribe", { bodyLimit: 4 * Math.ceil(MAX_AUDIO_BYTES / 3) + 4096 }, operation("transcribe"));
   app.post("/api/voice/refine", { bodyLimit: 128 * 1024 }, operation("refine"));
 }

@@ -8,7 +8,7 @@
 
 - GET `/api/voice/config`：仅地域/workspace、qwenConfigured/deepseekConfigured、qwenBaseUrl/deepseekBaseUrl、asrModel/promptModel；无Key。
 - POST `/api/voice/config`：strict局部更新，新增可选qwenBaseUrl/qwenModel；Key省略保留、null删除，owner仅来自鉴权。
-- POST `/api/voice/transcribe`：UUID requestId、规范Base64、durationMs300–121000，最多2MiB；按实际字节识别ADTS AAC或旧MP4/M4A ftyp。
+- POST `/api/voice/transcribe`：UUID requestId、规范Base64、durationMs300–121000，最多2MiB；按实际字节识别ADTS AAC或旧MP4/M4A ftyp。可选`asrHints: string[]`，1–12项非空字符串，含换行分隔符总长≤500 UTF-16单位，每项≤500；禁止路径分隔符及控制字符，超限400。HTTP正文为Base64上限+4096字节，容纳中文参考。
 - POST `/api/voice/refine`：UUID requestId、非空text最多20000字符。
 - POST `/api/voice/cancel`：UUID requestId，只取消同owner，提前到达记取消终态；已完成结果不被迟到取消改写。
 - GET `/api/voice/results/:requestId`：UUID 路径参数，owner仅来自鉴权，`Cache-Control: no-store`。200返回`{status:"not_found"}`、`{status:"processing",requestId}`或`{status:"completed",requestId,outcome,expiresAt,text?|errorCode?}`；outcome为succeeded/failed/cancelled，失败仅固定错误码。匿名/撤销401，非法UUID400。
@@ -27,7 +27,13 @@
 
 新APK29原生MediaRecorder.OutputFormat.AAC_ADTS/.aac、单声道16kHz48kbps，DataURI audio/aac。ADTS逐帧检查sync/layer/sample-index/帧长与边界；旧M4A对31使用audio/mp4，Qwen3在请求前拒绝并提示升级，不谎称旧容器是AAC、不自动转码。录音120秒/2MiB，取消/后台/audiofocus丢失释放并删临时文件。
 
-31原生parameters.vocabulary仅携带固定低权重1的手机会话/聊天会话/Codex/DeepSeek，不读会话历史、项目文件或草稿生成上下文。官方即时热词键为文本、值为整数权重；该字段不得传到Qwen3。真实对照发现单词“会话”或“旧会话”提示会误改绘画，禁止将其升级成全局词替换；当前混用同音词仍有误识别，必须保留可编辑原文/预览，不声称完全纠错。隔离测试验证协议及原文保持，真实准确性另记。
+V4：31原生parameters.vocabulary将手机参考和固定手机会话/聊天会话/Codex/DeepSeek去重合并，均低权重1；含非ASCII的单条截到15个Unicode字符，纯ASCII截到7个空格片段。新加坡子空间不支持热词；按有效目标域名判断，显式workspace或新加坡maas专属域名保守省略整份词表。Qwen3仅在有手机参考时将参考与固定词表去重，作为首条system.content换行文本提供识别背景，不发送vocabulary或传统角色指令。其他模型不附加参考参数。
+
+2026-11-14匿名在线核验：[热词及限制](https://help.aliyun.com/zh/model-studio/improve-asr-accuracy)、[31原生HTTP](https://help.aliyun.com/zh/model-studio/qwen-audio-asr-http-api)、[Qwen3兼容API](https://help.aliyun.com/zh/model-studio/qwen-asr-api-reference)。31也支持前置user/input_text上下文（每轮400字符、最近5轮），本实现选用与现有行为一致的即时热词；旧fun-asr-flash页面现在描述Fun-ASR，不再作为31协议依据。
+
+手机默认开启“识别时参考当前会话（项目名、标题、文件名）”，设置明确告知会发给语音识别服务商。只持久化本机布尔偏好；localStorage不可读取时保守关闭，写失败仍保持当前进程选择。Codex/Agent均从当前已加载会话提取cwd最后一级、去路径/URL的标题、最近20条消息中最多10个文件basename（单条最多扫描20000字符），按优先级忽略大小写去重，含分隔符总长≤500，截断不拆代理对；不上传完整路径、消息正文或草稿，不读取项目文件。录音开始捕获参考，重转沿用；POST前重新检查偏好，关闭时完全省略asrHints，空参考也省略。参考仅在内存，不写恢复元数据。asrHints纳入V1输入摘要，同ID改参考409，GET恢复不会重传参考。
+
+真实对照发现单词“会话”或“旧会话”提示会误改绘画，禁止将其升级成全局词替换；当前混用同音词仍有误识别，必须保留可编辑原文/预览，不声称完全纠错。隔离测试验证协议及原文保持，真实准确性另记。
 
 DeepSeek默认官方`/chat/completions`、deepseek-v4-flash、thinking.disabled；支持deepseekBaseUrl/deepseekModel，第三方只发通用参数。所有HTTPS URL拒userinfo/query/hash/空白/反斜杠；禁止重定向。响应最多256KiB，文字最多20000字符，整理finish_reason必须stop。
 
@@ -56,6 +62,8 @@ DeepSeek默认官方`/chat/completions`、deepseek-v4-flash、thinking.disabled�
 `corepack pnpm test:voice`注入fetch和临时私有目录，覆盖官方31 output.text和Qwen3 choices、地域/maas、AAC/旧M4A、双阶段错误、URL绑定/旧配置、鉴权/撤销、取消/并发/墓碑与体积。新增丢失响应取同文且每阶段服务商仅调用一次、并发合并/内容冲突、TTL/容量、撤销及迟到结果、后台/进程重启GET-only恢复、草稿隔离与冲突测试。手机decoder拒缺少qwenBaseUrl的旧网关；实际浏览器检查保存/清Key/重开/原文保留。禁止读取真实Key/会话或调用付费模型；运行健康与真机验收分别记录。
 
 V2回归直接触发生产VoiceInput按钮与effect（合成hooks，不替代React DOM/真机），配合生产恢复协调器验证502后同一音频新ID重转、双击锁、重转响应丢失GET恢复、失败/取消分类、内存释放、草稿冲突及重新整理。Relay路由测试验证旧ID重放失败不再调用供应商、新ID成功且供应商总调用两次。
+
+V4同一手机测试入口覆盖名称优先级/去路径/URL剔除/最近20条/10文件/500字符/Unicode、偏好默认值及存储失败、生产设置按钮、HTTP省略字段、生产VoiceInput重转快照及关闭保护。Relay覆盖两模型请求体、未知模型/新加坡子空间省略、热词单条限制、schema边界、带参考幂等冲突、GET恢复不重传及最大音频+中文参考的正文预算。均为合成数据及假fetch；不读取真实配置或调用供应商。
 
 V3在同一手机测试入口导入生产纯函数，覆盖各类保留/丢失、3个↔三个、日期/时间/百分比、格式/大小写、常见中文非数量词和非否定词、同义/被动否定、否定减少、两万字输入；组件驱动验证5条上限/总数、推荐原文与仍可采用整理稿、预览编辑及会话清理。浏览器/Android视觉验收单列，不能用合成hooks替代。
 

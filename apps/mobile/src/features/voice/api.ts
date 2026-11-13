@@ -7,7 +7,7 @@ export function voiceApi(endpoint: string, token: string) {
   return {
     config: async (signal: AbortSignal) => parseVoiceConfig(await apiGet(url("config"), token, signal)),
     configure: async (patch: { region?: "cn" | "sg"; workspace?: string; qwenBaseUrl?: string; qwenModel?: string; qwenKey?: string | null; deepseekKey?: string | null; deepseekBaseUrl?: string; deepseekModel?: string }, signal: AbortSignal) => parseVoiceConfig(await apiPost(url("config"), token, patch, signal)),
-    transcribe: async (requestId: string, dataBase64: string, durationMs: number, signal: AbortSignal) => submitted(await apiPost(url("transcribe"), token, { requestId, dataBase64, durationMs }, signal), requestId),
+    transcribe: async (requestId: string, dataBase64: string, durationMs: number, signal: AbortSignal, asrHints?: string[]) => submitted(await apiPost(url("transcribe"), token, { requestId, dataBase64, durationMs, ...(asrHints?.length ? { asrHints } : {}) }, signal), requestId),
     refine: async (requestId: string, text: string, signal: AbortSignal) => submitted(await apiPost(url("refine"), token, { requestId, text }, signal), requestId),
     result: async (requestId: string, signal: AbortSignal) => parseVoiceResult(await apiGet(url(`results/${encodeURIComponent(requestId)}`), token, signal), requestId),
     cancel: async (requestId: string) => { await apiPost(url("cancel"), token, { requestId }); },

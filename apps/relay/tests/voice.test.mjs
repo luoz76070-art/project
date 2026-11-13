@@ -15,6 +15,59 @@ const input = () => ({ requestId: randomUUID(), dataBase64: audio, durationMs: 1
 const refine = () => ({ requestId: randomUUID(), text: '只分析 APK26，不要执行或发布，保留 DeepSeek。' });
 const signal = () => new AbortController().signal;
 const response = text => Response.json({ choices: [{ finish_reason: 'stop', message: { content: text } }] });
+
+test('ASR hints use only each model official format and merge fixed vocabulary', async () => {
+  for (const model of ['qwen-audio-3.1-asr-flash', 'qwen3-asr-flash', 'unknown-asr']) {
+    let body;
+    const service = new VoiceService(async (_url, options) => { body = JSON.parse(options.body); return model === 'qwen3-asr-flash' ? response('结果') : Response.json({ output: { text: '结果' } }); });
+    try {
+      await service.transcribe('a', { ...input(), dataBase64: aac, asrHints: ['项目', '修复语音', 'service.ts', 'Codex'] }, { ...config, qwenModel: model }, signal());
+      if (model === 'qwen-audio-3.1-asr-flash') {
+        assert.deepEqual(body.parameters.vocabulary, { '手机会话': 1, '聊天会话': 1, Codex: 1, DeepSeek: 1, '项目': 1, '修复语音': 1, 'service.ts': 1 });
+        assert.deepEqual(body.input.messages.map(message => message.role), ['user']);
+      } else if (model === 'qwen3-asr-flash') {
+        assert.deepEqual(body.messages[0], { role: 'system', content: '手机会话\n聊天会话\nCodex\nDeepSeek\n项目\n修复语音\nservice.ts' });
+        assert.equal(body.messages[1].content[0].type, 'input_audio');
+        assert.equal('parameters' in body, false); assert.equal('vocabulary' in body, false);
+      } else {
+        assert.equal('vocabulary' in body.parameters, false);
+        assert.doesNotMatch(JSON.stringify(body), /项目|service.ts|system/);
+      }
+    } finally { service.stop(); }
+  }
+});
+
+test('native hotwords obey per-term Unicode/ASCII limits and unsupported Singapore workspace omits them', async () => {
+  const bodies = [], service = new VoiceService(async (_url, options) => { bodies.push(JSON.parse(options.body)); return Response.json({ output: { text: '结果' } }); });
+  try {
+    await service.transcribe('a', { ...input(), asrHints: ['中'.repeat(30), 'one two three four five six seven eight', '😀'.repeat(16)] }, config, signal());
+    assert.deepEqual(Object.keys(bodies[0].parameters.vocabulary).slice(4), ['中'.repeat(15), 'one two three four five six seven', '😀'.repeat(15)]);
+    for (const extra of [{ region: 'sg', workspace: 'child' }, { region: 'cn', qwenBaseUrl: 'https://synthetic.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1' }]) {
+      await service.transcribe('a', { ...input(), asrHints: ['项目'] }, { ...config, ...extra }, signal());
+      assert.equal('vocabulary' in bodies.at(-1).parameters, false);
+    }
+  } finally { service.stop(); }
+});
+
+test('ASR schema bounds optional references and hints participate in V1 request identity', async () => {
+  const valid = { ...input(), asrHints: ['中'.repeat(500)] };
+  assert.equal(transcribeSchema.safeParse(valid).success, true);
+  assert.equal(transcribeSchema.safeParse({ ...valid, asrHints: Array(12).fill('a') }).success, true);
+  for (const hints of [[], Array(13).fill('a'), ['中'.repeat(501)], ['a'.repeat(250), 'b'.repeat(250)], ['a/b.ts'], ['C:\\private'], ['x\ny'], [''], { text: 'wrong' }, [1]]) {
+    assert.equal(transcribeSchema.safeParse({ ...valid, asrHints: hints }).success, false, JSON.stringify(hints));
+  }
+  let calls = 0;
+  const service = new VoiceService(async () => { calls++; return Response.json({ output: { text: '相同结果' } }); });
+  try {
+    const request = { ...input(), asrHints: ['项目'] };
+    await service.transcribe('a', request, config, signal());
+    await service.transcribe('a', request, config, signal());
+    assert.throws(() => service.replay('a', request.requestId, 'asr', { ...request, asrHints: ['不同'] }), { code: 'voice_request_conflict' });
+    await assert.rejects(service.transcribe('a', { ...request, asrHints: undefined }, config, signal()), { code: 'voice_request_conflict' });
+    assert.equal(calls, 1);
+    assert.doesNotMatch(JSON.stringify(service.lookup('a', request.requestId)), /项目|asrHints/);
+  } finally { service.stop(); }
+});
 const tick = () => new Promise(resolve => setImmediate(resolve));
 async function temporary(t) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'voice-fixture-'));
@@ -507,4 +560,31 @@ test('ASR 502 is cached; explicit retry with the same recording and a new id cal
   assert.equal(recovered.outcome, 'succeeded'); assert.equal(recovered.text, '第二次转写成功');
   assert.notEqual(first.requestId, second.requestId);
   assert.deepEqual(supplierAudio, Array(2).fill(`data:audio/aac;base64,${aac}`));
+});
+
+test('ASR routes validate references before calling provider and recover hinted results without reupload', async t => {
+  const root = await temporary(t), bodies = [];
+  const voice = new VoiceService(async (_url, options) => { bodies.push(JSON.parse(options.body)); return response('同一段文本'); });
+  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty'), defaultCwd: root }, services: { voice, desktopControl: { stop: async () => {} }, liveTurns: { stop: async () => {} } } });
+  t.after(() => app.close());
+  const headers = { authorization: 'Bearer synthetic-admin' };
+  await app.inject({ method: 'POST', url: '/api/voice/config', headers, payload: { qwenKey: config.qwenKey, qwenModel: 'qwen3-asr-flash' } });
+  const request = { ...input(), dataBase64: aac, asrHints: ['项目', '标题', 'service.ts'] };
+  const submit = payload => app.inject({ method: 'POST', url: '/api/voice/transcribe', headers, payload });
+  for (const asrHints of [Array(13).fill('a'), ['x'.repeat(501)], ['/private/a.ts']]) {
+    assert.equal((await submit({ ...request, asrHints })).statusCode, 400);
+  }
+  assert.equal(bodies.length, 0);
+  assert.equal((await submit(request)).statusCode, 200);
+  assert.match(bodies[0].messages[0].content, /项目\n标题\nservice.ts/);
+  const result = await app.inject({ url: `/api/voice/results/${request.requestId}`, headers });
+  assert.equal(result.json().text, '同一段文本');
+  assert.doesNotMatch(result.body, /asrHints|项目|标题|service.ts/);
+  assert.equal((await submit(request)).statusCode, 200);
+  assert.equal((await submit({ ...request, asrHints: ['另一项目'] })).statusCode, 409);
+  assert.equal(bodies.length, 1);
+  // Max-size AAC + 500 Chinese characters must fit the HTTP body budget.
+  const frame = Buffer.from(aac, 'base64');
+  const maximumAudio = Buffer.concat(Array(Math.floor(MAX_AUDIO_BYTES / frame.length)).fill(frame));
+  assert.equal((await submit({ ...request, requestId: randomUUID(), dataBase64: maximumAudio.toString('base64'), asrHints: ['中'.repeat(500)] })).statusCode, 200);
 });
