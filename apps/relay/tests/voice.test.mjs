@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { VoiceService, transcribeSchema, refineSchema, MAX_AUDIO_BYTES } from '../dist/voice/service.js';
+import { VoiceService, transcribeSchema, refineSchema, MAX_AUDIO_BYTES, VOICE_RESULT_TTL } from '../dist/voice/service.js';
 import { VoiceCredentialStore, voiceConfigPatch } from '../dist/voice/credentials.js';
 import { createRelayServer } from '../dist/server/createRelayServer.js';
 
@@ -134,15 +134,15 @@ test('per-device and global concurrency, request replay and cancel-before-arriva
   await assert.rejects(service.refine('e', refine(), config, signal()), { code: 'voice_busy' });
   for (const release of releases) release();
   await Promise.all([first, ...others]);
-  await assert.rejects(service.refine('a', firstInput, config, signal()), { code: 'voice_request_used' });
+  assert.deepEqual(await service.refine('a', firstInput, config, signal()), { text: 'done' });
   const cancelled = refine(); service.cancel('a', cancelled.requestId);
-  await assert.rejects(service.refine('a', cancelled, config, signal()), { code: 'voice_request_used' });
+  await assert.rejects(service.refine('a', cancelled, config, signal()), { code: 'voice_cancelled' });
   // A request identifier belongs to one owner, not the whole gateway.
   const cross = service.refine('z', cancelled, config, signal()); releases.at(-1)(); await cross;
 });
 
-test('disconnect signal, explicit cancel, revoke and shutdown abort the active supplier call', async () => {
-  for (const kind of ['signal', 'cancel', 'revoke', 'stop']) {
+test('explicit cancel, revoke and shutdown abort the active supplier call', async () => {
+  for (const kind of ['cancel', 'revoke', 'stop']) {
     let aborted = false;
     const service = new VoiceService(async (_url, options) => new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => { aborted = true; reject(new Error('upstream secret')); }, { once: true })));
     const controller = new AbortController(), request = refine();
@@ -170,25 +170,41 @@ test('deadline aborts the provider and reports an unknown result without retry',
   assert.equal(calls, 1);
 });
 
-test('closing the HTTP response cancels upstream work through the production route', { timeout: 6000 }, async t => {
-  const root = await temporary(t);
-  let started, cancelled;
-  const ready = new Promise(resolve => { started = resolve; });
-  const stopped = new Promise(resolve => { cancelled = resolve; });
-  const voice = new VoiceService(async (_url, options) => {
-    started();
-    return new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => { cancelled(); reject(new Error('aborted')); }, { once: true }));
-  });
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty'), defaultCwd: root }, services: { voice, desktopControl: { stop: async () => {} }, liveTurns: { stop: async () => {} } } });
-  t.after(async () => { app.server.closeAllConnections(); await app.close(); });
-  const auth = { authorization: 'Bearer synthetic-admin' };
-  await app.inject({ method: 'POST', url: '/api/voice/config', headers: auth, payload: { deepseekKey: config.deepseekKey } });
-  const base = await app.listen({ host: '127.0.0.1', port: 0 }), controller = new AbortController();
-  const request = fetch(`${base}/api/voice/refine`, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(refine()), signal: controller.signal });
-  await ready; controller.abort(); await assert.rejects(request); await stopped;
+test('lost HTTP response is recovered for both stages with exactly one provider call', { timeout: 6000 }, async t => {
+  for (const stage of ['transcribe', 'refine']) {
+    const root = await temporary(t); let started, release, calls = 0, aborted = false;
+    const ready = new Promise(resolve => { started = resolve; });
+    const voice = new VoiceService(async (_url, options) => {
+      calls++; started(); options.signal.addEventListener('abort', () => { aborted = true; });
+      return new Promise(resolve => { release = () => resolve(stage === 'transcribe' ? Response.json({ output: { text: '同一段文本' } }) : response('同一段文本')); });
+    });
+    const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty'), defaultCwd: root }, services: { voice, desktopControl: { stop: async () => {} }, liveTurns: { stop: async () => {} } } });
+    t.after(async () => { app.server.closeAllConnections(); await app.close(); });
+    const headers = { authorization: 'Bearer synthetic-admin', 'content-type': 'application/json' };
+    await app.inject({ method: 'POST', url: '/api/voice/config', headers, payload: { qwenKey: config.qwenKey, deepseekKey: config.deepseekKey } });
+    const payload = stage === 'transcribe' ? input() : refine();
+    const base = await app.listen({ host: '127.0.0.1', port: 0 }), controller = new AbortController();
+    const request = fetch(`${base}/api/voice/${stage}`, { method: 'POST', headers, body: JSON.stringify(payload), signal: controller.signal });
+    await ready; controller.abort(); await assert.rejects(request); await tick();
+    assert.equal(aborted, false);
+    const lookup = () => app.inject({ url: `/api/voice/results/${payload.requestId}`, headers });
+    assert.equal((await lookup()).json().status, 'processing');
+    assert.equal((await app.inject({ method: 'POST', url: `/api/voice/${stage}`, headers, payload })).statusCode, 202);
+    release();
+    for (let i = 0; i < 30 && voice.lookup('admin', payload.requestId).status === 'processing'; i++) await tick();
+    const recovered = await lookup();
+    assert.equal(recovered.headers['cache-control'], 'no-store');
+    assert.equal(recovered.json().text, '同一段文本');
+    assert.equal(recovered.json().outcome, 'succeeded');
+    assert.equal((await app.inject({ method: 'POST', url: `/api/voice/${stage}`, headers, payload })).json().text, '同一段文本');
+    assert.equal(calls, 1);
+    assert.equal((await app.inject({ url: `/api/voice/results/${payload.requestId}` })).statusCode, 401);
+    assert.equal((await app.inject({ url: '/api/voice/results/not-a-uuid', headers })).statusCode, 400);
+    assert.deepEqual((await app.inject({ url: `/api/voice/results/${randomUUID()}`, headers })).json(), { status: 'not_found' });
+  }
 });
 
-test('voice HTTP capacity is reserved before body parsing and released after errors', async t => {
+test('voice parsing capacity is released before awaiting the provider, while new operations stay bounded', async t => {
   const root = await temporary(t); let release, started, hold = true;
   const ready = new Promise(resolve => { started = resolve; });
   const voice = new VoiceService(async () => {
@@ -201,7 +217,7 @@ test('voice HTTP capacity is reserved before body parsing and released after err
   await app.inject({ method: 'POST', url: '/api/voice/config', headers, payload: { deepseekKey: config.deepseekKey } });
   const first = app.inject({ method: 'POST', url: '/api/voice/refine', headers, payload: refine() });
   await ready;
-  assert.equal((await app.inject({ method: 'POST', url: '/api/voice/refine', headers, payload: '{bad' })).statusCode, 429);
+  assert.equal((await app.inject({ method: 'POST', url: '/api/voice/refine', headers, payload: '{bad' })).statusCode, 400);
   hold = false; release(); assert.equal((await first).statusCode, 200);
   assert.equal((await app.inject({ method: 'POST', url: '/api/voice/refine', headers, payload: '{bad' })).statusCode, 400);
   assert.equal((await app.inject({ method: 'POST', url: '/api/voice/refine', headers, payload: refine() })).statusCode, 200);
@@ -367,4 +383,104 @@ test('Qwen target guard is enforced by production HTTP config route', async t =>
   assert.equal(rejected.statusCode, 409); assert.deepEqual(rejected.json(), { error: 'voice_qwen_key_required_for_url' });
   const changed = await app.inject({ method: 'POST', url: '/api/voice/config', headers, payload: { qwenBaseUrl: 'https://llm-synthetic.cn-beijing.maas.aliyuncs.com', qwenModel: 'qwen3-asr-flash', qwenKey: 'synthetic-new-key' } });
   assert.equal(changed.statusCode, 200); assert.equal(changed.json().asrModel, 'qwen3-asr-flash'); assert.doesNotMatch(changed.body, /synthetic-new-key/);
+});
+
+test('in-flight duplicates share work; changed content/stage conflicts; completed/error/cancel replay never pays again', async () => {
+  let release, calls = 0;
+  const service = new VoiceService(async () => { calls++; return new Promise(resolve => { release = () => resolve(response('保留同文')); }); });
+  const req = refine(), first = service.refine('a', req, config, signal());
+  const duplicate = service.refine('a', req, config, signal());
+  await assert.rejects(service.refine('a', { ...req, text: 'different' }, config, signal()), { code: 'voice_request_conflict' });
+  await assert.rejects(service.transcribe('a', { ...input(), requestId: req.requestId }, config, signal()), { code: 'voice_request_conflict' });
+  release(); assert.deepEqual(await first, await duplicate); assert.equal(calls, 1);
+  assert.equal(service.lookup('b', req.requestId).status, 'not_found');
+  service.revoke('a'); assert.equal(service.lookup('a', req.requestId).status, 'not_found');
+  let failedCalls = 0;
+  const failing = new VoiceService(async () => { failedCalls++; return new Response('secret', { status: 500 }); });
+  for (let i = 0; i < 2; i++) await assert.rejects(failing.refine('a', req, config, signal()), { code: 'voice_refine_unavailable' });
+  assert.equal(failing.lookup('a', req.requestId).outcome, 'failed'); assert.equal(failedCalls, 1);
+  assert.doesNotMatch(JSON.stringify(failing.lookup('a', req.requestId)), /secret/);
+});
+
+test('caller disconnection does not cancel work; revoke prevents a late provider response repopulating cache', async () => {
+  let release, upstream;
+  const service = new VoiceService(async (_url, opts) => { upstream = opts.signal; return new Promise(resolve => { release = () => resolve(response('late')); }); });
+  const req = refine(), controller = new AbortController();
+  const pending = service.refine('a', req, config, controller.signal);
+  controller.abort(); assert.equal(upstream.aborted, false);
+  service.revoke('a'); release(); await assert.rejects(pending, { code: 'voice_cancelled' });
+  assert.deepEqual(service.lookup('a', req.requestId), { status: 'not_found' });
+});
+
+test('result TTL starts at completion and queries do not renew it; expiry frees capacity', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1_000_000 });
+  let release;
+  const service = new VoiceService(async () => new Promise(resolve => { release = () => resolve(response('cached')); }));
+  const req = refine(), pending = service.refine('a', req, config, signal());
+  t.mock.timers.tick(1000); release(); await pending;
+  const expires = service.lookup('a', req.requestId).expiresAt;
+  assert.equal(expires, Date.now() + VOICE_RESULT_TTL);
+  t.mock.timers.tick(VOICE_RESULT_TTL - 1);
+  assert.equal(service.lookup('a', req.requestId).expiresAt, expires);
+  t.mock.timers.tick(1); assert.deepEqual(service.lookup('a', req.requestId), { status: 'not_found' });
+});
+
+test('count and UTF-8 byte caps reject new work without evicting recoverable results', async () => {
+  let calls = 0;
+  const small = new VoiceService(async () => { calls++; return response('small'); });
+  const first = refine(); await small.refine('a', first, config, signal());
+  for (let i = 1; i < 64; i++) await small.refine('a', refine(), config, signal());
+  await assert.rejects(small.refine('a', refine(), config, signal()), { code: 'voice_busy' });
+  assert.equal(calls, 64); assert.equal(small.lookup('a', first.requestId).text, 'small');
+  const large = new VoiceService(async () => response('字'.repeat(20000)));
+  for (let i = 0; i < 17; i++) await large.refine('a', refine(), config, signal());
+  await assert.rejects(large.refine('a', refine(), config, signal()), { code: 'voice_busy' });
+  large.revoke('a'); await large.refine('a', refine(), config, signal());
+  const tombstones = new VoiceService(async () => assert.fail('cancel tombstones cannot call a supplier'));
+  for (let i = 0; i < 1024; i++) tombstones.cancel(`owner-${Math.floor(i / 64)}`, randomUUID());
+  assert.throws(() => tombstones.cancel('new-owner', randomUUID()), { code: 'voice_busy' });
+  tombstones.revoke('owner-0'); tombstones.cancel('new-owner', randomUUID());
+  const global = new VoiceService(async () => response('字'.repeat(20000)));
+  for (let i = 0; i < 277; i++) await global.refine(`owner-${i}`, refine(), config, signal());
+  await assert.rejects(global.refine('last', refine(), config, signal()), { code: 'voice_busy' });
+});
+
+test('paired-device result queries are isolated and revocation removes completed and pending results', async t => {
+  const root = await temporary(t), voice = new VoiceService(async () => response('private text'));
+  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty'), defaultCwd: root }, services: { voice, desktopControl: { stop: async () => {} }, liveTurns: { stop: async () => {} } } });
+  t.after(() => app.close());
+  const admin = { authorization: 'Bearer synthetic-admin' };
+  async function pair() {
+    const pairing = (await app.inject({ method: 'POST', url: '/api/pairing', headers: admin })).json();
+    return (await app.inject({ method: 'POST', url: '/api/pairing/consume', payload: { code: pairing.code, name: 'synthetic' } })).json();
+  }
+  const a = await pair(), b = await pair();
+  const auth = { authorization: `Bearer ${a.token}` }, other = { authorization: `Bearer ${b.token}` };
+  await app.inject({ method: 'POST', url: '/api/voice/config', headers: auth, payload: { deepseekKey: config.deepseekKey } });
+  const req = refine();
+  assert.equal((await app.inject({ method: 'POST', url: '/api/voice/refine', headers: auth, payload: req })).statusCode, 200);
+  const url = `/api/voice/results/${req.requestId}`;
+  assert.equal((await app.inject({ url, headers: auth })).json().text, 'private text');
+  assert.equal((await app.inject({ url, headers: other })).json().status, 'not_found');
+  await app.inject({ method: 'DELETE', url: `/api/devices/${a.device.id}`, headers: admin });
+  assert.equal((await app.inject({ url, headers: auth })).statusCode, 401);
+  assert.deepEqual(voice.lookup(a.device.id, req.requestId), { status: 'not_found' });
+});
+
+test('concurrent body parsing is still bounded before parsing malformed JSON', async t => {
+  const root = await temporary(t); let release, started;
+  const ready = new Promise(resolve => { started = resolve; });
+  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty'), defaultCwd: root }, services: { voice: new VoiceService(async () => response('done')), desktopControl: { stop: async () => {} }, liveTurns: { stop: async () => {} } } });
+  t.after(() => app.close());
+  app.addHook('preParsing', (request, _reply, payload, done) => {
+    if (request.headers['x-hold-parser']) { release = () => done(null, payload); started(); }
+    else done(null, payload);
+  });
+  const headers = { authorization: 'Bearer synthetic-admin', 'content-type': 'application/json' };
+  await app.inject({ method: 'POST', url: '/api/voice/config', headers, payload: { deepseekKey: config.deepseekKey } });
+  const first = app.inject({ method: 'POST', url: '/api/voice/refine', headers: { ...headers, 'x-hold-parser': '1' }, payload: refine() }).then(value => value);
+  await ready;
+  assert.equal((await app.inject({ method: 'POST', url: '/api/voice/refine', headers, payload: '{bad' })).statusCode, 429);
+  release(); assert.equal((await first).statusCode, 200);
+  assert.equal((await app.inject({ method: 'POST', url: '/api/voice/refine', headers, payload: '{bad' })).statusCode, 400);
 });

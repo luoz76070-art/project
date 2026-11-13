@@ -10,7 +10,9 @@
 - POST `/api/voice/config`：strict局部更新，新增可选qwenBaseUrl/qwenModel；Key省略保留、null删除，owner仅来自鉴权。
 - POST `/api/voice/transcribe`：UUID requestId、规范Base64、durationMs300–121000，最多2MiB；按实际字节识别ADTS AAC或旧MP4/M4A ftyp。
 - POST `/api/voice/refine`：UUID requestId、非空text最多20000字符。
-- POST `/api/voice/cancel`：UUID requestId，只取消同owner，提前到达记墓碑。
+- POST `/api/voice/cancel`：UUID requestId，只取消同owner，提前到达记取消终态；已完成结果不被迟到取消改写。
+- GET `/api/voice/results/:requestId`：UUID 路径参数，owner仅来自鉴权，`Cache-Control: no-store`。200返回`{status:"not_found"}`、`{status:"processing",requestId}`或`{status:"completed",requestId,outcome,expiresAt,text?|errorCode?}`；outcome为succeeded/failed/cancelled，失败仅固定错误码。匿名/撤销401，非法UUID400。
+- 相同owner/ID/输入的POST处理中返回202 processing，完成重放原{text}或原固定错误；同ID不同阶段/内容409 voice_request_conflict。服务层调用共享同一Promise，重放不重新检查已变更的供应商凭证或再次调用供应商。
 
 ## 3. 配置与供应商协议
 
@@ -34,8 +36,12 @@ DeepSeek默认官方`/chat/completions`、deepseek-v4-flash、thinking.disabled�
 - 更改百炼有效目标（包含地域导致默认域名改变）且已有Key但未替换/清除：409 voice_qwen_key_required_for_url；DeepSeek对应voice_deepseek_key_required_for_url，原配置保持。显式业务空间URL不随地域元数据变化而移动。
 - 不支持模型/URL或非法请求：400 voice_invalid_request；非法音频400 voice_audio_invalid；Qwen3旧M4A：409 voice_audio_upgrade_required。
 - 供应商401/403→voice_{asr|refine}_auth，404→endpoint，400/422→request，429→busy，其余失败/网络→unavailable，均本地502；坏JSON/缺字段/截断→response_invalid。截止→504 voice_{stage}_timeout。仅固定code，不透传上游正文或异常信息。
-- 取消→409 voice_cancelled；墓碑重放409 voice_request_used；每owner1/全局4、15分钟1024墓碑，超量429 voice_busy，不自动重试，不承诺跨重启exactly-once。
-- HTTP正文解析前也预留每owner1/全局4，所有错误/断开路径释放。截止、断开、撤销、preClose Abort上游；手机原生HTTP另发cancel并丢弃迟到结果。
+- 取消→409 voice_cancelled；成功/失败/取消终态按owner+requestId内存保存，自完成起15分钟，不因查询续期；处理中保留至供应商截止。条数每owner64/全局1024，缓存负载字节每owner1MiB/全局16MiB，处理中预留64KiB，终态按UTF-8文字+512字节固定元数据预算计费；这不是总进程RSS上限。超限在付费调用前429 voice_busy，不淘汰未过期结果。
+- 仅缓存输入SHA256摘要与阶段、结果/固定错误、时间和处理控制信息；不缓存音频或Key。先查幂等记录，再限制新操作每owner1/全局4。取消/撤销/停止阻止迟到结果重新写回；voice.revoke清除该设备所有结果，stop清空缓存。Relay重启后结果丢失，不承诺跨重启exactly-once。
+- HTTP正文解析前预留每owner1/全局4，preHandler释放解析额度，错误/断开也释放。已受理任务不随HTTP断开取消；显式cancel、撤销、preClose及ASR55秒/整理40秒截止仍Abort上游。供应商网络失败不自动重试。
+- 手机每阶段生成UUID并在POST前持久化最少元数据到localStorage：requestId、stage、连接scope、原会话/线程身份、createdAt、草稿SHA256摘要；禁止录音、原文、整理稿、Key/token。存储失败不发起上传。手机以创建时间计15分钟，终态/不存在/过期清除。
+- POST结果未知仅GET原ID，按1/2/4/8秒退避；后台暂停轮询，回前台/online立即查询，录音阶段仍取消。原生POST和GET迟到响应仅消费一次。进程重启在应用根部恢复当前连接的所有未过期记录，只GET，不重传、不自动启动下一整理阶段；查不到静默清除。连接切换后不跨scope取结果。
+- 正常录音保持预览再采用。失去原面板/进程后的成功恢复按原Codex/Agent线程定位，摘要及写入前比较均通过才追加草稿并沿用既有草稿存储；冲突或保存失败显示可复制结果，不覆盖新草稿。待恢复记录本身不存文字；明确取消清除记录，切会话仅脱离等待、不取消已上传任务。
 
 ## 5. 基准、正常和异常
 
@@ -43,7 +49,7 @@ DeepSeek默认官方`/chat/completions`、deepseek-v4-flash、thinking.disabled�
 
 ## 6. 验证要求
 
-`corepack pnpm test:voice`注入fetch和临时私有目录，覆盖官方31 output.text和Qwen3 choices、地域/maas、AAC/旧M4A、双阶段错误、URL绑定/旧配置、鉴权/撤销、取消/并发/墓碑与体积。手机decoder拒缺少qwenBaseUrl的旧网关；实际浏览器检查保存/清Key/重开/原文保留。禁止读取真实Key/会话或调用付费模型；运行健康与真机验收分别记录。
+`corepack pnpm test:voice`注入fetch和临时私有目录，覆盖官方31 output.text和Qwen3 choices、地域/maas、AAC/旧M4A、双阶段错误、URL绑定/旧配置、鉴权/撤销、取消/并发/墓碑与体积。新增丢失响应取同文且每阶段服务商仅调用一次、并发合并/内容冲突、TTL/容量、撤销及迟到结果、后台/进程重启GET-only恢复、草稿隔离与冲突测试。手机decoder拒缺少qwenBaseUrl的旧网关；实际浏览器检查保存/清Key/重开/原文保留。禁止读取真实Key/会话或调用付费模型；运行健康与真机验收分别记录。
 
 ## 7. 易错对照
 

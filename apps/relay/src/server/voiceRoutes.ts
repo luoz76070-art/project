@@ -17,6 +17,7 @@ export function registerVoiceRoutes(app: FastifyInstance, options: { owners: Wea
     parsing.set(request.id, owner);
     reply.raw.once("close", () => release(request));
   });
+  app.addHook("preHandler", async request => release(request));
   app.addHook("onResponse", async request => release(request));
   app.addHook("onError", async request => release(request));
   app.addHook("onRequestAbort", async request => release(request));
@@ -35,6 +36,10 @@ export function registerVoiceRoutes(app: FastifyInstance, options: { owners: Wea
     const owner = owners.get(request)!;
     return credentials.update(owner, voiceConfigPatch.parse(request.body), () => devices.has(owner));
   }));
+  app.get("/api/voice/results/:requestId", safe(async request => {
+    const { requestId } = z.object({ requestId: z.string().uuid() }).parse(request.params);
+    return service.lookup(owners.get(request)!, requestId);
+  }));
   app.post("/api/voice/cancel", { bodyLimit: 256 }, safe(async request => {
     const { requestId } = z.object({ requestId: z.string().uuid() }).strict().parse(request.body);
     service.cancel(owners.get(request)!, requestId); return { ok: true };
@@ -42,16 +47,16 @@ export function registerVoiceRoutes(app: FastifyInstance, options: { owners: Wea
   const operation = (kind: "transcribe" | "refine") => safe(async (request, reply) => {
     const owner = owners.get(request)!;
     if (!devices.has(owner)) throw new VoiceError("voice_cancelled", 409);
-    const controller = new AbortController();
-    const cancel = () => { if (!reply.raw.writableEnded) controller.abort(); };
-    reply.raw.on("close", cancel);
-    try {
-      const result = kind === "transcribe"
-        ? await service.transcribe(owner, transcribeSchema.parse(request.body), credentials.get(owner), controller.signal)
-        : await service.refine(owner, refineSchema.parse(request.body), credentials.get(owner), controller.signal);
-      if (!devices.has(owner)) throw new VoiceError("voice_cancelled", 409);
-      return result;
-    } finally { reply.raw.off("close", cancel); }
+    const input = kind === "transcribe" ? transcribeSchema.parse(request.body) : refineSchema.parse(request.body);
+    const existing = service.replay(owner, input.requestId, kind === "transcribe" ? "asr" : "refine", input);
+    if (existing.status === "processing") return reply.code(202).send(existing);
+    if (existing.status === "completed") return { text: existing.text };
+    const signal = new AbortController().signal;
+    const result = "dataBase64" in input
+      ? await service.transcribe(owner, input, credentials.get(owner), signal)
+      : await service.refine(owner, input, credentials.get(owner), signal);
+    if (!devices.has(owner)) throw new VoiceError("voice_cancelled", 409);
+    return result;
   });
   app.post("/api/voice/transcribe", { bodyLimit: 4 * Math.ceil(MAX_AUDIO_BYTES / 3) + 1024 }, operation("transcribe"));
   app.post("/api/voice/refine", { bodyLimit: 128 * 1024 }, operation("refine"));
