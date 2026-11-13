@@ -9,13 +9,13 @@ import { writeClipboard } from "../../shared/clipboard";
 import { voiceDraftHash } from "./recovery";
 import type { VoiceRecoveryPort } from "./useVoiceRecovery";
 
-type Phase = "idle" | "starting" | "recording" | "transcribing" | "refining" | "preview";
+type Phase = "idle" | "starting" | "recording" | "transcribing" | "failed" | "refining" | "preview";
 export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, recovery }: { endpoint: string; token: string; draft: string; onDraft: (value: string) => void; scope: string; thread: string; recovery: VoiceRecoveryPort }) {
   const [open, setOpen] = useState(false), [phase, setPhase] = useState<Phase>("idle");
   const [mode, setMode] = useState<"text" | "prompt">("prompt"), [seconds, setSeconds] = useState(0);
   const [original, setOriginal] = useState(""), [prompt, setPrompt] = useState(""), [error, setError] = useState("");
   const sheet = useRef<HTMLElement | null>(null);
-  const session = useRef<{ id: string; base: string; conflict: boolean; mode: "text" | "prompt"; abort: AbortController; requestId?: string; finished?: boolean; recordingReceived?: boolean } | null>(null);
+  const session = useRef<{ id: string; base: string; conflict: boolean; mode: "text" | "prompt"; abort: AbortController; requestId?: string; finished?: boolean; recordingReceived?: boolean; recording?: { dataBase64: string; durationMs: number } } | null>(null);
   const latest = useRef({ draft, onDraft }); latest.current = { draft, onDraft };
   if (session.current && draft !== session.current.base) session.current.conflict = true;
   const api = voiceApi(endpoint, token);
@@ -25,6 +25,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
   function cancel() {
     const active = session.current; session.current = null;
     if (active) {
+      active.recording = undefined;
       active.abort.abort();
       void VoiceRecorder.cancel({ sessionId: active.id }).catch(() => {});
       if (active.requestId) { recovery.cancel(active.requestId); void api.cancel(active.requestId).catch(() => {}); }
@@ -44,11 +45,12 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
     document.addEventListener("visibilitychange", hide);
     return () => {
       const active = session.current;
-      if (active?.requestId) { session.current = null; recovery.detach(active.requestId); active.abort.abort(); }
+      if (active?.requestId) { session.current = null; active.recording = undefined; recovery.detach(active.requestId); active.abort.abort(); }
       else cancel();
+      setPhase("idle"); setOriginal(""); setPrompt(""); setError("");
       document.removeEventListener("visibilitychange", hide);
     };
-  }, [endpoint, token]);
+  }, [endpoint, token, scope, thread]);
   useEffect(() => {
     if (phase !== "recording") return;
     const started = Date.now();
@@ -73,19 +75,30 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
     finally { if (session.current === active) { active.requestId = undefined; active.finished = true; setPhase("preview"); } }
   }
 
-  async function finished(recording: VoiceRecording, active: NonNullable<typeof session.current>) {
+  function finished(recording: VoiceRecording, active: NonNullable<typeof session.current>) {
     if (session.current !== active || recording.sessionId !== active.id || active.recordingReceived) return;
     active.recordingReceived = true; active.finished = true;
     if (recording.error || !recording.dataBase64 || !recording.durationMs) { setPhase("idle"); setError(voiceError(new Error(recording.error || "voice_recording_failed"))); return; }
-    active.finished = false; setPhase("transcribing");
+    active.recording = { dataBase64: recording.dataBase64, durationMs: recording.durationMs };
+    void transcribe(active);
+  }
+
+  async function transcribe(active: NonNullable<typeof session.current>) {
+    // Lock before hashing/submitting: a second click can arrive before React renders.
+    if (session.current !== active || !active.finished || !active.recording || active.abort.signal.aborted) return;
+    active.finished = false; setPhase("transcribing"); setError("");
     try {
-      const text = await submit("asr", active, id => api.transcribe(id, recording.dataBase64!, recording.durationMs!, active.abort.signal));
+      const text = await submit("asr", active, id => api.transcribe(id, active.recording!.dataBase64, active.recording!.durationMs, active.abort.signal));
       if (session.current !== active) return;
-      active.requestId = undefined; setOriginal(text);
+      active.requestId = undefined; active.recording = undefined; setOriginal(text);
       if (active.mode === "prompt") await refine(text, active);
       else { active.finished = true; setPhase("preview"); }
     } catch (caught) {
-      if (session.current === active) { active.requestId = undefined; active.finished = true; setPhase("idle"); setError(voiceError(caught)); }
+      if (session.current === active) {
+        active.requestId = undefined; active.finished = true;
+        if ((caught as { name?: string; code?: string })?.name === "AbortError" || (caught as { code?: string })?.code === "voice_cancelled") active.recording = undefined;
+        setPhase(active.recording ? "failed" : "idle"); setError(voiceError(caught));
+      }
     }
   }
 
@@ -141,11 +154,15 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
         <div className="voice-modes" aria-label="语音处理方式">{(["text", "prompt"] as const).map(value => <button type="button" key={value} aria-pressed={mode === value} disabled={busy} onClick={() => setMode(value)}>{value === "text" ? "仅转文字" : "整理提示词"}</button>)}</div>
         {!available && <p role="status">录音需要安装支持语音的新版 Android APK。</p>}
         {phase === "recording" ? <button type="button" className="action-button voice-recording" onClick={() => void VoiceRecorder.stop({ sessionId: session.current!.id }).catch(caught => { cancel(); setPhase("idle"); setError(voiceError(caught)); })}><Square size={17} />结束录音 · {seconds}s / 120s</button>
-          : <button type="button" className="action-button" disabled={!available || busy} onClick={() => void start()}><Mic size={17} />{original ? "重新录音" : "开始录音"}</button>}
+          : <button type="button" className="action-button" disabled={!available || busy} onClick={() => void start()}><Mic size={17} />{original || phase === "failed" ? "重新录音" : "开始录音"}</button>}
         {busy && phase !== "recording" && <p className="voice-stage" role="status"><Loader2 size={16} className="spin" />{phase === "starting" ? "正在准备麦克风…" : phase === "transcribing" ? "百炼正在转文字…" : "DeepSeek 正在整理…"}</p>}
         {original && <label>识别原文<textarea aria-label="语音识别原文" value={original} maxLength={20_000} disabled={busy} rows={4} onChange={event => { setOriginal(event.target.value); setPrompt(""); }} /></label>}
         {prompt && <label>整理后的提示词<textarea aria-label="整理后的提示词" value={prompt} maxLength={20_000} disabled={busy} rows={6} onChange={event => setPrompt(event.target.value)} /></label>}
         {error && <p className="voice-error" role="alert">{error}</p>}
+        {phase === "failed" && <div className="voice-actions">
+          <button type="button" className="action-button" onClick={() => { if (session.current) void transcribe(session.current); }}>重新转写</button>
+          <button type="button" className="action-button" onClick={() => { cancel(); setPhase("idle"); setError(""); }}>丢弃</button>
+        </div>}
         {session.current?.conflict && <p role="status">输入框已有新内容。请复制所需文字后自行粘贴。</p>}
         {original && <div className="voice-actions">
           <button type="button" className="action-button" disabled={busy || !original.trim() || session.current?.conflict} onClick={() => adopt(original)}>采用原文</button>
