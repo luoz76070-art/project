@@ -6,6 +6,7 @@
   "files": [
     "index.mjs",
     "bridge.mjs",
+    "turnResult.mjs",
     "catalog.mjs",
     "messages.mjs",
     "queue.mjs",
