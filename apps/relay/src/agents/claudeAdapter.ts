@@ -1,3 +1,4 @@
+import { activityEvidence, type ActivityEvidence } from "../store/activityEvidence.js";
 import { randomUUID } from "node:crypto";
 import type { z } from "zod";
 import type { AgentAdapter, AgentStatus } from "./agentGateway.js";
@@ -9,6 +10,7 @@ import { agentError, type AgentDelivery, type AgentMessage, type AgentOperation,
 type Listener = { snapshot: (snapshot: AgentSessionSnapshot) => void; disconnect: () => void };
 type Pending = { command: ClaudeCommand; sent: boolean; expires: number };
 type Entry = {
+  activityEvidence: ActivityEvidence | null;
   lastTurn: LastTurn | null;
   endedTurn?: { id: string; observedAt: string };
   sessionId: string; activationId: string; generation: string; sequence: number; touched: number; connected: boolean;
@@ -53,7 +55,7 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
       const previous = entry;
       const requests = new ClaudeInteractions(() => { if (entry) this.publish(entry); }, this.limits.pollMs, this.limits.interactionMs);
       entry = { ...input, requests, generation: randomUUID(), sequence: 0, touched: Date.now(), connected: true, activity: "thinking", messages: [], live: new Map(),
-        partial: true, ready: false, listeners: new Set(), queue: [], submission: previous?.submission ?? null, pending: null, operationError: null, lastTurn: null };
+        partial: true, ready: false, listeners: new Set(), queue: [], submission: previous?.submission ?? null, pending: null, operationError: null, lastTurn: null, activityEvidence: null };
       this.entries.set(input.sessionId, entry);
     }
     entry.touched = Date.now();
@@ -98,6 +100,7 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
     const entry = this.host(id, input.generation);
     if (entry.interactions !== 1) throw agentError("CLAUDE_INTERACTIONS_UNAVAILABLE", 409);
     if (entry.turnId !== input.turnId) throw agentError("CLAUDE_REQUEST_EXPIRED", 409);
+    entry.activityEvidence = null;
     return entry.requests.wait(input, entry.listeners.size > 0, signal);
   }
   closeInteraction(id: string, generation: string, requestId: string, serial: number) { this.host(id, generation).requests.close(requestId, serial); return { ok: true }; }
@@ -184,7 +187,7 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
   }
   private disconnect(entry: Entry) {
     if (!entry.connected) return;
-    entry.connected = false;
+    entry.connected = false; entry.activityEvidence = null;
     entry.requests.closeAll();
     if (entry.pending) entry.submission = entry.pending.sent ? { ...entry.submission!, delivery: "uncertain" } : null;
     entry.pending = null; entry.queue = []; entry.poll?.();
@@ -196,6 +199,7 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
       case "state": {
         const previousTurn = entry.turnId;
         entry.turnId = event.turnId; entry.activity = event.activity;
+        entry.activityEvidence = activityEvidence(event.activity, event.turnId);
         if (event.turnId) entry.endedTurn = undefined;
         if (previousTurn && !event.turnId) {
           entry.lastTurn = event.aborted === true ? makeLastTurn(previousTurn, "interrupted", "cancelled") : null;
@@ -214,7 +218,7 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
         const bytes = [...entry.live.values()].reduce((n, m) => n + m.text.length, 0);
         if ((!existing && entry.live.size >= 128) || bytes + event.text.length > 256_000) { entry.partial = true; break; }
         entry.live.set(event.id, { id: event.id, timestamp: existing?.timestamp ?? new Date().toISOString(), role: "assistant", kind: "agent_message", text: (existing?.text ?? "") + event.text, turnId: event.turnId, phase: "commentary" });
-        entry.activity = "outputting"; break;
+        entry.activity = "outputting"; entry.activityEvidence = activityEvidence("outputting", entry.turnId); break;
       }
       case "tool": {
         if (!entry.listeners.size || event.turnId !== entry.turnId) break;
@@ -222,7 +226,7 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
         const bytes = [...entry.live.values()].reduce((n, m) => n + m.text.length, 0) - (existing?.text.length ?? 0);
         if ((!existing && entry.live.size >= 128) || bytes + event.text.length > 256_000) { entry.partial = true; break; }
         entry.live.set(event.id, { id: event.id, timestamp: existing?.timestamp ?? new Date().toISOString(), role: "tool", kind: event.kind, text: event.text, turnId: event.turnId });
-        entry.activity = "working"; break;
+        entry.activity = "working"; entry.activityEvidence = activityEvidence("working", entry.turnId); break;
       }
       case "messages": {
         // The unchanged plugin only marks a final answer after reason=answer and !isAborted.
@@ -254,7 +258,7 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
   private view(entry: Entry): AgentSessionSnapshot {
     const enabled = entry.connected && entry.ready && !entry.pending && (!entry.submission || entry.submission.delivery === "confirmed");
     return { agentId: "claude", session: this.session(entry), connected: entry.connected, updatedAt: new Date().toISOString(), status: entry.turnId ? "running" : "idle", activity: entry.activity,
-      lastTurn: entry.lastTurn,
+      lastTurn: entry.lastTurn, activeTurnId: entry.turnId, activityEvidence: entry.turnId ? entry.activityEvidence : null,
       messages: [...entry.messages, ...entry.live.values()], ...entry.requests.views(), historyCursor: null, partialText: entry.partial,
       operationError: entry.operationError,
       control: entry.connected ? { token: entry.generation, canSend: enabled, canSteer: false, canInterrupt: enabled && Boolean(entry.turnId) } : null,

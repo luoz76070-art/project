@@ -507,3 +507,23 @@ test('parallel interaction arrivals can be out of serial order, stay bounded, an
   assert.deepEqual(await second, { status: 'closed' }); assert.deepEqual(await first, { status: 'closed' });
   assert.equal((await (await httpWait).json()).status, 'closed'); assert.ok(Date.now() - start < 500);
 });
+
+test('S2 Claude uses unchanged state/text/tool events for bounded evidence and clears unknown endings', async t => {
+  const f = fixture(t); await f.ready();
+  assert.equal(f.latest().activityEvidence, null);
+  f.emit([{ type: 'state', turnId: 'a', activity: 'thinking' }]);
+  assert.equal(f.latest().activityEvidence.kind, 'thinking');
+  for (const [type, kind] of [['text', 'outputting'], ['tool', 'working']]) {
+    f.emit([{ type, turnId: 'a', id: type, text: 'PRIVATE', kind: 'function_call' }]);
+    const evidence = f.latest().activityEvidence;
+    assert.equal(evidence.kind, kind); assert.equal(evidence.turnId, 'a');
+    assert.deepEqual(Object.keys(evidence).sort(), ['kind', 'observedAt', 'turnId']); assert.doesNotMatch(JSON.stringify(evidence), /PRIVATE/);
+  }
+  f.emit([{ type: 'state', turnId: null, activity: 'working' }]);
+  assert.equal(f.latest().activityEvidence, null); assert.equal(f.latest().lastTurn, null);
+  f.emit([{ type: 'text', turnId: 'a', id: 'late', text: 'PRIVATE' }]); assert.equal(f.latest().activityEvidence, null);
+  f.emit([{ type: 'state', turnId: 'b', activity: 'thinking' }]);
+  assert.equal(f.latest().activityEvidence.turnId, 'b');
+  f.emit([{ type: 'tool', turnId: 'a', id: 'late-tool', text: 'PRIVATE', kind: 'function_call' }]);
+  assert.equal(f.latest().activityEvidence.turnId, 'b');
+});

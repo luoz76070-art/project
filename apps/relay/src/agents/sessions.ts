@@ -1,3 +1,4 @@
+import type { ActivityEvidence } from "../../../../shared/activityEvidence.js";
 import type { LastTurn } from "../../../../shared/lastTurn.js";
 export type AgentSession = { id: string; title: string; directory: string; updatedAt: string };
 export type AgentMessage = { id: string; timestamp: string; role: string; text: string; kind: string; turnId?: string; phase?: "commentary" | "final_answer" };
@@ -12,6 +13,8 @@ export type AgentPermission = {
   decisions: ("once" | "always" | "reject")[];
 };
 export type AgentSessionSnapshot = {
+  activeTurnId?: string | null;
+  activityEvidence?: ActivityEvidence | null;
   lastTurn?: LastTurn | null;
   agentId: string; session: AgentSession; connected: boolean; updatedAt: string;
   status: "idle" | "running"; activity: "thinking" | "working" | "outputting";
