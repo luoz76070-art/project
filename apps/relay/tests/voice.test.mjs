@@ -484,3 +484,27 @@ test('concurrent body parsing is still bounded before parsing malformed JSON', a
   release(); assert.equal((await first).statusCode, 200);
   assert.equal((await app.inject({ method: 'POST', url: '/api/voice/refine', headers, payload: '{bad' })).statusCode, 400);
 });
+
+test('ASR 502 is cached; explicit retry with the same recording and a new id calls the provider exactly twice', async t => {
+  const root = await temporary(t), supplierAudio = [];
+  const voice = new VoiceService(async (_url, options) => {
+    supplierAudio.push(JSON.parse(options.body).input.messages[0].content[0].input_audio.data);
+    return supplierAudio.length === 1 ? new Response('synthetic failure', { status: 502 }) : Response.json({ output: { text: '第二次转写成功' } });
+  });
+  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty'), defaultCwd: root }, services: { voice, desktopControl: { stop: async () => {} }, liveTurns: { stop: async () => {} } } });
+  t.after(() => app.close());
+  const headers = { authorization: 'Bearer synthetic-admin' };
+  await app.inject({ method: 'POST', url: '/api/voice/config', headers, payload: { qwenKey: config.qwenKey } });
+  const first = { ...input(), dataBase64: aac }, second = { ...first, requestId: randomUUID() };
+  const submit = payload => app.inject({ method: 'POST', url: '/api/voice/transcribe', headers, payload });
+  assert.equal((await submit(first)).statusCode, 502);
+  const failed = (await app.inject({ url: `/api/voice/results/${first.requestId}`, headers })).json();
+  assert.equal(failed.outcome, 'failed'); assert.equal(failed.errorCode, 'voice_asr_unavailable');
+  assert.equal((await submit(first)).statusCode, 502); assert.equal(supplierAudio.length, 1);
+  // Ignore the retry POST body, as if the network lost it; V1 GET returns the result.
+  assert.equal((await submit(second)).statusCode, 200);
+  const recovered = (await app.inject({ url: `/api/voice/results/${second.requestId}`, headers })).json();
+  assert.equal(recovered.outcome, 'succeeded'); assert.equal(recovered.text, '第二次转写成功');
+  assert.notEqual(first.requestId, second.requestId);
+  assert.deepEqual(supplierAudio, Array(2).fill(`data:audio/aac;base64,${aac}`));
+});

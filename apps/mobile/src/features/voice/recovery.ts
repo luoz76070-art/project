@@ -58,7 +58,9 @@ export function createVoiceRecovery(options: {
         remove(record.requestId); finish(record.requestId, result.text);
       } else {
         remove(record.requestId);
-        finish(record.requestId, undefined, new Error(result.status === "not_found" ? "语音结果已失效，请重新录音。" : "语音处理失败或已取消；已有原文仍可采用。"));
+        finish(record.requestId, undefined, result.status === "completed" && result.outcome === "cancelled"
+          ? cancelled()
+          : new Error(result.status === "not_found" ? "语音结果已失效，可重新转写保留的录音。" : "语音处理失败，可重试；已有原文仍可采用。"));
       }
     } finally { consuming.delete(record.requestId); }
   }
@@ -71,7 +73,7 @@ export function createVoiceRecovery(options: {
     let hasPending = false;
     try {
       const pending = records(); hasPending = pending.length > 0;
-      for (const id of live.keys()) if (!pending.some(r => r.requestId === id)) finish(id);
+      for (const id of live.keys()) if (!pending.some(r => r.requestId === id)) finish(id, undefined, new Error("语音结果已过期，可重新转写保留的录音。"));
       for (const record of pending) {
         if (signal.aborted) break;
         try {

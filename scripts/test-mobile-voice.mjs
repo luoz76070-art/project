@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import ts from 'typescript';
 import { build } from 'esbuild';
+import { voiceInputDriver } from './helpers/voice-input-driver.mjs';
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-voice-tests-'));
 test.after(() => fs.rm(root, { recursive: true, force: true }));
@@ -204,4 +205,140 @@ test('production draft adapters restore original Codex/Agent drafts, preserve ot
   assert.equal(adapters.writeVoiceAgentDraft(scope, 'deepseek:11111111-1111-4111-8111-111111111111', '取回', 'NO'), false);
   assert.equal(adapters.writeVoiceAgentDraft(scope, 'deepseek:11111111-1111-4111-8111-111111111111', 'live edit', 'appended'), true);
   assert.equal(live['deepseek:11111111-1111-4111-8111-111111111111'], 'appended');
+});
+
+async function until(check) {
+  const deadline = Date.now() + 3000;
+  while (!check()) { if (Date.now() >= deadline) assert.fail('voice state did not settle'); await tick(); }
+}
+function inputDriver(t, recovery, api = {}) {
+  const driver = voiceInputDriver({ recovery, mergeVoiceDraft, voiceError, voiceDraftHash, api: {
+    config: async () => ({ qwenConfigured: true, deepseekConfigured: true }),
+    cancel: async () => {}, refine: async () => '整理结果', ...api,
+  } });
+  t.after(() => driver.unmount());
+  driver.click('语音输入'); driver.click('仅转文字');
+  return driver;
+}
+async function record(driver) {
+  const before = driver.calls.start;
+  driver.click(driver.button('重新录音') ? '重新录音' : '开始录音');
+  await until(() => driver.calls.start > before);
+  driver.recording();
+}
+
+// ASR failure -> explicit new request, both attempts use the real V1 coordinator.
+test('production retry button reuses audio after 502, changes id, locks double clicks and recovers a lost second response', async t => {
+  const store = storage(), posts = [], gets = [];
+  const manager = coordinator(t, store, { query: async id => {
+    gets.push(id);
+    return posts.length === 1 ? { status: 'completed', requestId: id, outcome: 'failed', errorCode: 'voice_asr_unavailable', expiresAt: Date.now() + voiceRecoveryTtl }
+      : completed({ requestId: id }, '第二次成功');
+  } });
+  manager.setVisible(true);
+  const driver = inputDriver(t, manager, { transcribe: async (id, audio, duration) => {
+    posts.push({ id, audio, duration });
+    const raw = [...store.data.values()][0];
+    assert.doesNotMatch(raw, /synthetic-audio|dataBase64|durationMs|原草稿/);
+    if (posts.length === 1) ensureHttpOk(502, { error: 'voice_asr_unavailable' });
+    throw new Error('second POST response lost');
+  } });
+  await record(driver);
+  const active = driver.session();
+  await until(() => driver.button('重新转写'));
+  assert.equal(posts.length, 1); assert.equal(active.recording.dataBase64, 'synthetic-audio');
+  const retry = driver.button('重新转写').props.onClick;
+  retry(); retry(); // Same render, before the disabled/hidden button can update.
+  await until(() => driver.original() === '第二次成功');
+  assert.equal(posts.length, 2); assert.equal(new Set(posts.map(p => p.id)).size, 2);
+  assert.deepEqual(posts.map(({ audio, duration }) => ({ audio, duration })), Array(2).fill({ audio: 'synthetic-audio', duration: 1000 }));
+  assert.deepEqual(gets, posts.map(p => p.id)); assert.equal(driver.calls.start, 1);
+  assert.equal(active.recording, undefined); assert.equal(driver.button('重新转写'), undefined);
+  assert.equal(store.data.size, 0);
+  driver.click('采用原文'); assert.deepEqual(driver.drafts, ['原草稿\n\n第二次成功']);
+});
+
+test('failed, not_found, provider timeout and definitive rejection preserve audio; cancellation releases it', async t => {
+  for (const kind of ['failed', 'not_found', 'timeout', 'rejected', 'cancelled', 'cancel-post']) {
+    const store = storage();
+    const manager = coordinator(t, store, { query: async id => kind === 'not_found' ? { status: 'not_found' }
+      : { status: 'completed', requestId: id, outcome: kind === 'cancelled' ? 'cancelled' : 'failed', errorCode: kind === 'timeout' ? 'voice_asr_timeout' : 'voice_asr_unavailable', expiresAt: Date.now() + voiceRecoveryTtl } });
+    manager.setVisible(true);
+    const driver = inputDriver(t, manager, { transcribe: async () => {
+      if (kind === 'cancel-post') ensureHttpOk(409, { error: 'voice_cancelled' });
+      if (kind === 'rejected') ensureHttpOk(422, {});
+      throw new Error('network unavailable');
+    } });
+    await record(driver); const active = driver.session();
+    await until(() => active.finished);
+    const cancelled = kind.startsWith('cancel');
+    assert.equal(Boolean(active.recording), !cancelled, kind);
+    assert.equal(Boolean(driver.button('重新转写')), !cancelled, kind);
+    assert.equal(store.data.size, 0);
+    manager.stop();
+  }
+});
+
+test('V1 recovery expiry is a retryable failure rather than a user cancellation', async t => {
+  const store = storage(); let now = Date.now();
+  const manager = coordinator(t, store, { now: () => now, query: async id => ({ status: 'processing', requestId: id }) });
+  const driver = inputDriver(t, manager, { transcribe: async () => null });
+  await record(driver);
+  await until(() => store.data.size > 0);
+  now += voiceRecoveryTtl + 100;
+  manager.setVisible(true);
+  await until(() => driver.button('重新转写'));
+  assert.ok(driver.session().recording); assert.equal(store.data.size, 0);
+});
+
+test('discard, new recording, close, scope/thread change and unmount clear the retained audio', async t => {
+  for (const action of ['discard', 'new', 'close', 'thread', 'scope', 'unmount']) {
+    const manager = coordinator(t, storage()); manager.setVisible(true);
+    const driver = inputDriver(t, manager, { transcribe: async () => { throw new Error('network'); } });
+    await record(driver); const active = driver.session();
+    await until(() => driver.button('重新转写'));
+    driver.hide(); assert.ok(active.recording, 'background alone preserves a failed recording');
+    if (action === 'discard') driver.click('丢弃');
+    if (action === 'new') driver.click('重新录音');
+    if (action === 'close') driver.click('关闭语音输入');
+    if (action === 'thread') driver.render({ thread: 'codex:other' });
+    if (action === 'scope') driver.render({ scope: 'other-connection' });
+    if (action === 'unmount') driver.unmount();
+    assert.equal(active.recording, undefined, action);
+    assert.notEqual(driver.session(), active, action);
+    manager.stop();
+  }
+});
+
+test('unmount while uploading releases audio, preserves V1 metadata and ignores late results', async t => {
+  const store = storage(); let resolvePost;
+  const manager = coordinator(t, store);
+  const driver = inputDriver(t, manager, { transcribe: () => new Promise(resolve => { resolvePost = resolve; }) });
+  await record(driver); const active = driver.session();
+  await until(() => resolvePost);
+  driver.unmount();
+  assert.equal(active.recording, undefined); assert.equal(active.abort.signal.aborted, true);
+  assert.equal(loadVoicePending(store, 'connection-one').length, 1);
+  manager.stop(); resolvePost('late'); await tick();
+  assert.deepEqual(driver.drafts, []); assert.equal(driver.session(), undefined);
+});
+
+test('retry preserves captured draft conflicts and refine failures keep editable original text', async t => {
+  const store = storage(); let asr = 0, refinements = 0;
+  const manager = coordinator(t, store); manager.setVisible(true);
+  const driver = inputDriver(t, manager, { transcribe: async () => {
+    if (++asr === 1) throw new Error('lost'); return '已有原文';
+  }, refine: async () => { if (++refinements === 1) ensureHttpOk(422, {}); return '重新整理成功'; } });
+  driver.click('整理提示词');
+  await record(driver);
+  await until(() => driver.button('重新转写'));
+  driver.render({ draft: '新的草稿' });
+  driver.click('重新转写');
+  await until(() => driver.original() === '已有原文' && driver.session().finished);
+  assert.equal(driver.session().recording, undefined);
+  assert.equal(driver.button('采用原文').props.disabled, true);
+  driver.click('重新整理');
+  await until(() => driver.button('采用提示词'));
+  assert.equal(driver.original(), '已有原文'); assert.equal(asr, 2); assert.equal(refinements, 2);
+  assert.equal(driver.button('采用提示词').props.disabled, true); assert.deepEqual(driver.drafts, []);
 });
