@@ -6,11 +6,14 @@ import { ComposerSessionStatus } from "../chat/SessionStatus";
 import { agentSessionStatus } from "../chat/sessionStatusModel";
 import { loadReadingPositions, saveReadingPositions } from "../chat/readingPositions";
 import { productBeforeNavigate, isKelivoHost } from "../product/host";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { registerVoiceAgentDrafts } from "../voice/draftRecovery";
 import type { VoiceRecoveryPort } from "../voice/useVoiceRecovery";
 import { VoiceInput } from "../voice/VoiceInput";
 import { ListTodo, ChevronLeft, Loader2 } from "lucide-react";
+import { AgentPickRow } from "./AgentPickRow";
+import { checkingSummary, offlineSummary, summarizeSessions, type AgentSummary } from "./agentSummary";
+import { loadWorkspaceCache } from "../threads/cache";
 import { AgentIcon } from "./AgentIcon";
 import { PullToRefresh } from "../../shared/PullToRefresh";
 import type { CodexMessage, PendingAttachment } from "../../app/types";
@@ -33,7 +36,7 @@ import { groupByProject, projectGroupLabel, sessionInRange, sessionListRefreshMs
 import { ProjectGroups } from "../threads/ProjectGroups";
 import { SessionRangeControl } from "../threads/SessionRangeControl";
 
-type Agent = { id: string; label: string; transport: string; sessionApi?: 1 };
+type Agent = { id: string; label: string; transport: string; sessionApi?: 1; state?: string };
 const friendlyError = (error: unknown) => {
   const status = (error as { status?: number })?.status;
   return status === 401 ? deviceRevokedMessage : status === 410 ? "电脑会话暂时离线，请返回会话列表并等待重新连接。" : status === 404 ? "电脑端尚未提供此 Agent，请更新或检查插件配置。"
@@ -55,6 +58,8 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
     write: value => { if (!saveAgentDrafts(scope, value)) return false; draftsRef.current = value; setDrafts(value); return true; },
   }), [scope]);
   const controller = useRef<AbortController | null>(null), requestId = useRef(0);
+  const summaryController = useRef<AbortController | null>(null);
+  const [summaries, setSummaries] = useState<Record<string, AgentSummary>>({}), [reachable, setReachable] = useState<boolean | null>(null);
   useEffect(() => {
     const flush = () => saveAgentDrafts(scope, draftsRef.current);
     const beforeNavigate = (event: Event) => { if (!flush()) { event.preventDefault(); setError("草稿保存失败，请保留当前页面并重试。"); } };
@@ -65,7 +70,7 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
   useEffect(() => { const timer = setTimeout(() => saveAgentDrafts(scope, draftsRef.current), 700); return () => clearTimeout(timer); }, [drafts, scope]);
   useEffect(() => {
     void loadAgents();
-    return () => { ++requestId.current; controller.current?.abort(); };
+    return () => { ++requestId.current; controller.current?.abort(); summaryController.current?.abort(); };
   }, [endpoint, token]);
   function begin(silent = false) { controller.current?.abort(); controller.current = new AbortController(); const id = ++requestId.current; if (!silent) { setError(""); setLoading(true); } return { signal: controller.current.signal, id }; }
   async function loadAgents() {
@@ -76,13 +81,28 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
       if (!Array.isArray(data.agents)) throw new Error("invalid agents");
       const available = data.agents.filter(item => /^[a-z][a-z0-9-]{0,63}$/u.test(item.id) && (item.sessionApi === 1
         || (item.id === "opencode" && item.transport === "opencode-v2-http-sse") || (item.id === "claude" && item.transport === "claude-mods-http") || (item.id === "deepseek" && item.transport === "deepseek-cordis-http-sse")));
-      setAgents(available);
+      setAgents(available); setReachable(true);
+      void loadSummaries(available);
       const restore = restoreView.current;
       const target = available.find(item => item.id === restore?.agentId);
       if (target) void loadSessions(target);
       else restoreView.current = null;
-    } catch (caught) { if (!request.signal.aborted) setError(friendlyError(caught)); }
+    } catch (caught) { if (!request.signal.aborted) { setError(friendlyError(caught)); setReachable(false); } }
     finally { if (!request.signal.aborted) setLoading(false); }
+  }
+  /** U13: the first page of each Agent's sessions tells whether it answers, how many sessions and the latest activity. */
+  async function loadSummaries(list: Agent[]) {
+    summaryController.current?.abort();
+    const current = new AbortController();
+    summaryController.current = current;
+    setSummaries(Object.fromEntries(list.map(item => [item.id, checkingSummary])));
+    await Promise.all(list.map(async item => {
+      try {
+        const data = await apiGet<{ sessions: AgentSession[]; cursor: string | null }>(buildUrl(endpoint, `/api/agents/${item.id}/sessions${item.id === "deepseek" ? "?range=recent" : ""}`), token, current.signal);
+        if (!Array.isArray(data.sessions)) throw new Error("invalid sessions");
+        if (!current.signal.aborted) setSummaries(previous => ({ ...previous, [item.id]: summarizeSessions(data.sessions, Boolean(data.cursor)) }));
+      } catch { if (!current.signal.aborted) setSummaries(previous => ({ ...previous, [item.id]: offlineSummary })); }
+    }));
   }
   async function loadSessions(target: Agent, append = false, selectedRange = range, silent = false) {
     const request = begin(silent); setAgent(target);
@@ -131,6 +151,9 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
     if (isKelivoHost) saveAgentView(scope, null, null);
     setSelected(null); ++requestId.current; controller.current?.abort(); setAgent(null); setSessions([]); setCursor(null); setError(""); setLoading(false);
   }
+  // Codex lives in the phone workspace; its row uses the thread list cached there, and the gateway answering stands for online.
+  const codexThreads = useMemo(() => agent ? [] : loadWorkspaceCache(scope).threads, [agent, scope, reachable]);
+  const codexSummary: AgentSummary = reachable === null ? checkingSummary : !reachable ? offlineSummary : summarizeSessions(codexThreads, codexThreads.length >= 120);
   const title = selected?.title || agent?.label || "选择 Agent";
   const subtitle = selected ? `${agent?.label} · 原服务会话` : "同一连接，分别管理会话";
   const titleText = <span className="workspace-switch-text"><span className="workspace-name"><strong>{title}</strong></span>
@@ -152,8 +175,9 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
       })} />
       : <PullToRefresh className="agent-session-list" onRefresh={() => agent ? loadSessions(agent) : loadAgents()}>
         {!agent && <>
-          <button className="agent-session-row" onClick={onBack}><strong>Codex</strong><small>电脑桌面会话与手机工作台</small></button>
-          {agents.map(item => <button className="agent-session-row" key={item.id} onClick={() => void loadSessions(item)}><strong>{item.label}</strong><small>{item.id === "deepseek" ? "查看电脑会话与历史，继续原线程和处理提问" : item.id === "claude" ? "打开已加载插件的会话，查看输出、排队输入与中断" : "打开现有会话，查看输出与处理提问"}</small></button>)}
+          <AgentPickRow id="codex" label="Codex" description="电脑桌面会话与手机工作台" summary={codexSummary} onOpen={onBack} />
+          {agents.map(item => <AgentPickRow key={item.id} id={item.id} label={item.label} summary={summaries[item.id]} recentOnly={item.id === "deepseek"} onOpen={() => void loadSessions(item)}
+            description={item.id === "deepseek" ? "查看电脑会话与历史，继续原线程和处理提问" : item.id === "claude" ? "打开已加载插件的会话，查看输出、排队输入与中断" : "打开现有会话，查看输出与处理提问"} />)}
           {!loading && !agents.length && !error && <p className="setting-description">电脑端尚未接入其他 Agent。配置 DeepSeek Harness、Claude Code 插件或 OpenCode 服务后，下拉刷新此页。</p>}
         </>}
         {agent && <>

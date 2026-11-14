@@ -2458,3 +2458,17 @@ button.workspace-switch:active, button.workspace-switch:focus-visible { backgrou
 .sidebar-actions { display: flex; align-items: center; gap: var(--space-4); }
 .pull-refresh { display: flex; align-items: flex-end; justify-content: center; overflow: hidden; padding-bottom: var(--space-8); color: var(--muted); font-size: var(--font-size-12); }
 .thread-list, .agent-session-list { overscroll-behavior-y: contain; }
+
+/* U13: Agent picker rows — icon, name with online status, description, sessions and last activity. */
+.agent-pick-row { flex-direction: row; align-items: flex-start; gap: var(--space-12); text-align: left; color: var(--text); }
+.agent-pick-row .agent-glyph { width: 40px; height: 40px; }
+.agent-pick-text { min-width: 0; flex: 1; display: grid; gap: var(--space-4); }
+.agent-pick-title { display: flex; align-items: center; gap: var(--space-8); min-width: 0; }
+.agent-pick-title strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-pick-status { flex: none; display: inline-flex; align-items: center; gap: var(--space-4); color: var(--muted); font-size: var(--font-size-12); }
+.agent-pick-status::before { content: ""; width: 6px; height: 6px; border-radius: var(--radius-pill); background: var(--muted); }
+.agent-pick-status.online::before { background: var(--ok); }
+.agent-pick-status.offline { color: var(--danger); }
+.agent-pick-status.offline::before { background: var(--danger); }
+.agent-pick-row .agent-pick-meta { color: var(--text); }
+.agent-pick-meta span { display: inline-block; max-width: 100%; }
