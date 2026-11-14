@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Existing tag to validate and publish, for example mobicodex-kelivo-v0.1.9-native-preview"
+        description: "Existing tag to validate and publish, for example mobicodex-kelivo-v0.1.10-native-preview"
         required: true
-        default: "mobicodex-kelivo-v0.1.9-native-preview"
+        default: "mobicodex-kelivo-v0.1.10-native-preview"
         type: string
       source_ref:
         description: "Branch or commit containing the workflow fix and release files"

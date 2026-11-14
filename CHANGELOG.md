@@ -1,6 +1,6 @@
 # 更新说明
 
-## 未发布
+## 0.1.10-native-preview · 2026-11-14（MobiCodex code12）
 
 - 修复 0.1.9 点“开始录音”闪退回到 Kelivo 界面：发布版 R8 把 Capacitor 读取插件注解的字段优化掉，权限检查变成空指针。现保留 Capacitor 运行时，构建验收会检查 APK 里这些反射元数据仍在。
 - 电脑页用户消息气泡改用与 Kelivo AI 页一致的淡色底，不再用主题的饱和 primaryContainer（动态取色时是明显的蓝色块）。
