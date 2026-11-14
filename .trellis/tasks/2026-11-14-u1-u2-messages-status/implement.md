@@ -12,3 +12,9 @@
 - corepack pnpm --filter @mobile-codex/mobile build：通过。
 - lgit diff --check：通过。未改工作流、协议、状态推断模型或缓存。
 - 按任务要求未打开浏览器；浅深色视觉、触摸手势与原生剪贴板效果交由 Claude 合成页/真机验收，隔离 hook 测试不代表原生验证。
+
+## 审查修正（2026-11-14）
+
+- 同 turnId 的助手正文跨工具卡共用头部；用户消息或不同 turnId 重置，缺 turnId 时保持相邻规则。独立消息身份和工具摘要保持。
+- pre/code/.code-block/table（含子元素）的触摸/笔长按不启动复制计时，也不阻止 contextmenu；正文长按仍复制并反馈。
+- 先加入回归：旧实现分组与代码选择两项失败；修正后渲染/交互 74/74，本分支 test:mobile 362/362，typecheck、lint 均通过。未新增浏览器或原生验收。

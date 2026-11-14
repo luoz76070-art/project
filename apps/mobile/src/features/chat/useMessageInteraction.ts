@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type FocusEvent } from "react";
 
 const interactive = "a, button, input, textarea, select, summary, [role=button]";
+function usesNativeSelection(target: EventTarget) { return target instanceof Element && Boolean(target.closest("pre, code, .code-block, table")); }
 function isInteractive(target: EventTarget) { return target instanceof Element && Boolean(target.closest(interactive)); }
 
 /** Only a stationary touch/pen press copies; normal selection and scrolling remain native. */
@@ -35,7 +36,7 @@ export function useMessageInteraction(identity: string, onCopy: () => void | boo
       onClick: (event: MouseEvent<HTMLElement>) => { if (!isInteractive(event.target) && !held.current) setRevealed(true); held.current = false; },
       onPointerDown: (event: PointerEvent<HTMLElement>) => {
         cancelPress(); held.current = false;
-        if (!event.isPrimary || event.pointerType === "mouse" || isInteractive(event.target)) return;
+        if (!event.isPrimary || event.pointerType === "mouse" || isInteractive(event.target) || usesNativeSelection(event.target)) return;
         press.current = { x: event.clientX, y: event.clientY, timer: setTimeout(() => {
           press.current = null;
           if (window.getSelection()?.toString()) return;
@@ -48,7 +49,7 @@ export function useMessageInteraction(identity: string, onCopy: () => void | boo
       onPointerUp: cancelPress,
       onPointerCancel: cancelPress,
       onPointerLeave: cancelPress,
-      onContextMenu: (event: MouseEvent<HTMLElement>) => { if (!isInteractive(event.target) && (press.current || held.current)) event.preventDefault(); },
+      onContextMenu: (event: MouseEvent<HTMLElement>) => { if (!isInteractive(event.target) && !usesNativeSelection(event.target) && (press.current || held.current)) event.preventDefault(); },
     },
   };
 }

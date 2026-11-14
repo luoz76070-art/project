@@ -124,11 +124,23 @@ export function MessageTimeline({ messages, renderMessage, running = false }: { 
     const key = messageDisplayKey(message);
     keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
   }
-  // Group only adjacent assistant prose in the same turn; keep each message's identity.
+  // Tools keep the current turn's assistant identity; untagged prose uses adjacency.
   const continuations = new Set<CodexMessage>();
+  let identityTurn: string | undefined;
+  let hasAssistant = false;
   messages.forEach((message, index) => {
-    const previous = messages[index - 1];
-    if (message.role === "assistant" && !isToolMessage(message) && previous?.role === "assistant" && !isToolMessage(previous) && message.turnId === previous.turnId) continuations.add(message);
+    if (message.role === "user" || (message.turnId && message.turnId !== identityTurn)) {
+      identityTurn = message.turnId;
+      hasAssistant = false;
+    }
+    if (message.role !== "assistant" || isToolMessage(message)) return;
+    if (message.turnId) {
+      if (hasAssistant) continuations.add(message);
+      hasAssistant = true;
+    } else {
+      const previous = messages[index - 1];
+      if (previous?.role === "assistant" && !previous.turnId && !isToolMessage(previous)) continuations.add(message);
+    }
   });
   const renderGroupedMessage: RenderMessage = (message, expanded) => renderMessage(message, expanded, continuations.has(message));
   const groups = groupMessageProcesses(messages);

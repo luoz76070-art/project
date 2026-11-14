@@ -21,14 +21,18 @@ export function messageInteractionDriver(onCopy) {
     const index = cursor++, old = slots[index];
     if (!old || deps.some((value, i) => value !== old.deps[i])) { old?.cleanup?.(); slots[index] = { deps, cleanup: setup() }; }
   };
-  class Element { constructor(interactive = false) { this.interactive = interactive; } closest() { return this.interactive; } }
+  class Element {
+    constructor(selector = '', parent = null) { this.selector = selector; this.parent = parent; }
+    closest(selectors) { return selectors.split(',').some(selector => selector.trim() === this.selector) ? this : this.parent?.closest(selectors) ?? null; }
+  }
   const hook = factory(useEffect, useRef, useState, fn => { timers.set(++serial, fn); return serial; }, id => timers.delete(id), Element, { getSelection: () => selection });
   function render() { cursor = 0; state = hook('message-one', onCopy); return state; }
   render();
   return {
     render,
     event(name, patch = {}) { const event = { target: new Element(), currentTarget: { contains: target => target === 'inside' }, pointerType: 'touch', isPrimary: true, clientX: 0, clientY: 0, preventDefault() { this.prevented = true; }, ...patch }; state.handlers[name](event); render(); return event; },
-    interactive: () => new Element(true),
+    interactive: () => new Element('button'),
+    element: (selector, parent) => new Element(selector, parent),
     select: text => { selection = text; },
     hold() { for (const [id, fn] of [...timers]) { timers.delete(id); fn(); } render(); },
     pending: () => timers.size,

@@ -318,9 +318,39 @@ test('U1 consecutive assistant messages share identity while preserving every me
   assert.equal((html.match(/assistant-continuation/g) ?? []).length, 2);
   assert.doesNotMatch(html, /message-actions|message-meta|aria-label="复制|<time/);
   assert.match(html, /tabindex="0"/);
-  for (const separator of [tool(1), { id: 'user', role: 'user', text: 'new request' }, { ...note(3), turnId: 'other' }]) {
+  for (const separator of [{ id: 'user', role: 'user', text: 'new request' }, { ...note(3), turnId: 'other' }]) {
     const separated = render(h(MessageTimeline, { messages: [note(1), separator, note(2)], renderMessage: bubble }));
     assert.equal((separated.match(/<strong>Codex<\/strong>/g) ?? []).length, separator.role === 'assistant' ? 3 : 2);
+  }
+});
+test('U1 a turn shares one assistant identity across tools until a user or different turn intervenes', () => {
+  const sequence = [note(1), tool(1), note(2), tool(2), { ...note(3), phase: 'final_answer' }];
+  const html = render(h(MessageTimeline, { messages: sequence, renderMessage: bubble }));
+  assert.equal((html.match(/class="message-avatar"/g) ?? []).length, 1);
+  assert.equal((html.match(/<strong>Codex<\/strong>/g) ?? []).length, 1);
+  assert.equal((html.match(/data-message-role="assistant"/g) ?? []).length, 3);
+  assert.equal((html.match(/class="process-toggle"/g) ?? []).length, 2);
+  for (const separator of [
+    { ...tool(3), turnId: 'turn-b' },
+    { id: 'user', role: 'user', turnId: 'turn-a', text: 'new request' },
+    { id: 'user', role: 'user', text: 'legacy request' },
+  ]) {
+    const separated = render(h(MessageTimeline, { messages: [...sequence, separator, tool(4), note(4)], renderMessage: bubble }));
+    assert.equal((separated.match(/<strong>Codex<\/strong>/g) ?? []).length, 2);
+  }
+});
+test('U1 messages without turn IDs only share identity with adjacent untagged assistant prose', () => {
+  const legacy = index => ({ ...note(index), turnId: undefined });
+  const cases = [
+    [[legacy(1), legacy(2)], 1],
+    [[legacy(1), { ...tool(1), turnId: undefined }, legacy(2)], 2],
+    [[legacy(1), { id: 'system', role: 'system', text: 'notice' }, legacy(2)], 2],
+    [[note(1), legacy(2)], 2],
+    [[legacy(1), note(2)], 2],
+  ];
+  for (const [messages, heads] of cases) {
+    const html = render(h(MessageTimeline, { messages, renderMessage: bubble }));
+    assert.equal((html.match(/<strong>Codex<\/strong>/g) ?? []).length, heads);
   }
 });
 test('U1 system messages use a small icon banner, not a user bubble', () => {
@@ -349,6 +379,28 @@ test('U1 stationary long press copies once with feedback; failures are never rep
     void driver.render().copy(); assert.equal(calls, 1);
     finish(); await Promise.resolve(); await Promise.resolve();
     assert.equal(driver.render().feedback, fail ? '复制失败，请重试' : '已复制');
+    driver.unmount();
+  }
+});
+test('U1 code and table presses preserve native selection and context menus, while prose still copies', async () => {
+  for (const selector of ['pre', 'code', '.code-block', 'table']) for (const nested of [false, true]) for (const pointerType of ['touch', 'pen']) {
+    let calls = 0;
+    const driver = messageInteractionDriver(() => { calls++; });
+    const region = driver.element(selector), target = nested ? driver.element('span', region) : region;
+    driver.event('onPointerDown', { target, pointerType });
+    assert.equal(driver.pending(), 0, `${selector}: no whole-message copy timer`);
+    assert.equal(driver.event('onContextMenu', { target }).prevented, undefined);
+    driver.hold();
+    assert.equal(calls, 0);
+    assert.equal(driver.event('onContextMenu', { target }).prevented, undefined);
+    driver.event('onPointerUp');
+    driver.event('onPointerDown', { pointerType });
+    assert.equal(driver.pending(), 1);
+    // Even with an active prose press, a menu originating inside code stays native.
+    assert.equal(driver.event('onContextMenu', { target }).prevented, undefined);
+    assert.equal(driver.event('onContextMenu').prevented, true);
+    driver.hold(); await Promise.resolve();
+    assert.equal(calls, 1); assert.equal(driver.render().feedback, '已复制');
     driver.unmount();
   }
 });
