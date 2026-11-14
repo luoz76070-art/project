@@ -4,13 +4,16 @@ import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { WorkItem, WorkItemAsset, WorkItemAttempt, WorkItemChange, WorkItemResponse, WorkItemState, WorkItemSummary } from '../../../../shared/workItem.js';
 import type { LastTurn } from '../../../../shared/lastTurn.js';
-import { fieldsSchema, itemSchema, limits, mutationSchema, stateSchema, uuid, workItemError } from './schema.js';
+import { assetSchema, captureSchema, fieldsSchema, itemSchema, limits, mutationSchema, stateSchema, uuid, workItemError } from './schema.js';
 import { applyTurnResult, newAttempt, recordDelivery, userAction, verifyItem, type InternalBinding, type UserAction } from './stateMachine.js';
+import type { CaptureSession } from '../../../../shared/capture.js';
+import { CaptureAssetStore } from '../capture/store.js';
 import { importSchema, legacyEntries } from './legacy.js';
 
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const receiptSchema = z.object({ mutationId: uuid, fingerprint: hashSchema, revision: z.number().int().positive() }).strict();
-const entrySchema = z.object({ item: itemSchema, createFingerprint: hashSchema, receipts: z.array(receiptSchema).max(limits.receipts) }).strict();
+const deletionSchema = z.object({ at: z.string().datetime(), mutationId: uuid, fingerprint: hashSchema, revision: z.number().int().positive() }).strict();
+const entrySchema = z.object({ deleted: deletionSchema.optional(), everDispatched: z.boolean().optional(), item: itemSchema, createFingerprint: hashSchema, receipts: z.array(receiptSchema).max(limits.receipts) }).strict();
 const snapshotSchema = z.object({ schemaVersion: z.literal(1), storeId: uuid, storeRevision: z.number().int().safe().nonnegative(),
   entries: z.array(entrySchema).max(limits.items), imports: z.array(z.object({ legacyId: uuid, uid: uuid, fingerprint: hashSchema }).strict()).max(limits.items),
 }).strict().superRefine((data, ctx) => {
@@ -18,6 +21,7 @@ const snapshotSchema = z.object({ schemaVersion: z.literal(1), storeId: uuid, st
     || new Set(data.imports.map(e => e.uid)).size !== data.imports.length
     || data.imports.some(e => !data.entries.some(x => x.item.uid === e.uid && x.item.source.legacyId === e.legacyId && x.item.source.importFingerprint === e.fingerprint))
     || data.entries.some(e => (e.item.source.kind === 'legacy-handoff' && !data.imports.some(i => i.uid === e.item.uid))
+      || (e.deleted && (!e.item.capture || e.item.state !== 'todo' || e.everDispatched || e.deleted.revision !== e.item.revision + 1))
       || new Set(e.receipts.map(r => r.mutationId)).size !== e.receipts.length || e.receipts.some(r => r.revision > e.item.revision))) {
     ctx.addIssue({ code: 'custom', message: 'store_identity_invalid' });
   }
@@ -35,9 +39,9 @@ export class WorkItemStore {
   private writes: Promise<unknown> = Promise.resolve();
   private listeners = new Set<(event: WorkItemChange) => void>();
   readonly file: string;
-  private constructor(private root: string) { this.file = path.join(root, '.mobile-codex', 'work-items.json'); }
-  static async open(root: string): Promise<WorkItemStore> {
-    const store = new WorkItemStore(root);
+  private constructor(private root: string, private captures: CaptureAssetStore) { this.file = path.join(root, '.mobile-codex', 'work-items.json'); }
+  static async open(root: string, captures = new CaptureAssetStore(root)): Promise<WorkItemStore> {
+    const store = new WorkItemStore(root, captures);
     try {
       const stat = await fs.stat(store.file);
       if (stat.size > limits.storeBytes) throw new Error('oversized');
@@ -60,38 +64,46 @@ export class WorkItemStore {
   private snapshot(): Snapshot { if (!this.data) throw workItemError('work_item_store_unavailable', 503); return this.data; }
   info() { const data = this.snapshot(); return { storeId: data.storeId, storeRevision: data.storeRevision }; }
   get(uid: string): WorkItemResponse {
-    const item = this.snapshot().entries.find(e => e.item.uid === uid)?.item;
+    const entry = this.snapshot().entries.find(e => e.item.uid === uid);
+    if (entry?.deleted) throw workItemError('work_item_deleted', 410);
+    const item = entry?.item;
     if (!item) throw workItemError('work_item_not_found', 404);
     return { item: clone(item), ...this.info() };
   }
-  list(state?: WorkItemState, cursor?: string, limit = 50) {
+  list(state?: WorkItemState, cursor?: string, limit = 50, captureOnly = false) {
     const data = this.snapshot();
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw workItemError('work_item_limit_invalid', 400);
     if (state) stateSchema.parse(state);
     let offset = 0;
     if (cursor) {
-      const parsed = z.object({ revision: z.number().int().nonnegative(), offset: z.number().int().nonnegative(), state: stateSchema.nullable() }).strict()
+      const parsed = z.object({ revision: z.number().int().nonnegative(), offset: z.number().int().nonnegative(), state: stateSchema.nullable(), captureOnly: z.boolean().optional() }).strict()
         .parse(JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')));
-      if (parsed.revision !== data.storeRevision || parsed.state !== (state ?? null)) throw workItemError('work_item_cursor_stale');
+      if (parsed.revision !== data.storeRevision || parsed.state !== (state ?? null) || Boolean(parsed.captureOnly) !== captureOnly) throw workItemError('work_item_cursor_stale');
       offset = parsed.offset;
     }
-    const items = data.entries.map(e => e.item).filter(item => !state || item.state === state).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.uid.localeCompare(b.uid));
+    const items = data.entries.filter(e => !e.deleted && (!captureOnly || e.item.source.kind === 'capture')).map(e => e.item).filter(item => !state || item.state === state).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.uid.localeCompare(b.uid));
     const page: WorkItemSummary[] = items.slice(offset, offset + limit).map(({ uid, revision, kind, title, state, createdAt, updatedAt }) => ({ uid, revision, kind, title, state, createdAt, updatedAt }));
-    return { ...this.info(), items: page, nextCursor: offset + limit < items.length ? Buffer.from(JSON.stringify({ revision: data.storeRevision, offset: offset + limit, state: state ?? null })).toString('base64url') : null };
+    return { ...this.info(), items: page, nextCursor: offset + limit < items.length ? Buffer.from(JSON.stringify({ revision: data.storeRevision, offset: offset + limit, state: state ?? null, captureOnly })).toString('base64url') : null };
   }
   subscribe(listener: (event: WorkItemChange) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   async drain() { await this.writes; }
-  create(uid: string, input: ItemFields, owner: string, mutation: Mutation, guard: Guard) {
+  create(uid: string, input: ItemFields, owner: string, mutation: Mutation, guard: Guard, capture?: CaptureSession) {
+    if (capture) captureSchema.parse(capture);
     uuid.parse(uid); const fields = fieldsSchema.parse(input); mutationSchema.parse(mutation);
-    const signature = fingerprint({ uid, fields, owner, mutation });
+    const signature = fingerprint({ uid, fields, owner, mutation, ...(capture ? { capture } : {}) });
     return this.serialize(async () => {
       guard(); const data = this.snapshot(), existing = data.entries.find(e => e.item.uid === uid);
-      if (existing) { if (existing.createFingerprint !== signature) throw workItemError('work_item_id_conflict'); return this.get(uid); }
+      if (existing) { if (existing.deleted) throw workItemError('work_item_deleted', 410); if (existing.createFingerprint !== signature) throw workItemError('work_item_id_conflict'); return this.get(uid); }
       if (mutation.expectedRevision !== 0) throw workItemError('work_item_revision_conflict');
+      if (capture) {
+        if (data.entries.some(e => e.item.capture?.id === capture.id)) throw workItemError('work_item_capture_conflict');
+        const assets = await this.captures.validate(capture.assetIds, capture.id, owner);
+        if (JSON.stringify(fields.assets) !== JSON.stringify(assets.filter(a => a.role === 'original').map(a => assetSchema.parse(a)))) throw workItemError('work_item_capture_assets_invalid', 422);
+      } else if (fields.assets.some(a => a.managed)) throw workItemError('work_item_capture_required', 400);
       await this.validateAssets(fields.assets);
       const now = new Date().toISOString();
       const item: WorkItem = { ...fields, schemaVersion: 1, uid, revision: 1, state: 'todo', createdAt: now, updatedAt: now,
-        createdByDeviceId: owner, source: { kind: 'manual' }, currentAttempt: newAttempt(), lastTransition: null };
+        createdByDeviceId: owner, ...(capture ? { capture: clone(capture), source: { kind: 'capture' as const, captureSessionId: capture.id } } : { source: { kind: 'manual' as const } }), currentAttempt: newAttempt(), lastTransition: null };
       const next = clone(data); next.entries.push({ item, createFingerprint: signature, receipts: [{ mutationId: mutation.mutationId, fingerprint: signature, revision: 1 }] });
       await this.commit(next, [uid], guard); return this.get(uid);
     });
@@ -99,8 +111,27 @@ export class WorkItemStore {
   patch(uid: string, patch: Partial<ItemFields>, mutation: Mutation, owner: string, guard: Guard) {
     const fields = fieldsSchema.partial().parse(patch);
     return this.mutate(uid, mutation, { action: 'edit', fields, owner }, guard, async item => {
+      if (fields.assets && (item.capture || fields.assets.some(a => a.managed))) throw workItemError('work_item_capture_evidence_immutable', 400);
       if (fields.assets) await this.validateAssets(fields.assets);
       return { ...item, ...fields };
+    });
+  }
+  deleteCapture(uid: string, mutation: Mutation, owner: string, guard: Guard) {
+    uuid.parse(uid); mutationSchema.parse(mutation); const signature = fingerprint({ uid, mutation, owner, action: 'delete' });
+    return this.serialize(async () => {
+      guard(); const next = clone(this.snapshot()), entry = next.entries.find(e => e.item.uid === uid);
+      if (!entry) throw workItemError('work_item_not_found', 404);
+      if (entry.deleted) {
+        if (entry.deleted.fingerprint !== signature) throw workItemError('work_item_deleted', 410);
+        return { uid, deleted: true as const, revision: entry.deleted.revision, ...this.info() };
+      }
+      if (entry.item.revision !== mutation.expectedRevision) throw workItemError('work_item_revision_conflict');
+      if (entry.receipts.some(r => r.mutationId === mutation.mutationId)) throw workItemError('work_item_mutation_conflict');
+      const item = entry.item;
+      if (!item.capture || item.state !== 'todo' || entry.everDispatched || item.currentAttempt.delivery !== 'none' || item.currentAttempt.channel || item.currentAttempt.sessionId) throw workItemError('work_item_delete_forbidden');
+      entry.deleted = { at: new Date().toISOString(), mutationId: mutation.mutationId, fingerprint: signature, revision: item.revision + 1 };
+      await this.commit(next, [uid], guard);
+      return { uid, deleted: true as const, revision: entry.deleted.revision, ...this.info() };
     });
   }
   action(uid: string, action: UserAction, reason: string | null, mutation: Mutation, owner: string, guard: Guard) {
@@ -157,11 +188,13 @@ export class WorkItemStore {
     return this.serialize(async () => {
       guard(); const next = clone(this.snapshot()), entry = next.entries.find(e => e.item.uid === uid);
       if (!entry) throw workItemError('work_item_not_found', 404);
+      if (entry.deleted) throw workItemError('work_item_deleted', 410);
       const receipt = entry.receipts.find(r => r.mutationId === mutation.mutationId);
       if (receipt) { if (receipt.fingerprint !== signature) throw workItemError('work_item_mutation_conflict'); return this.get(uid); }
       if (entry.item.revision !== mutation.expectedRevision) throw workItemError('work_item_revision_conflict');
       const updated = await run(entry.item);
       if (updated === entry.item) return this.get(uid);
+      if (updated.currentAttempt.delivery !== 'none' || updated.currentAttempt.channel || updated.currentAttempt.sessionId) entry.everDispatched = true;
       entry.item = { ...updated, revision: entry.item.revision + 1, updatedAt: new Date().toISOString() };
       entry.receipts.push({ mutationId: mutation.mutationId, fingerprint: signature, revision: entry.item.revision });
       entry.receipts = entry.receipts.slice(-limits.receipts);
@@ -187,8 +220,8 @@ export class WorkItemStore {
     snapshotSchema.parse(next);
     await this.persist(next, guard);
     this.data = next;
-    for (const uid of changed) { const item = next.entries.find(e => e.item.uid === uid)!.item;
-      for (const listener of this.listeners) { try { listener({ uid, revision: item.revision, storeRevision: next.storeRevision }); } catch { /* A disconnected consumer cannot roll back a committed write. */ } }
+    for (const uid of changed) { const entry = next.entries.find(e => e.item.uid === uid)!, item = entry.item;
+      for (const listener of this.listeners) { try { listener({ uid, revision: entry.deleted?.revision ?? item.revision, storeRevision: next.storeRevision, ...(entry.deleted ? { deleted: true as const } : {}) }); } catch { /* A disconnected consumer cannot roll back a committed write. */ } }
     }
   }
   private async persist(next: Snapshot, guard: Guard = () => {}) {

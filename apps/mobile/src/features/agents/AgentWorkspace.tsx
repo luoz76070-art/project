@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { registerVoiceAgentDrafts } from "../voice/draftRecovery";
 import type { VoiceRecoveryPort } from "../voice/useVoiceRecovery";
 import { VoiceInput } from "../voice/VoiceInput";
-import { ChevronLeft, Loader2, RefreshCcw } from "lucide-react";
+import { Plus, ChevronLeft, Loader2, RefreshCcw } from "lucide-react";
 import type { CodexMessage, PendingAttachment } from "../../app/types";
 import { maxMessagesPerThread } from "../../app/config";
 import { MessageBubble, MessageTimeline, AttachmentTray } from "../chat/components";
@@ -37,7 +37,7 @@ const friendlyError = (error: unknown) => {
     : status === 409 ? "会话状态已变化，请等待重新同步后再操作。" : "无法连接 Agent，请确认电脑上的网关与 Agent 服务正在运行。";
 };
 
-export default function AgentWorkspace({ endpoint, token, scope, onBack, voiceRecovery }: { endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
+export default function AgentWorkspace({ onCapture, endpoint, token, scope, onBack, voiceRecovery }: { onCapture: () => void; endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
   const deviceRevoked = useDeviceRevoked(endpoint, token);
   const restoreView = useRef(isKelivoHost ? loadAgentView(scope) : null);
   const [agents, setAgents] = useState<Agent[]>([]), [agent, setAgent] = useState<Agent | null>(null);
@@ -118,6 +118,7 @@ export default function AgentWorkspace({ endpoint, token, scope, onBack, voiceRe
     <header className="topbar glass-surface">
       <button className="icon-button" aria-label={selected ? "返回 Agent 会话列表" : agent ? "返回 Agent 列表" : "返回 Codex"} onClick={back}><ChevronLeft size={21} /></button>
       <div className="workspace-title"><div><h1>{selected?.title || agent?.label || "选择 Agent"}</h1><p>{selected ? `${agent?.label} · 原服务会话` : "同一连接，分别管理会话"}</p></div></div>
+      <button className="icon-button" aria-label="新建事项" title="新建事项" onClick={onCapture}><Plus size={18} /></button>
       {!selected && <button className="icon-button" aria-label="刷新 Agent 列表" disabled={loading} onClick={() => void (agent ? loadSessions(agent) : loadAgents())}><RefreshCcw size={18} className={loading ? "spin" : ""} /></button>}
     </header>
     {(deviceRevoked || error) && <p className="connection-notice" role="status">{deviceRevoked ? deviceRevokedMessage : error}</p>}

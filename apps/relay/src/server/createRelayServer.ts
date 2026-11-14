@@ -1,3 +1,4 @@
+import { CaptureAssetStore } from '../capture/store.js';
 import path from "node:path";
 import { createWorkItemRoutes } from "./workItemRoutes.js";
 import { DeviceRegistry } from "./devices.js";
@@ -70,11 +71,12 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const streams = new Set<PassThrough>();
   const readImage = createProjectImageReader();
   const agentSessionRoutes = createAgentSessionRoutes({ gateway: agentGateway, owners, devices, streams, deviceStreams, submissions, readImage });
-  const workItemRoutes = createWorkItemRoutes({ root: config.defaultCwd, owners, devices, streams, deviceStreams });
+  const captures = new CaptureAssetStore(config.defaultCwd);
+  const workItemRoutes = createWorkItemRoutes({ root: config.defaultCwd, captures, owners, devices, streams, deviceStreams });
   // A route may still await its upstream's first frame before reply.send(stream).
   // Cancel adapters before HTTP drain, otherwise onClose cannot release that wait.
   app.addHook("preClose", async () => { voice.stop(); for (const stream of streams) stream.destroy(); await Promise.all([agentGateway.stop(), desktopControl.messageQueue?.stop()]); });
-  app.addHook("onClose", async () => { store.close(); await Promise.all([desktopControl.stop(), liveTurns.stop(), live.stop?.(), workItemRoutes.stop()]); });
+  app.addHook("onClose", async () => { store.close(); await Promise.all([desktopControl.stop(), liveTurns.stop(), live.stop?.(), workItemRoutes.stop(), captures.drain()]); });
 
   await app.register(cors, {
     origin: true,
@@ -377,7 +379,18 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     return { turn: liveTurns.respondUserInput({ ...params, ...body }) };
   });
 
+  app.get('/api/capture-assets/:id', async (request, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const { encoding } = z.object({ encoding: z.literal('base64').optional() }).strict().parse(request.query);
+    const { asset, data } = await captures.read(id);
+    reply.header('Cache-Control', 'no-store').header('X-Content-Type-Options', 'nosniff');
+    return encoding ? { asset, dataBase64: data.toString('base64') } : reply.type(asset.mimeType).send(data);
+  });
   app.post("/api/uploads", async (request) => {
+    if ((request.body as { purpose?: unknown } | null)?.purpose === 'capture') {
+      const guard = () => { if (!devices.has(owners.get(request)!)) throw Object.assign(new Error('unauthorized'), { statusCode: 401 }); };
+      return { upload: await captures.save(request.body, owners.get(request)!, guard) };
+    }
     const body = z
       .object({
         fileName: z.string().min(1).max(200),
