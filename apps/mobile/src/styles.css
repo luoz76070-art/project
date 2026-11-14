@@ -2424,3 +2424,16 @@ input, textarea { caret-color: var(--signal); }
 .composer-toolbar-spacer { flex: 1; }
 @keyframes sessionBreath { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .session-status-dot { animation: none; } }
+
+/* U12 connection card */
+.connection-card { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-12); }
+.connection-card-text { flex: 1 1 0; min-width: 9em; }
+.connection-card-text strong { display: block; }
+.connection-card-text p { margin: var(--space-4) 0 0; overflow-wrap: anywhere; }
+.connection-card-text p span { display: inline-block; max-width: 100%; }
+.connection-card-dot { flex: none; width: var(--space-12); height: var(--space-12); border-radius: var(--radius-pill); background: var(--muted); }
+.connection-card.ok .connection-card-dot { background: var(--ok); }
+.connection-card.testing .connection-card-dot { background: var(--signal); }
+.connection-card.error .connection-card-dot { background: var(--danger); }
+.settings-subsection { margin-top: var(--space-12); }
+

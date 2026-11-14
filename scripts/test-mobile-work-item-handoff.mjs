@@ -32,8 +32,8 @@ test('preview 413 displays exact excess; 401 stops all subsequent handoff reques
   const before=globalThis.fetch;let requests=0;t.after(()=>{globalThis.fetch=before;});
   globalThis.fetch=async()=>{requests++;return new Response('{"error":"unauthorized"}',{status:401,headers:{'Content-Type':'application/json'}});};
   const api=captureApi('http://127.0.0.1:19876','revoked-handoff',new AbortController().signal),client=handoffClient(api.request),input=request();
-  await assert.rejects(client.preview('item',input),/此设备已被撤销/);
-  for(const operation of [()=>client.agents(),()=>client.sessions('claude'),()=>client.read('item',input.handoffId),()=>client.confirm('item',input,preview,true)])await assert.rejects(async()=>operation(),/此设备已被撤销/);
+  await assert.rejects(client.preview('item',input),/电脑拒绝了这台设备/);
+  for(const operation of [()=>client.agents(),()=>client.sessions('claude'),()=>client.read('item',input.handoffId),()=>client.confirm('item',input,preview,true)])await assert.rejects(async()=>operation(),/电脑拒绝了这台设备/);
   assert.equal(requests,1);
 });
 const source=await fs.readFile('apps/mobile/src/features/handoff/ItemHandoff.tsx','utf8');

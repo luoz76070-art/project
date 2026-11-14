@@ -1,4 +1,5 @@
 import { SystemNotice } from "../shared/SystemNotice";
+import { ConnectionCard } from "../features/connection/ConnectionCard";
 import { WorkItemsPage } from "../features/workItems/WorkItemsPage";
 import { ThreadRow } from "../features/threads/ThreadRow";
 import { SidebarScrim } from "../features/threads/SidebarScrim";
@@ -228,7 +229,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
   const workspaceTitle = selected?.threadName || (isNewThread ? "新线程" : "Mobile Codex");
   const workspaceSubtitle =
     selected?.cwd ||
-    (connectionState === "ok" ? "Relay 已连接" : connectionState === "testing" ? "检测连接中" : "打开设置配置 Endpoint 和 Token");
+    (connectionState === "ok" ? "已连接电脑" : connectionState === "testing" ? "正在检测连接" : "打开设置连接电脑");
   const chatSubtitle = selected?.cwd || (isNewThread ? "准备创建新的 Codex 线程" : workspaceSubtitle);
   const isDesktopWatch = activeRuntime.watchMode === "desktop-tail";
   const desktopCapability = activeRuntime.desktopControl;
@@ -1958,8 +1959,12 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
           </button>
         </div>
 
+        <ConnectionCard endpoint={endpoint} token={token} connectionState={connectionState} open={settingsOpen} />
         <PairingPanel endpoint={endpoint} token={token} onPaired={applyPairedConnection} />
-        <section className="settings-section">
+        {settingsOpen && <section className="settings-section"><VoiceSettings endpoint={endpoint} token={token} /></section>}
+        <section className="settings-section"><details className="settings-disclosure advanced-settings"><DisclosureSummary>高级</DisclosureSummary>
+          <p className="setting-description">手动填写电脑地址和访问令牌、检查连接、导出诊断。配对成功后一般不需要改。</p>
+          <div className="settings-subsection">
           <h3>手动连接</h3>
           <div className="profile-row">
             <label className="input-field">
@@ -1982,9 +1987,9 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
           <div className="field-row">
             <label className="input-field">
               <Server size={16} />
-              <input value={draftEndpoint} onChange={(event) => setDraftEndpoint(event.target.value)} placeholder="Relay endpoint" />
+              <input value={draftEndpoint} onChange={(event) => setDraftEndpoint(event.target.value)} placeholder="电脑地址，例如 https://…" aria-label="电脑地址" />
             </label>
-            <button className="icon-button" onClick={() => openHealthUrl(endpoint)} aria-label="打开健康检查">
+            <button className="icon-button" onClick={() => openHealthUrl(endpoint)} aria-label="在浏览器里检查电脑地址" title="在浏览器里检查电脑地址">
               <ExternalLink size={17} />
             </button>
           </div>
@@ -1994,11 +1999,11 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
               <input
                 value={draftToken}
                 onChange={(event) => setDraftToken(event.target.value)}
-                placeholder="Token"
+                placeholder="访问令牌" aria-label="访问令牌"
                 type={showToken ? "text" : "password"}
               />
             </label>
-            <button className="icon-button" onClick={() => setShowToken((value) => !value)} aria-label="显示或隐藏 token">
+            <button className="icon-button" onClick={() => setShowToken((value) => !value)} aria-label="显示或隐藏访问令牌">
               {showToken ? <EyeOff size={17} /> : <Eye size={17} />}
             </button>
           </div>
@@ -2016,10 +2021,33 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
               <span>保存档案</span>
             </button>
           </div>
-        </section>
-
-        {settingsOpen && <section className="settings-section"><VoiceSettings endpoint={endpoint} token={token} /></section>}
-        <section className="settings-section"><details className="settings-disclosure"><DisclosureSummary>会话显示诊断</DisclosureSummary>
+        </div>
+        <div className="settings-subsection">
+          <h3>电脑状态</h3>
+          <div className="status-grid">
+            <span>电脑</span>
+            <strong>{connectionState === "ok" ? "在线" : connectionState === "testing" ? "检测中" : "待确认"}</strong>
+            <span>实时会话</span>
+            <strong>{relayStatus?.live?.ok ? "可用" : relayStatus?.live?.error ?? "未检测"}</strong>
+            <span>桌面端 Codex</span>
+            <strong>{relayStatus?.desktopControl?.ok ? "可控制" : relayStatus?.desktopControl?.error ?? "未检测"}</strong>
+            <span>上传目录</span>
+            <strong>{relayStatus?.uploadDir ? shortPath(relayStatus.uploadDir) : "未检测"}</strong>
+          </div>
+          <div className="settings-actions">
+            <button className="action-button" onClick={() => void refreshRelayStatus()}>
+              <Activity size={16} />
+              <span>刷新状态</span>
+            </button>
+            {relayStatus?.uploadDir && (
+              <button className="action-button" onClick={() => copyText(relayStatus.uploadDir, "upload-dir")}>
+                <Clipboard size={16} />
+                <span>{copied === "upload-dir" ? "已复制" : "复制上传目录"}</span>
+              </button>
+            )}
+          </div>
+        </div>
+          <div className="settings-subsection"><details className="settings-disclosure"><DisclosureSummary>会话显示诊断</DisclosureSummary>
           <p className="update-note">出现显示或连接问题时，可复制不超过 2 KB 的摘要。详细报告单独保存为文件，最多 64 KB。仅含版本、身份指纹、数量及连接状态，不含正文、附件路径或密钥。</p>
           <div className="settings-actions"><button className="action-button" disabled={!selected?.id || copyingMessageDiagnostics} onClick={() => void exportMessageDiagnostics("copy")}>
             {copyingMessageDiagnostics ? <Loader2 size={16} className="spin" /> : <Copy size={16} />}
@@ -2027,6 +2055,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
           </button>
           <button className="action-button" disabled={!selected?.id || copyingMessageDiagnostics} onClick={() => void exportMessageDiagnostics("file")}><Download size={16} /><span>保存详细报告</span></button></div>
           {messageDiagnosticsStatus && <p className="update-note" role="status">{messageDiagnosticsStatus}</p>}
+        </details></div>
         </details></section>
         {isKelivoHost ? <section className="settings-section"><h3>应用版本</h3><p>{appVersionLabel}</p><button className="action-button" onClick={() => window.dispatchEvent(new Event(productOpenUpdates))}><Download size={18} /><span>应用更新</span></button></section> : <section className="settings-section"><details className="settings-disclosure"><DisclosureSummary>版本与更新</DisclosureSummary>
           <div className="version-card">
@@ -2097,32 +2126,6 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
             </button>
           </div>
         </details></section>}
-
-        <section className="settings-section">
-          <h3>电脑状态</h3>
-          <div className="status-grid">
-            <span>Relay</span>
-            <strong>{connectionState === "ok" ? "在线" : connectionState === "testing" ? "检测中" : "待确认"}</strong>
-            <span>Live</span>
-            <strong>{relayStatus?.live?.ok ? "可用" : relayStatus?.live?.error ?? "未检测"}</strong>
-            <span>Desktop</span>
-            <strong>{relayStatus?.desktopControl?.ok ? "IPC 可用" : relayStatus?.desktopControl?.error ?? "未检测"}</strong>
-            <span>上传目录</span>
-            <strong>{relayStatus?.uploadDir ? shortPath(relayStatus.uploadDir) : "未检测"}</strong>
-          </div>
-          <div className="settings-actions">
-            <button className="action-button" onClick={() => void refreshRelayStatus()}>
-              <Activity size={16} />
-              <span>刷新状态</span>
-            </button>
-            {relayStatus?.uploadDir && (
-              <button className="action-button" onClick={() => copyText(relayStatus.uploadDir, "upload-dir")}>
-                <Clipboard size={16} />
-                <span>{copied === "upload-dir" ? "已复制" : "复制上传目录"}</span>
-              </button>
-            )}
-          </div>
-        </section>
 
         <section className="settings-section">
           <h3>主题</h3>

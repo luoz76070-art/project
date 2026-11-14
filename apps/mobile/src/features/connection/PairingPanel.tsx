@@ -19,7 +19,7 @@ export function PairingPanel({ endpoint, token, onPaired }: { endpoint: string; 
       const payload = input.startsWith("{") ? JSON.parse(input) as { endpoint?: string; code?: string } : { code: input };
       const target = normalizeEndpoint(payload.endpoint ?? endpoint);
       assertSecureEndpoint(target);
-      if (typeof payload.code !== "string" || !payload.code.trim()) throw new Error("请粘贴电脑 Relay 的配对信息");
+      if (typeof payload.code !== "string" || !payload.code.trim()) throw new Error("请粘贴电脑上显示的配对信息");
       const result = await apiPost<{ token: string }>(buildUrl(target, "/api/pairing/consume"), "", { code: payload.code, name: "手机" });
       if (!result.token) throw new Error("配对响应缺少设备凭证");
       await onPaired(target, result.token);
@@ -51,8 +51,8 @@ export function PairingPanel({ endpoint, token, onPaired }: { endpoint: string; 
   }
 
   return <section className="settings-section pairing-section">
-    <h3>连接电脑</h3>
-    <p className="setting-description">在电脑 Relay 中点击 Pair phone，或让 Codex 的 Mobile Codex 插件生成配对信息，再粘贴到这里。配对信息 5 分钟内有效，仅可使用一次。</p>
+    <h3>配对与设备</h3>
+    <p className="setting-description">在电脑上的 MobiCodex 网关生成配对码（也可以让 Codex 的 MobiCodex 插件生成），粘贴到这里。配对码 5 分钟内有效，只能用一次。</p>
     <label className="pairing-input"><span>配对信息</span><textarea aria-label="配对信息" value={pairingText} maxLength={4096} placeholder="粘贴电脑配对信息或一次性配对码" onChange={event => setPairingText(event.target.value)} /></label>
     <div className="settings-actions">
       <button className="action-button primary" onClick={() => void pair()} disabled={busy || !pairingText.trim()}>配对连接</button>

@@ -1,4 +1,4 @@
-export const deviceRevokedMessage = "此设备已被撤销，请重新配对";
+export const deviceRevokedMessage = "电脑拒绝了这台设备：可能已被撤销，或访问令牌不对。请重新配对。";
 export const deviceRevokedError = () => Object.assign(new Error(deviceRevokedMessage), { status: 401 });
 
 /** In-memory only. A different Relay path or newly paired token gets its own state. */

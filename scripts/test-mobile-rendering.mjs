@@ -299,7 +299,8 @@ test('U11 sidebar keeps two actions and source values, while testing connections
   assert.match(app, /setSourceFilter\("all"\)\}>全部/);
   assert.match(app, /setSourceFilter\("desktop"\)\}>电脑发起/);
   assert.match(app, /setSourceFilter\("relay"\)\}>手机发起/);
-  const connection = app.slice(app.indexOf('<h3>手动连接</h3>'), app.indexOf('<VoiceSettings'));
+  const connection = app.slice(app.indexOf('<h3>手动连接</h3>'), app.indexOf('会话显示诊断'));
+  assert.ok(connection.length > 0, 'manual connection sits in 高级, before diagnostics');
   assert.match(connection, /onClick=\{\(\) => void testConnection\(\)\}/);
   assert.match(connection, /disabled=\{connectionState === "testing"\}/);
   assert.match(connection, /测试连接/);
