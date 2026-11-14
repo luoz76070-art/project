@@ -7,7 +7,7 @@
 **AI 聊天 · Codex 电脑工作台 · 一个 App**
 
 [![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)](#下载)
-[![Preview](https://img.shields.io/badge/preview-0.1.10-blue)](releases/android/kelivo-preview/0.1.10/)
+[![Preview](https://img.shields.io/badge/preview-0.1.11-blue)](releases/android/kelivo-preview/0.1.11/)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47.6-02569B?logo=flutter)](apps/kelivo)
 [![License](https://img.shields.io/badge/整合发行-AGPL--3.0-555)](apps/kelivo/LICENSE)
 
@@ -19,7 +19,7 @@ MobiCodex 把 Kelivo 的 AI 客户端与 Codex To Phone 的电脑控制能力放
 
 你可以在「AI」页独立聊天，也可以在「电脑」页继续电脑上的 Codex、DeepSeek Harness、Claude Code 或 OpenCode 会话。需要衔接时，主动将某条 AI 回复交给电脑，编辑并确认发送。切换入口无需调用模型判断，也不会自动创建电脑任务。
 
-当前交付为 **0.1.10-native-preview / versionCode 12**，面向 Android arm64 手机。源码保留不等于所有功能都完成验收；完整 Kelivo 功能对照、最低系统、系统插件与部分真实联动仍在逐项检查，详见[验收账本](docs/audits/2026-11-06/kelivo-parity-evidence.md)。
+当前交付为 **0.1.11-native-preview / versionCode 13**，面向 Android arm64 手机。源码保留不等于所有功能都完成验收；完整 Kelivo 功能对照、最低系统、系统插件与部分真实联动仍在逐项检查，详见[验收账本](docs/audits/2026-11-06/kelivo-parity-evidence.md)。
 
 2026-11-07，用户已真机确认升级 code9，DeepSeek 原会话和正文正常。配套网关及 DeepSeek 0.2.7 原桥接已上线，兼容实际宿主 0.2.2-rc.1；本地/公网 77 项检查通过。code8 说明常显与 code7 图片/大图、字号、连接/草稿/主题的真机证据保留；code9 其余真实交互仍按项验收，详见[运行记录](docs/audits/2026-11-07/agent-parity-runtime.md)。
 
@@ -29,17 +29,17 @@ code10 使用用户选定的黑白电脑/手机图标，并将应用名、启动
 
 | 文件 | 用途 |
 | --- | --- |
-| [Android APK：0.1.10 预览版（下载页）](https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/index.html) | Android 7.0+、arm64-v8a；原预览证书签名，可覆盖安装已有版本 |
-| [GitHub Release APK](https://github.com/luoz76070-art/MobiCodex/releases/download/mobicodex-kelivo-v0.1.10-native-preview/mobicodex-0.1.10-preview-arm64.apk) | 同一次构建，GitHub Actions 临时证书签名，仅适合全新安装或核对构建 |
-| [对应源码归档](https://github.com/luoz76070-art/MobiCodex/releases/download/mobicodex-kelivo-v0.1.10-native-preview/mobicodex-0.1.10-preview-source.tar.gz) | 与本 APK 对应的源码、依赖锁、构建入口和逐文件 SHA256 |
+| [Android APK：0.1.11 预览版（下载页）](https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/index.html) | Android 7.0+、arm64-v8a；原预览证书签名，可覆盖安装已有版本 |
+| [GitHub Release APK](https://github.com/luoz76070-art/MobiCodex/releases/download/mobicodex-kelivo-v0.1.11-native-preview/mobicodex-0.1.11-preview-arm64.apk) | 同一次构建，GitHub Actions 临时证书签名，仅适合全新安装或核对构建 |
+| [对应源码归档](https://github.com/luoz76070-art/MobiCodex/releases/download/mobicodex-kelivo-v0.1.11-native-preview/mobicodex-0.1.11-preview-source.tar.gz) | 与本 APK 对应的源码、依赖锁、构建入口和逐文件 SHA256 |
 | [电脑网关图片修复预览](releases/android/kelivo-preview/0.1.7/desktop-image-reference-preview/) | 支持原会话明确引用的隔离副本图片，沿用 code9 与 DeepSeek 0.2.7；[检查与部署状态](docs/audits/2026-11-07/image-reference-fix.md) |
 | [最新电脑兼容补充：DeepSeek 0.2.7](releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/) | 配套网关、原 profile 桥接、源码补丁；新增 Harness 0.2.2-rc.1 兼容，无个人配置 |
 | [code9 原配套网关与插件](releases/android/kelivo-preview/0.1.7/README.md#电脑端配套更新) | 原归档保留，含 Claude 0.1.2；DeepSeek 新宿主请用上面的 0.2.7 补充 |
-| [校验值与版本说明](releases/android/kelivo-preview/0.1.10/) | SHA256、签名说明、兼容边界及电脑网关要求 |
+| [校验值与版本说明](releases/android/kelivo-preview/0.1.11/) | SHA256、签名说明、兼容边界及电脑网关要求 |
 
 安装包约 59.8 MiB，包名为 `com.mobilecodex.kelivo.preview`。下载页与 App 内更新提供的安装包使用原预览证书签名，可直接覆盖安装；GitHub Release 上的同版本安装包由 GitHub Actions 构建并用临时证书签名，不能覆盖已安装版本。它与原独立 Codex To Phone App 的包名不同；手机安装器会要求你确认。
 
-App 的独立自托管更新源已同步 **0.1.10 / code12**。code6–11 使用者可打开「设置 → 应用更新 → 检查更新」，下载后按 Android 提示确认安装。code4/5 请先用上面的 APK 覆盖安装一次。更新包与对应源码的公网校验见[发布记录](docs/audits/2026-11-07/mobicodex-branding.md)；电脑网关升级另按版本说明操作。
+App 的独立自托管更新源已同步 **0.1.11 / code13**。code6–12 使用者可打开「设置 → 应用更新 → 检查更新」，下载后按 Android 提示确认安装。code4/5 请先用上面的 APK 覆盖安装一次。更新包与对应源码的公网校验见[发布记录](docs/audits/2026-11-07/mobicodex-branding.md)；电脑网关升级另按版本说明操作。
 
 ## 界面预览
 
