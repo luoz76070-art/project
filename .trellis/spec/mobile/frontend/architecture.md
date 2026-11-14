@@ -24,7 +24,7 @@
 
 2026-10-29缓存保护：Codex输入保存至`mobileCodexThreadInputCacheV1:${scope}`，包含普通草稿、pendingMessageId/Text及本地未确认消息，不随正文LRU淘汰；关键输入JSON按UTF-16计最多1MiB，超限明确返回input-failed，不截断。正文沿用V2键与messageIdentityVersion=3，最多24线程×120消息、总JSON最多2MiB，优先最近访问，配额不足可只清理本scope正文。先写输入，成功后才替换正文；迁移重试先压缩旧正文，保留唯一的旧输入副本。新输入键存在时（包括空对象）是权威，不能从失败残留的旧正文恢复已清空输入。700ms/隐藏/pagehide/卸载flush保持；App单独展示保存失败与重试，普通进度不可覆盖。题目答案、审批/控制能力与令牌不新增持久化。
 
-APK32将Codex运行状态/普通发送反馈收进`.composer-toolbar`，空草稿仅显示主停止按钮；有文本或附件才显示紧凑的引导/排队直接发送及独立停止。`hasMessageContent`只表示内容是否存在，能力/提交锁仍使用原`canSubmitMessage`/`canSend`/`canInterrupt`，不能借布局重算控制权限或静默切mode。待发由原生details默认收起并按线程key隔离，数量与uncertain/paused/sending/waiting优先摘要在收起时仍可见；明细与取消仍来自原权威队列。待确认/网络/错误不因紧凑布局被隐藏，旧网关禁用queue时仍显示兼容说明。
+U2将所有电脑通道的当前状态/普通发送反馈收进输入框上方唯一的`.composer-status-bar`，停止按钮同属该栏，空草稿和有内容均只显示一个；有文本或附件才显示紧凑的引导/排队直接发送。`hasMessageContent`只表示内容是否存在，能力/提交锁仍使用原`canSubmitMessage`/`canSend`/`canInterrupt`，不能借布局重算控制权限或静默切mode。待发由原生details默认收起并按线程key隔离，数量与uncertain/paused/sending/waiting优先摘要在收起时仍可见；明细与取消仍来自原权威队列。待确认/网络/错误不因紧凑布局被隐藏，旧网关禁用queue时仍显示兼容说明。
 
 - Workspace key 由 profile ID、cacheNamespace 与规范化 Endpoint 组成。保存/切换档案才替换连接；卸载时取消请求、订阅和计时器。原生 HTTP 无法物理取消时，丢弃旧作用域结果。
 - 基线读取结束后才建立订阅；seq/baseSeq 不连续时重建基线。正常 SSE 暂停业务轮询，降级/健康检查 single-flight；后台暂停，回前台重新检查。
@@ -80,3 +80,7 @@ MessageMediaProvider 目标为 threadId 或 agentId+sessionId 的互斥联合，
 U10：消息中的本地Markdown文件链接显示为不可导航的文件名标签，完整目的路径放title；只HTTP(S)链接可作外链，代码块/行内代码保持原文。路径展示统一正斜杠，不改变原始路径或项目持久化身份。抽屉侧栏和遮罩同读sidebarOpen，无选中项仅用于初始化；关闭后不隐式重开，分屏切换仍关闭抽屉。遮罩浅深色复用--scrim。设置details保留原生展开/键盘操作，summary使用共享Lucide箭头并隐藏原生marker。
 
 U11：线程行由ThreadRow展示标题/时间，项目路径只留分组标题（同名项目仍有消歧路径）。全部筛选隐藏常规桌面来源，手机/CLI/Exec/未知保留小标签；desktop隐藏桌面，relay隐藏appServer，其他来源显式保留。all/desktop/relay过滤语义不变，不将CLI伪称手机。当前桌面的唯一标记保留。连接检测只留设置的手动连接区；更早会话保留原range行为和44px命中区域，使用文字链接外观。
+
+U1：MessageTimeline 只在展示层标记同 turnId 的非工具助手消息，工具过程卡片不打断该组，用户消息或换 turnId 时重新分组；缺 turnId 的消息仅按相邻助手正文分组。组首显示 Agent 图标/名字，正文和 data-message-id/role 仍逐条保留。用户正文用 --accent-soft（宿主 primaryContainer），助手无气泡。消息可聚焦；点击/聚焦才挂载时间与复制，焦点移入复制按钮不关闭。长按触摸/笔 550ms 复制，移动超过10px、取消、移出、放开、失焦或卸载取消计时；链接/按钮等交互子元素与已有选区不触发整条复制；从 pre、code、.code-block、table 及其子元素开始的长按不启动整条复制计时，这些区域的 contextmenu 不 preventDefault，保留原生文本选择。剪贴板结果必须 await，失败不能报成功，卸载后的结果不更新提示。系统提示使用图标细横幅；工具卡与代码块继续单独分隔。
+
+U2：SessionStatus 的 composer 变体与 ComposerSessionStatus 统一接收 S2 推断结果，不从 running 自行猜测思考/执行。消息流和顶栏不再重复本轮执行/终态标签，工具过程摘要保留。状态栏保留有效 lastTurn 的原因、结束时间及 observed 标记；新轮运行时显示上轮结果，同 turn 的终态只展示一次。思考/执行点用 --signal 呼吸，prefers-reduced-motion 时禁用；失败用 --danger。停止和发送沿原能力门控，键盘快捷键、默认排队与草稿保护不变。

@@ -1,9 +1,9 @@
+import { SystemNotice } from "../../shared/SystemNotice";
 import { useDeviceRevoked } from "../connection/useDeviceRevoked";
 import { deviceRevokedMessage } from "../connection/authorization";
-import { SessionStatus } from "../chat/SessionStatus";
-import { agentSessionStatus, isActiveSessionStatus } from "../chat/sessionStatusModel";
+import { ComposerSessionStatus } from "../chat/SessionStatus";
+import { agentSessionStatus } from "../chat/sessionStatusModel";
 import { loadReadingPositions, saveReadingPositions } from "../chat/readingPositions";
-import { TurnResultNotice } from "../chat/TurnResultNotice";
 import { productBeforeNavigate, isKelivoHost } from "../product/host";
 import { useEffect, useRef, useState } from "react";
 import { registerVoiceAgentDrafts } from "../voice/draftRecovery";
@@ -121,7 +121,7 @@ export default function AgentWorkspace({ onCapture, endpoint, token, scope, onBa
       <button className="icon-button" aria-label="新建事项" title="新建事项" onClick={onCapture}><Plus size={18} /></button>
       {!selected && <button className="icon-button" aria-label="刷新 Agent 列表" disabled={loading} onClick={() => void (agent ? loadSessions(agent) : loadAgents())}><RefreshCcw size={18} className={loading ? "spin" : ""} /></button>}
     </header>
-    {(deviceRevoked || error) && <p className="connection-notice" role="status">{deviceRevoked ? deviceRevokedMessage : error}</p>}
+    {(deviceRevoked || error) && <SystemNotice error>{deviceRevoked ? deviceRevokedMessage : error}</SystemNotice>}
     {selected && agent ? <AgentChat voiceRecovery={voiceRecovery} key={`${agent.id}:${selected.id}`} endpoint={endpoint} token={token} agent={agent} session={selected}
       scopeKey={scope} draft={drafts[`${agent.id}:${selected.id}`] ?? ""} onDraft={value => setDrafts(current => {
         const key = `${agent.id}:${selected.id}`, next = { ...current };
@@ -301,37 +301,34 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
     void operate("message", "/messages", { text: composeMessageWithAttachments(input.text, attachments), delivery });
   }
   const sessionStatus = agentSessionStatus(snapshot, online);
-  const progress = isActiveSessionStatus(sessionStatus) ? sessionStatus : null;
   return <section className="agent-chat">
-    <div className="agent-connection" role="status"><span className={`status-dot ${online ? "ok" : "error"}`} />{online ? `${agent.label} 已连接` : stream === "unauthorized" ? deviceRevokedMessage : stream === "paused" ? "连接已暂停，返回前台后恢复" : "正在恢复连接…"}</div>
+    <SystemNotice className="agent-connection" error={stream === "unauthorized"}>{online ? `${agent.label} 已连接` : stream === "unauthorized" ? deviceRevokedMessage : stream === "paused" ? "连接已暂停，返回前台后恢复" : "正在恢复连接…"}</SystemNotice>
     <div className="messages-viewport" ref={viewport} onScroll={() => { const element = viewport.current; if (element) { nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100; reading.current[draftSession] = element.scrollTop; } }}>
       {(snapshot?.partialText || agent.id === "claude" || agent.id === "deepseek") && <details className="agent-capabilities"><summary>会话能力与同步范围</summary>
         {snapshot?.partialText && <p>当前显示已同步的消息与工具记录，长内容可能截断；更早历史以本通道提供的加载入口为准。</p>}
         {agent.id === "claude" && <p>消息在当前任务结束后处理；提问和单次审批可在手机处理。</p>}
         {agent.id === "deepseek" && <p>查看历史不会启动任务；发送后继续原会话，运行中可引导或排队。权限请求须核对完整参数后允许一次或拒绝。</p>}
       </details>}
-      {snapshot?.operationError && <p className="connection-notice" role="status">{snapshot.operationError.code === "rejected" ? "电脑会话拒绝了本次操作，输入内容已保留。" : "操作尚未送达电脑便已过期，输入内容已保留。"}</p>}
-      <TurnResultNotice result={snapshot?.lastTurn} running={snapshot?.status === "running"} />
+      {snapshot?.operationError && <SystemNotice error>{snapshot.operationError.code === "rejected" ? "电脑会话拒绝了本次操作，输入内容已保留。" : "操作尚未送达电脑便已过期，输入内容已保留。"}</SystemNotice>}
       {historyCursor && (agent.id === "deepseek" || history.length < 190) && <button className="history-button" disabled={historyBusy} onClick={() => void older()}>{historyBusy ? "读取历史中…" : "加载更早的消息"}</button>}
       {agent.id === "deepseek" && history.length > 0 && <button className="history-button" disabled={historyBusy} onClick={() => { setHistory([]); setHistoryCursor(snapshot?.historyCursor ?? null); nearBottom.current = true; requestAnimationFrame(() => viewport.current?.scrollTo({ top: viewport.current.scrollHeight })); }}>正在浏览历史 · 返回最新</button>}
       {agent.id !== "deepseek" && history.length >= 190 && <p className="setting-description">已达到手机历史显示上限，更早记录可在电脑查看。</p>}
-      <MessageMediaProvider endpoint={endpoint} token={token} agentId={agent.id} sessionId={session.id}>
-        <MessageTimeline messages={messages} running={snapshot?.status === "running"} renderMessage={(message, expandToolDetails) => <MessageBubble message={message} expandToolDetails={expandToolDetails} assistantLabel={agent.label} smooth={false} smoothPending={false} onSmoothDone={() => {}} onCopy={() => void writeClipboard(message.text)} />} />
+      <MessageMediaProvider key={draftSession} endpoint={endpoint} token={token} agentId={agent.id} sessionId={session.id}>
+        <MessageTimeline messages={messages} running={snapshot?.status === "running"} renderMessage={(message, expandToolDetails, assistantContinuation) => <MessageBubble message={message} assistantContinuation={assistantContinuation} expandToolDetails={expandToolDetails} assistantLabel={agent.label} smooth={false} smoothPending={false} onSmoothDone={() => {}} onCopy={() => writeClipboard(message.text)} />} />
       </MessageMediaProvider>
       {snapshot?.questions.map(question => <AgentQuestions key={question.id} request={question} agentLabel={agent.label} disabled={!online || busy} onRespond={answers => operate("question", `/questions/${question.id}/respond`, { answers }, question.id)} />)}
       {snapshot?.permissions.map(permission => <PermissionCard key={permission.id} permission={permission} agentLabel={agent.label} disabled={!online || busy} onRespond={decision => operate("permission", `/permissions/${permission.id}/respond`, { decision }, permission.id)} />)}
-      <SessionStatus status={progress} />
       {!snapshot && <p className="inline-loading" role="status"><Loader2 size={18} className="spin" />正在读取原会话…</p>}
     </div>
     <footer className="composer-panel agent-composer">
-      {error && <p className="connection-notice" role="status">{error}</p>}
-      {unresolved && !queuedSubmission && <p className="connection-notice" role="status">{snapshot?.submission?.delivery === "uncertain" ? "提交结果未知，正在核对；请勿重复发送。" : "已提交，等待服务确认。"}</p>}
+      {error && <SystemNotice error>{error}</SystemNotice>}
+      {unresolved && !queuedSubmission && <SystemNotice>{snapshot?.submission?.delivery === "uncertain" ? "提交结果未知，正在核对；请勿重复发送。" : "已提交，等待服务确认。"}</SystemNotice>}
       {snapshot?.queue && <AgentQueue queue={snapshot.queue} disabled={!online || busy} onCancel={id => operate("queue-cancel", `/queue/${encodeURIComponent(id)}/cancel`, {}, id)} />}
       {attachments.length > 0 && <AttachmentTray attachments={attachments} onRemove={id => onDraft(composeAgentDraft(input.text, attachments.filter(item => item.id !== id)))} />}
       <input ref={uploadInput} type="file" multiple className="hidden-file-input" onChange={event => void uploadFiles(event.target.files)} />
       <ComputerComposer draft={input.text} onDraft={editText} onSend={send} onStop={() => void operate("interrupt", "/interrupt", {})} onUpload={() => uploadInput.current?.click()}
         voice={<VoiceInput context={{ cwd: session.directory, title: session.title, messages }} scope={scopeKey} thread={draftSession} recovery={voiceRecovery} endpoint={endpoint} token={token} draft={input.text} onDraft={editText} />} label="发送给当前 Agent 会话"
-        placeholder={online ? `向 ${agent.label} 发送消息` : "草稿已保留，等待恢复连接…"} status={sessionStatus ? <SessionStatus status={sessionStatus} variant="composer" /> : `${agent.label} · 当前会话`}
+        placeholder={online ? `向 ${agent.label} 发送消息` : "草稿已保留，等待恢复连接…"} status={<ComposerSessionStatus status={sessionStatus} lastTurn={snapshot?.lastTurn} running={snapshot?.status === "running"} fallback={`${agent.label} · 当前会话`} />}
         uploading={uploading} uploadDisabled={!token} busy={busy} running={snapshot?.status === "running"} hasContent={Boolean(input.text.trim() || attachments.length)}
         canSend={sendEnabled} canStop={Boolean(control?.canInterrupt)} deliveries={{ steer: sendEnabled && Boolean(control?.canSteer), queue: sendEnabled }}
         maxLength={Math.max(0, 20_000 - (draft.length - input.text.length))} />

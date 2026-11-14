@@ -1,3 +1,4 @@
+import { SystemNotice } from "../shared/SystemNotice";
 import { ThreadRow } from "../features/threads/ThreadRow";
 import { SidebarScrim } from "../features/threads/SidebarScrim";
 import { DisclosureSummary } from "../shared/DisclosureSummary";
@@ -6,11 +7,10 @@ import { migrateHandoff } from '../features/product/handoffMigration';
 import { HandoffMigrationNotice } from '../features/product/HandoffMigrationNotice';
 import { useDeviceRevoked } from "../features/connection/useDeviceRevoked";
 import { deviceRevokedMessage } from "../features/connection/authorization";
-import { SessionStatus } from "../features/chat/SessionStatus";
-import { codexSessionStatus, isActiveSessionStatus, readActivityEvidence, resultStatus } from "../features/chat/sessionStatusModel";
+import { ComposerSessionStatus } from "../features/chat/SessionStatus";
+import { codexSessionStatus, readActivityEvidence, resultStatus } from "../features/chat/sessionStatusModel";
 import { createPortal } from "react-dom";
 import { ProductRemoteShell } from "../features/product/ProductRemoteShell";
-import { TurnResultNotice } from "../features/chat/TurnResultNotice";
 import { isKelivoHost, navigateProduct, productBeforeNavigate, productOpenUpdates, takeProductSettingsLaunch, ProductHost } from "../features/product/host";
 import { productVersionCode, productVersionLabel } from "../features/product/identity";
 import { HandoffCard } from '../features/product/HandoffCard';
@@ -27,14 +27,14 @@ import { readDiagnosticEnvironment, makeDiagnosticsExport, saveDiagnosticFile } 
 import { createConnectionJournal } from "../features/connection/diagnosticJournal";
 import { createPollScope } from "../features/chat/sync";
 import { createRuntimeSync } from "../features/chat/runtimeSync";
-import { messagesForRender, turnInlineIndicator, capMessages, mergeMessages, mergeMessagesById, turnStatusText, desktopActionText, canUseEventSource } from "../features/chat/messages";
+import { messagesForRender, capMessages, mergeMessages, mergeMessagesById, turnStatusText, desktopActionText, canUseEventSource } from "../features/chat/messages";
 import { groupThreadsByProject, mergeThreads, shortPath, isDesktopSource, firstLine, sourceClass, sourceLabel, retainCodexThread, sessionInRange, sessionListRefreshMs, type SessionRange, type SourceFilter } from "../features/threads/model";
 import { ProjectGroups } from "../features/threads/ProjectGroups";
 import { SessionRangeControl } from "../features/threads/SessionRangeControl";
 import { loadConnectionProfiles, saveConnectionSettings, profileNameFromEndpoint, upsertConnectionProfile, saveConnectionProfiles } from "../features/connection/profiles";
 import { loadThreadList, loadActiveTurns, threadFromLiveTurn, readThread } from "../features/connection/queries";
 import { assertSecureEndpoint, toFriendlyFetchError, apiGet as requestGet, buildUrl, normalizeEndpoint, apiPost as requestPost } from "../features/connection/http";
-import { makeDiagnosticText, connectionBadge, openHealthUrl } from "../features/connection/diagnostics";
+import { makeDiagnosticText, openHealthUrl } from "../features/connection/diagnostics";
 import { Capacitor } from "@capacitor/core";
 import { NativeHotUpdate } from "../features/updates/native";
 import { useApkUpdate } from "../features/updates/useApkUpdate";
@@ -238,19 +238,10 @@ function Workspace({ onCapture, voiceRecovery, connection, scope, onApply, onOpe
   useEffect(() => { setQueueCancelling(null); }, [activeThreadKey]);
   const latestAssistantMessage = [...visibleMessages].reverse().find((message) => message.role === "assistant");
   const latestAssistantMessageId = latestAssistantMessage?.id ?? "";
-  const latestAssistantHasText = Boolean(latestAssistantMessage?.text.trim());
   const smoothLatestAssistant = Boolean(latestAssistantMessageId && activeRuntime.smoothMessageId === latestAssistantMessageId);
   const smoothPending = Boolean(smoothLatestAssistant && (activeRuntime.sending || isLiveTurnActive));
   const pendingApprovals = activeRuntime.approvals.filter((approval) => ["pending", "submitting", "submitted", "uncertain"].includes(approval.status));
   const sessionStatus = codexSessionStatus(activeRuntime, connectionState === "ok");
-  const turnActivity = isActiveSessionStatus(sessionStatus) ? sessionStatus : null;
-  const inlineTurnIndicator = turnInlineIndicator(visibleMessages, turnActivity);
-  const showInlineTurnIndicator = Boolean(
-    !loadingMessages &&
-      inlineTurnIndicator &&
-      !activeRuntime.lastTurnError &&
-      !(activeRuntime.turnStatus === "completed" && latestAssistantHasText),
-  );
   const canControlSelected = Boolean(isNewThread || selected);
   const hasMessageContent = Boolean(draft.trim() || attachments.length > 0);
   const canSubmitMessage = hasMessageContent && canControlSelected && !submittingMessage && !(activeRuntime.pendingMessageSource === 'handoff' && activeRuntime.pendingMessageId) && (!sending || isLiveTurnActive) && (!(selected && isDesktopSource(selected)) || desktopSend.ready);
@@ -1833,9 +1824,6 @@ function Workspace({ onCapture, voiceRecovery, connection, scope, onApply, onOpe
                 {canUseDesktopIpc && <span className="watch-chip">桌面可控</span>}
                 {isDesktopHistoryOnly && <span className="watch-chip warn">历史可接管</span>}
                 {activeRuntime.watching && <span className="watch-chip live">同步中</span>}
-                {isLiveTurnActive && <span className="watch-chip live">运行中</span>}
-                {activeRuntime.turnStatus === "interrupted" && <span className="watch-chip warn">已打断</span>}
-                {activeRuntime.turnStatus === "failed" && <span className="watch-chip warn">失败</span>}
               </div>
             </div>
             <div className="chat-actions">
@@ -1865,39 +1853,32 @@ function Workspace({ onCapture, voiceRecovery, connection, scope, onApply, onOpe
               </div>
             )}
             <MessageMediaProvider key={activeThreadKey} endpoint={endpoint} token={token} threadId={activeThreadKey}>
-            <MessageTimeline messages={visibleMessages} running={isLiveTurnActive} renderMessage={(message, expandToolDetails) => (
-              <React.Fragment>
-                <MessageBubble
-                  message={message}
-                  expandToolDetails={expandToolDetails}
-                  smooth={smoothLatestAssistant && message.id === latestAssistantMessageId}
-                  smoothPending={smoothPending && message.id === latestAssistantMessageId}
-                  onSmoothDone={() => {
-                    if (!activeThreadKey || message.id !== activeRuntime.smoothMessageId) return;
-                    if (activeRuntime.sending || activeRuntime.turnStatus === "starting" || activeRuntime.turnStatus === "inProgress") return;
-                    patchRuntime(activeThreadKey, { smoothMessageId: null });
-                  }}
-                  onCopy={() => copyText(message.text, message.id)}
-                />
-                {showInlineTurnIndicator && inlineTurnIndicator?.messageId === message.id && (
-                  <SessionStatus status={turnActivity} anchorRole={message.role} />
-                )}
-              </React.Fragment>
+            <MessageTimeline messages={visibleMessages} running={isLiveTurnActive} renderMessage={(message, expandToolDetails, assistantContinuation) => (
+              <MessageBubble
+                message={message}
+                assistantContinuation={assistantContinuation}
+                expandToolDetails={expandToolDetails}
+                smooth={smoothLatestAssistant && message.id === latestAssistantMessageId}
+                smoothPending={smoothPending && message.id === latestAssistantMessageId}
+                onSmoothDone={() => {
+                  if (!activeThreadKey || message.id !== activeRuntime.smoothMessageId) return;
+                  if (activeRuntime.sending || activeRuntime.turnStatus === "starting" || activeRuntime.turnStatus === "inProgress") return;
+                  patchRuntime(activeThreadKey, { smoothMessageId: null });
+                }}
+                onCopy={() => writeClipboard(message.text)}
+              />
             )} />
             </MessageMediaProvider>
             {(activeRuntime.userInputs ?? []).map(request => (
               <UserInputCard key={request.id} request={request} disabled={connectionState !== "ok" || streamState !== "online"} onRespond={answers => respondUserInput(request, answers)} />
             ))}
-            {showInlineTurnIndicator && inlineTurnIndicator && !inlineTurnIndicator.messageId && (
-              <SessionStatus status={turnActivity} anchorRole="assistant" />
-            )}
           </div>
 
           <footer className="composer-panel">
-            {cacheSaveResult.status !== "saved" && <div className="connection-notice cache-save-notice" role={cacheSaveResult.status === "input-failed" ? "alert" : "status"}>
+            {cacheSaveResult.status !== "saved" && <SystemNotice className="cache-save-notice" error={cacheSaveResult.status === "input-failed"}>
               <span>{threadCacheSaveNotice(cacheSaveResult)}</span>
               {cacheSaveResult.status === "input-failed" && <button type="button" className="tool-button" onClick={persistWorkspaceCache}>重试保存</button>}
-            </div>}
+            </SystemNotice>}
           {hasNewMessages && (
             <button className="latest-pill" onClick={jumpToLatest}>
               <Activity size={15} />
@@ -1906,9 +1887,9 @@ function Workspace({ onCapture, voiceRecovery, connection, scope, onApply, onOpe
           )}
 
             {!handoff && <HandoffMigrationNotice migrate={migrateLegacyHandoff} />}
-            {activeRuntime.desktopSubmission && <div className="connection-notice" role="status">提交结果待确认，草稿已保留；请勿重复发送。</div>}
-            {activeRuntime.desktopInterrupt && <div className="connection-notice" role="status">打断结果待确认，正在同步会话。</div>}
-            {(deviceRevoked || streamState === "recovering" || streamState === "unauthorized" || connectionState === "error") && <div className="connection-notice" role="status"><span className="status-dot error" />{deviceRevoked || streamState === "unauthorized" ? deviceRevokedMessage : streamState === "recovering" ? "正在恢复连接，消息与草稿已保留" : "连接暂时不可用，正在检查"}</div>}
+            {activeRuntime.desktopSubmission && <SystemNotice>提交结果待确认，草稿已保留；请勿重复发送。</SystemNotice>}
+            {activeRuntime.desktopInterrupt && <SystemNotice>打断结果待确认，正在同步会话。</SystemNotice>}
+            {(deviceRevoked || streamState === "recovering" || streamState === "unauthorized" || connectionState === "error") && <SystemNotice error={deviceRevoked || streamState === "unauthorized" || connectionState === "error"}>{deviceRevoked || streamState === "unauthorized" ? deviceRevokedMessage : streamState === "recovering" ? "正在恢复连接，消息与草稿已保留" : "连接暂时不可用，正在检查"}</SystemNotice>}
             {pendingApprovals.length > 0 && (
               <div className="approval-stack">
                 {pendingApprovals.map((approval) => (
@@ -1916,17 +1897,12 @@ function Workspace({ onCapture, voiceRecovery, connection, scope, onApply, onOpe
                 ))}
               </div>
             )}
-            <TurnResultNotice result={activeRuntime.lastTurn} running={activeRuntime.turnStatus === "inProgress" || activeRuntime.turnStatus === "starting"} />
             {activeRuntime.lastTurnError && activeRuntime.lastTurnError !== activeRuntime.lastTurn?.reason.message && (
               <div className="control-banner error-control">
                 <AlertCircle size={15} />
                 <span>{activeRuntime.lastTurnError}</span>
               </div>
             )}
-            <div className="composer-status">
-              <span>{sessionStatus ? <SessionStatus status={sessionStatus} variant="composer" /> : controlText}</span>
-              <em>{connectionBadge(connectionState, canUseDesktopIpc ? desktopControlStatus : liveStatus)}</em>
-            </div>
             {attachments.length > 0 && <AttachmentTray attachments={attachments} onRemove={removeAttachment} />}
             {desktopQueue.length > 0 && <details key={activeThreadKey} className="desktop-queue">
               <summary aria-label={`待发 ${desktopQueue.length} 条，${queueSummary}`}><span role="status" aria-live="polite">待发 {desktopQueue.length} 条 · {queueSummary}</span><ChevronDown size={16} aria-hidden="true" /></summary>
@@ -1937,14 +1913,16 @@ function Workspace({ onCapture, voiceRecovery, connection, scope, onApply, onOpe
               </div>)}
               </div>
             </details>}
-            {isLiveTurnActive && nativeDesktop && !canQueue && <p className="connection-notice">排队需要更新网关；可使用引导发送。</p>}
+            {isLiveTurnActive && nativeDesktop && !canQueue && <SystemNotice>排队需要更新网关；可使用引导发送。</SystemNotice>}
             <input ref={uploadInputRef} type="file" multiple className="hidden-file-input" onChange={event => void uploadFiles(event.target.files)} />
             <ComputerComposer draft={draft} onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }}
               onSend={delivery => void sendMessage(delivery)} onStop={() => void interruptActiveTurn()} onUpload={() => uploadInputRef.current?.click()}
               disabled={!canControlSelected} uploadDisabled={!token.trim()} uploading={uploading} running={isLiveTurnActive} hasContent={hasMessageContent}
               busy={submittingMessage || (sending && !isLiveTurnActive)} canSend={canSend} canStop={canInterrupt}
               deliveries={nativeDesktop ? { steer: canSubmitMessage, queue: canSend } : undefined}
-              status={!activeRuntime.desktopSubmission && activeRuntime.desktopSendFeedback ? activeRuntime.desktopSendFeedback : sessionStatus ? <SessionStatus status={sessionStatus} variant="composer" /> : `${isDesktopWatch ? "电脑" : "Relay"} · ${isDesktopHistoryOnly ? "历史会话" : "当前会话"}`}
+              status={<ComposerSessionStatus status={sessionStatus} lastTurn={activeRuntime.lastTurn} running={isLiveTurnActive}
+                feedback={!activeRuntime.desktopSubmission ? activeRuntime.desktopSendFeedback : undefined}
+                fallback={`${isDesktopWatch ? "电脑" : "Relay"} · ${isDesktopHistoryOnly ? "历史会话" : "当前会话"}`} />}
               statusTitle={activeRuntime.desktopSendFeedback || (sessionStatus?.detail || controlText)} placeholder="向 Codex 发送消息"
               voice={<VoiceInput context={{ cwd: selected?.cwd, title: selected?.threadName, messages }} scope={scope} thread={`codex:${activeThreadKey || newThreadId}`} recovery={voiceRecovery} key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
                 onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }} />} />
