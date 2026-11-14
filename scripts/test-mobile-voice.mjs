@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import ts from 'typescript';
 import { build } from 'esbuild';
-import { voiceInputDriver } from './helpers/voice-input-driver.mjs';
+import { voiceInputDriver, segments } from './helpers/voice-input-driver.mjs';
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-voice-tests-'));
 test.after(() => fs.rm(root, { recursive: true, force: true }));
@@ -596,3 +596,132 @@ test('a successful transcription is offered to voice history exactly once; failu
   assert.deepEqual(driver.transcripts, ['记录这一句']);
 });
 
+
+// V5: long recordings arrive in pieces of about 30 s and are transcribed while the recording goes on.
+const { joinTranscripts, parseVoiceSegment, transcribeSegment } = segments;
+const fast = { attempts: 3, pollMs: 1, polls: 5 };
+const piece = (index = 0) => ({ sessionId: 's', index, startMs: index * 30000, durationMs: 30000, dataBase64: `synthetic-piece-${index}-audio` });
+
+test('V5 pieces join without stray spaces in Chinese and keep one space between Latin words', () => {
+  assert.equal(joinTranscripts(['第一段。', ' 第二段，', undefined, '', 'Run tests', 'now。']), '第一段。第二段，Run tests now。');
+  assert.equal(joinTranscripts([]), '');
+  assert.equal(joinTranscripts(['版本 0.1', '11 发布']), '版本 0.1 11 发布');
+});
+
+test('V5 piece decoder accepts only this recording and bounded audio', () => {
+  assert.deepEqual(parseVoiceSegment(piece(2), 's'), piece(2));
+  for (const bad of [{ ...piece(), sessionId: 'other' }, { ...piece(), index: -1 }, { ...piece(), index: 1.5 }, { ...piece(), durationMs: 0 }, { ...piece(), durationMs: 121000 }, { ...piece(), dataBase64: 'short' }, null, 'piece'])
+    assert.equal(parseVoiceSegment(bad, 's'), null, JSON.stringify(bad));
+});
+
+test('V5 a lost or slow piece is looked up under the same ID and sent again only when the gateway never got it', async () => {
+  const calls = [];
+  const ok = await transcribeSegment({ transcribe: async id => { calls.push(['post', id]); return '直接成功'; }, result: async () => assert.fail('no lookup') }, 'r1', piece(), new AbortController().signal, undefined, fast);
+  assert.equal(ok, '直接成功'); assert.deepEqual(calls, [['post', 'r1']]);
+
+  calls.length = 0; let gets = 0;
+  const slow = await transcribeSegment({ transcribe: async id => { calls.push(['post', id]); return null; },
+    result: async id => { calls.push(['get', id]); return ++gets < 3 ? { status: 'processing', requestId: id } : { status: 'completed', requestId: id, outcome: 'succeeded', text: '稍后成功', expiresAt: Date.now() + 1000 }; } }, 'r2', piece(), new AbortController().signal, undefined, fast);
+  assert.equal(slow, '稍后成功'); assert.deepEqual(calls.map(c => c[0]), ['post', 'get', 'get', 'get']); assert.ok(calls.every(c => c[1] === 'r2'));
+
+  calls.length = 0; let posts = 0;
+  const lost = await transcribeSegment({ transcribe: async id => { calls.push(['post', id]); if (++posts === 1) throw new Error('network lost'); return '重发成功'; },
+    result: async id => { calls.push(['get', id]); return { status: 'not_found' }; } }, 'r3', piece(), new AbortController().signal, undefined, fast);
+  assert.equal(lost, '重发成功'); assert.deepEqual(calls, [['post', 'r3'], ['get', 'r3'], ['post', 'r3']]);
+});
+
+test('V5 a refused or failed piece is not retried, and cancelling stops the lookups', async () => {
+  let gets = 0;
+  await assert.rejects(transcribeSegment({ transcribe: async () => { throw Object.assign(new Error('HTTP 400'), { status: 400 }); }, result: async () => { gets++; return { status: 'not_found' }; } }, 'r4', piece(), new AbortController().signal, undefined, fast), /HTTP 400/);
+  assert.equal(gets, 0);
+  await assert.rejects(transcribeSegment({ transcribe: async () => null, result: async id => ({ status: 'completed', requestId: id, outcome: 'failed', errorCode: 'voice_asr_unavailable', expiresAt: Date.now() + 1000 }) }, 'r5', piece(), new AbortController().signal, undefined, fast), /voice_asr_unavailable/);
+  const controller = new AbortController();
+  const pending = transcribeSegment({ transcribe: async () => null, result: async id => { controller.abort(); return { status: 'processing', requestId: id }; } }, 'r6', piece(), controller.signal, undefined, { attempts: 3, pollMs: 50, polls: 5 });
+  await assert.rejects(pending, error => error.name === 'AbortError');
+});
+
+function segmentedDriver(t, api = {}) {
+  const store = storage();
+  const driver = voiceInputDriver({ recovery: coordinator(t, store), mergeVoiceDraft, voiceError, voiceDraftHash, findMissingVoiceDetails, buildAsrHints, voiceContextEnabled, segmented: true, api: {
+    config: async () => ({ qwenConfigured: true, deepseekConfigured: true }), cancel: async () => {}, refine: async () => '整理结果',
+    result: async () => ({ status: 'not_found' }), ...api,
+  } });
+  t.after(() => driver.unmount());
+  driver.click('语音输入');
+  return driver;
+}
+async function startSegmented(driver) {
+  driver.click('开始录音');
+  await until(() => driver.listening('segment'));
+}
+
+test('V5 pieces show text while recording and end as one transcript in order, each piece sent once', async t => {
+  const posts = [];
+  const driver = segmentedDriver(t, { transcribe: async (id, audio, duration) => { posts.push({ id, audio, duration }); return ({ 'synthetic-piece-0-audio': '第一段。', 'synthetic-piece-1-audio': '第二段。', 'synthetic-piece-2-audio': 'Done' })[audio]; } });
+  driver.click('仅转文字');
+  await startSegmented(driver);
+  assert.deepEqual({ segmentMs: driver.calls.startOptions.segmentMs, maxMs: driver.calls.startOptions.maxMs }, { segmentMs: 30000, maxMs: 600000 });
+  assert.match(driver.text(), /录音最长10分钟，边录边转文字/);
+  assert.match(driver.text(), /结束录音 · 0:00 \/ 10:00/);
+  driver.segment({ index: 0 });
+  await until(() => driver.original() === '第一段。');
+  assert.ok(driver.button('结束录音 · 0:00 / 10:00'), 'still recording while the first text shows');
+  driver.segment({ index: 2, durationMs: 12000 });
+  driver.segment({ index: 1 });
+  driver.segment({ index: 1 }); // a repeated piece is ignored
+  driver.recording({ dataBase64: undefined, segments: 3, durationMs: 72000 });
+  await until(() => driver.original() === '第一段。第二段。Done' && driver.button('采用原文'));
+  // Text follows the piece index even when a piece arrives late; each piece is posted once.
+  assert.deepEqual(posts.map(p => p.audio).sort(), ['synthetic-piece-0-audio', 'synthetic-piece-1-audio', 'synthetic-piece-2-audio']);
+  assert.equal(new Set(posts.map(p => p.id)).size, 3);
+  assert.deepEqual(Object.fromEntries(posts.map(p => [p.audio, p.duration])), { 'synthetic-piece-0-audio': 30000, 'synthetic-piece-1-audio': 30000, 'synthetic-piece-2-audio': 12000 });
+  assert.deepEqual(driver.transcripts, ['第一段。第二段。Done']);
+  assert.equal(driver.session().pieces, undefined, 'audio is released once the transcript is complete');
+  driver.click('采用原文'); assert.deepEqual(driver.drafts, ['原草稿\n\n第一段。第二段。Done']);
+});
+
+test('V5 a failed piece keeps the rest; retry sends only that piece under a new ID', async t => {
+  const posts = [];
+  const driver = segmentedDriver(t, { transcribe: async (id, audio) => {
+    posts.push({ id, audio });
+    if (audio === 'synthetic-piece-1-audio' && posts.filter(p => p.audio === audio).length === 1) throw Object.assign(new Error('HTTP 502'), { status: 502 });
+    return audio === 'synthetic-piece-0-audio' ? '前半。' : '后半。';
+  }, result: async id => ({ status: 'completed', requestId: id, outcome: 'failed', errorCode: 'voice_asr_unavailable', expiresAt: Date.now() + 1000 }) });
+  driver.click('仅转文字');
+  await startSegmented(driver);
+  driver.segment({ index: 0 }); driver.segment({ index: 1 });
+  driver.recording({ dataBase64: undefined, segments: 2, durationMs: 60000 });
+  await until(() => driver.button('重新转写'));
+  assert.equal(driver.original(), '前半。');
+  const firstFailure = posts.find(p => p.audio === 'synthetic-piece-1-audio').id;
+  driver.click('重新转写');
+  await until(() => driver.original() === '前半。后半。' && driver.button('采用原文'));
+  const retried = posts.filter(p => p.audio === 'synthetic-piece-1-audio');
+  assert.equal(retried.length, 2); assert.notEqual(retried[1].id, firstFailure);
+  assert.equal(posts.filter(p => p.audio === 'synthetic-piece-0-audio').length, 1);
+});
+
+test('V5 an interrupted recording keeps what was said, leaving the app does not cancel it, and prompt mode refines the whole text once', async t => {
+  const refined = [];
+  const driver = segmentedDriver(t, { transcribe: async () => '说到一半。', refine: async (_id, text) => { refined.push(text); return '整理后的要求'; } });
+  driver.click('整理提示词');
+  await startSegmented(driver);
+  driver.hide();
+  assert.equal(driver.calls.cancel, 0, 'the recorder, not the page, ends a segmented recording when the app is left');
+  driver.segment({ index: 0 });
+  driver.recording({ dataBase64: undefined, segments: 1, durationMs: 31000, interrupted: true });
+  await until(() => refined.length === 1 && driver.button('采用提示词'));
+  assert.deepEqual(refined, ['说到一半。']);
+  assert.match(driver.text(), /录音因切到后台或来电提前结束，已保留之前的内容/);
+});
+
+test('V5 a recorder error after some pieces shows what was transcribed with the error', async t => {
+  const driver = segmentedDriver(t, { transcribe: async () => '已识别部分。' });
+  driver.click('仅转文字');
+  await startSegmented(driver);
+  driver.segment({ index: 0 });
+  await until(() => driver.original() === '已识别部分。');
+  driver.recording({ dataBase64: undefined, error: 'voice_recording_failed' });
+  assert.equal(driver.original(), '已识别部分。');
+  assert.match(driver.text(), /无法开始或完成录音/);
+});

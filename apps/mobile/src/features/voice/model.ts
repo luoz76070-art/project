@@ -1,5 +1,6 @@
 export type VoiceConfig = { region: "cn" | "sg"; workspace: string; qwenConfigured: boolean; deepseekConfigured: boolean; deepseekBaseUrl: string; qwenBaseUrl: string; asrModel: string; promptModel: string };
-export type VoiceRecording = { sessionId: string; dataBase64?: string; durationMs?: number; error?: string };
+// A segmented recording (V5) ends with how many pieces it sent and whether it was cut short, instead of the audio.
+export type VoiceRecording = { sessionId: string; dataBase64?: string; durationMs?: number; error?: string; segments?: number; interrupted?: boolean };
 
 export function parseVoiceConfig(raw: unknown): VoiceConfig {
   if (!raw || typeof raw !== "object") throw new Error("语音配置响应无效，请更新电脑网关");

@@ -13,14 +13,17 @@ import type { VoiceRecoveryPort } from "./useVoiceRecovery";
 import { buildAsrHints, type VoiceContextSource } from "./asrContext";
 import { voiceContextEnabled } from "./preferences";
 import { recordVoiceTranscript } from "./history";
+import { joinTranscripts, parseVoiceSegment, transcribeSegment, voiceSegmentMs, voiceSegmentedMaxMs, type VoiceSegment } from "./segments";
 
 type Phase = "idle" | "starting" | "recording" | "transcribing" | "failed" | "refining" | "preview";
+type Piece = { index: number; requestId: string; segment?: VoiceSegment; text?: string; error?: unknown };
+const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, recovery, context, capture = false, onCapture }: { endpoint: string; token: string; draft: string; onDraft: (value: string) => void; scope: string; thread: string; recovery: VoiceRecoveryPort; context?: VoiceContextSource; capture?: boolean; onCapture?: (raw: string) => void }) {
   const [open, setOpen] = useState(false), [phase, setPhase] = useState<Phase>("idle");
   const [mode, setMode] = useState<"text" | "prompt">(capture ? "text" : "prompt"), [seconds, setSeconds] = useState(0);
-  const [original, setOriginal] = useState(""), [prompt, setPrompt] = useState(""), [error, setError] = useState("");
+  const [original, setOriginal] = useState(""), [prompt, setPrompt] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const sheet = useRef<HTMLElement | null>(null);
-  const session = useRef<{ id: string; base: string; conflict: boolean; mode: "text" | "prompt"; abort: AbortController; requestId?: string; hints?: string[]; finished?: boolean; recordingReceived?: boolean; recording?: { dataBase64: string; durationMs: number } } | null>(null);
+  const session = useRef<{ id: string; base: string; conflict: boolean; mode: "text" | "prompt"; abort: AbortController; requestId?: string; hints?: string[]; finished?: boolean; recordingReceived?: boolean; recording?: { dataBase64: string; durationMs: number }; segmented?: boolean; pieces?: Piece[]; expected?: number; draining?: boolean; interrupted?: boolean; limit?: number; removePieces?: () => void } | null>(null);
   const latest = useRef({ draft, onDraft, context }); latest.current = { draft, onDraft, context };
   if (session.current && draft !== session.current.base) session.current.conflict = true;
   const api = voiceApi(endpoint, token);
@@ -31,7 +34,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
   function cancel() {
     const active = session.current; session.current = null;
     if (active) {
-      active.recording = undefined;
+      active.recording = undefined; active.pieces = undefined;
       active.abort.abort();
       void VoiceRecorder.cancel({ sessionId: active.id }).catch(() => {});
       if (active.requestId) { recovery.cancel(active.requestId); void api.cancel(active.requestId).catch(() => {}); }
@@ -46,7 +49,8 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
   useEffect(() => {
     const hide = () => { if (document.hidden) {
       const active = session.current;
-      if (active && !active.finished && !active.requestId) { cancel(); setPhase("idle"); setError("录音或处理已中断，请保持应用在前台后重试。"); }
+      // A segmented recording decides for itself: the recorder keeps what was said if the app is left.
+      if (active && !active.segmented && !active.finished && !active.requestId) { cancel(); setPhase("idle"); setError("录音或处理已中断，请保持应用在前台后重试。"); }
     } };
     document.addEventListener("visibilitychange", hide);
     return () => {
@@ -60,7 +64,8 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
   useEffect(() => {
     if (phase !== "recording") return;
     const started = Date.now();
-    const timer = setInterval(() => setSeconds(Math.min(120, Math.floor((Date.now() - started) / 1000))), 250);
+    const limit = session.current?.limit ?? 120;
+    const timer = setInterval(() => setSeconds(Math.min(limit, Math.floor((Date.now() - started) / 1000))), 250);
     return () => clearInterval(timer);
   }, [phase]);
 
@@ -84,12 +89,75 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
   function finished(recording: VoiceRecording, active: NonNullable<typeof session.current>) {
     if (session.current !== active || recording.sessionId !== active.id || active.recordingReceived) return;
     active.recordingReceived = true; active.finished = true;
+    if (active.segmented) {
+      active.removePieces?.();
+      if (recording.error) {
+        const partial = joinTranscripts(active.pieces?.map(piece => piece.text) ?? []);
+        active.pieces = undefined; setPhase(partial ? "preview" : "idle"); if (partial) setOriginal(partial);
+        setError(voiceError(new Error(recording.error))); return;
+      }
+      active.expected = recording.segments; active.interrupted = recording.interrupted === true;
+      active.finished = false; setPhase("transcribing"); setError("");
+      void drain(active); return;
+    }
     if (recording.error || !recording.dataBase64 || !recording.durationMs) { setPhase("idle"); setError(voiceError(new Error(recording.error || "voice_recording_failed"))); return; }
     active.recording = { dataBase64: recording.dataBase64, durationMs: recording.durationMs };
     void transcribe(active);
   }
 
+  // V5: pieces are transcribed one after another, in order, while the recording goes on.
+  function accept(segment: VoiceSegment, active: NonNullable<typeof session.current>) {
+    if (session.current !== active || !active.pieces || active.pieces.some(piece => piece.index === segment.index)) return;
+    active.pieces.push({ index: segment.index, segment, requestId: crypto.randomUUID() });
+    active.pieces.sort((a, b) => a.index - b.index);
+    void drain(active);
+  }
+
+  async function drain(active: NonNullable<typeof session.current>) {
+    if (active.draining) return;
+    active.draining = true;
+    try {
+      for (;;) {
+        if (session.current !== active || !active.pieces) return;
+        const next = active.pieces.find(piece => piece.text === undefined && piece.error === undefined && piece.segment);
+        if (!next) break;
+        try {
+          next.text = await transcribeSegment(api, next.requestId, next.segment!, active.abort.signal, voiceContextEnabled() ? active.hints : undefined);
+          next.segment = undefined;
+        } catch (caught) {
+          if (session.current !== active || active.abort.signal.aborted) return;
+          next.error = caught;
+        }
+        if (session.current === active && active.pieces) setOriginal(joinTranscripts(active.pieces.map(piece => piece.text)));
+      }
+    } finally { active.draining = false; }
+    if (active.recordingReceived) settle(active);
+  }
+
+  function settle(active: NonNullable<typeof session.current>) {
+    if (session.current !== active || !active.pieces || active.draining || active.finished) return;
+    const failed = active.pieces.find(piece => piece.error !== undefined);
+    const text = joinTranscripts(active.pieces.map(piece => piece.text));
+    setOriginal(text);
+    if (failed || active.pieces.length !== active.expected) {
+      active.finished = true; setPhase("failed");
+      setError(failed ? voiceError(failed.error) : "有一段录音没有收到，请重新录音。");
+      return;
+    }
+    active.pieces = undefined; recordVoiceTranscript(text);
+    if (active.interrupted) setNotice("录音因切到后台或来电提前结束，已保留之前的内容。");
+    if (active.mode === "prompt") void refine(text, active);
+    else { active.finished = true; setPhase("preview"); }
+  }
+
   async function transcribe(active: NonNullable<typeof session.current>) {
+    if (active.segmented) {
+      // Only the failed pieces go again, each under a new request ID; the ones already done are kept.
+      if (session.current !== active || !active.pieces || !active.finished) return;
+      active.finished = false; setPhase("transcribing"); setError("");
+      for (const piece of active.pieces) if (piece.error !== undefined) { piece.error = undefined; piece.requestId = crypto.randomUUID(); }
+      void drain(active); return;
+    }
     // Lock before hashing/submitting: a second click can arrive before React renders.
     if (session.current !== active || !active.finished || !active.recording || active.abort.signal.aborted) return;
     active.finished = false; setPhase("transcribing"); setError("");
@@ -110,7 +178,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
 
   async function start() {
     if (session.current && !session.current.finished) return;
-    cancel(); setError(""); setPrompt(""); setOriginal(""); setSeconds(0); setPhase("starting");
+    cancel(); setError(""); setNotice(""); setPrompt(""); setOriginal(""); setSeconds(0); setPhase("starting");
     const active = { id: crypto.randomUUID(), base: latest.current.draft, hints: voiceContextEnabled() && latest.current.context ? buildAsrHints(latest.current.context) : undefined, conflict: false, mode: capture ? "text" : mode, abort: new AbortController() } as NonNullable<typeof session.current>;
     session.current = active;
     let listener: Awaited<ReturnType<typeof VoiceRecorder.addListener>> | undefined;
@@ -125,7 +193,14 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
       // Verify configuration before requesting the microphone; no paid request here.
       const config = await api.config(active.abort.signal);
       if (!config.qwenConfigured || (!capture && mode === "prompt" && !config.deepseekConfigured)) throw new Error("语音服务尚未配置，请到设置 → 语音与提示词填写所需 Key。");
-      await VoiceRecorder.start({ sessionId: active.id });
+      const begun = await VoiceRecorder.start({ sessionId: active.id, segmentMs: voiceSegmentMs, maxMs: voiceSegmentedMaxMs });
+      if (begun && typeof begun === "object" && begun.segmented === true && session.current === active) {
+        active.segmented = true; active.pieces = [];
+        active.limit = Math.round(Number(begun.maxMs) / 1000) || voiceSegmentedMaxMs / 1000;
+        const pieces = await VoiceRecorder.addListener("segment", raw => { const segment = parseVoiceSegment(raw, active.id); if (segment) accept(segment, active); });
+        active.removePieces = () => { void pieces.remove(); };
+        active.abort.signal.addEventListener("abort", () => { void pieces.remove(); }, { once: true });
+      }
       if (session.current === active && !active.recordingReceived) setPhase("recording");
     } catch (caught) {
       await listener?.remove();
@@ -158,10 +233,10 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
         }
       }}>
         <header><strong>语音输入</strong><button type="button" className="icon-button" aria-label="关闭语音输入" onClick={() => { cancel(); setOpen(false); setPhase("idle"); }}><X size={20} /></button></header>
-        <p className="setting-description">{capture ? "录音最长2分钟。采用原始转写作为事项说明，不做自动整理。" : "录音最长2分钟。预览后回填草稿，再由你发送。"}</p>
+        <p className="setting-description">{capture ? "录音最长10分钟，边录边转文字。采用原始转写作为事项说明，不做自动整理。" : "录音最长10分钟，边录边转文字。预览后回填草稿，再由你发送。"}</p>
         {!capture && <div className="voice-modes" aria-label="语音处理方式">{(["text", "prompt"] as const).map(value => <button type="button" key={value} aria-pressed={mode === value} disabled={busy} onClick={() => setMode(value)}>{value === "text" ? "仅转文字" : "整理提示词"}</button>)}</div>}
         {!available && <p role="status">录音需要安装支持语音的新版 Android APK。</p>}
-        {phase === "recording" ? <button type="button" className="action-button voice-recording" onClick={() => void VoiceRecorder.stop({ sessionId: session.current!.id }).catch(caught => { cancel(); setPhase("idle"); setError(voiceError(caught)); })}><Square size={17} />结束录音 · {seconds}s / 120s</button>
+        {phase === "recording" ? <button type="button" className="action-button voice-recording" onClick={() => void VoiceRecorder.stop({ sessionId: session.current!.id }).catch(caught => { cancel(); setPhase("idle"); setError(voiceError(caught)); })}><Square size={17} />结束录音 · {session.current?.segmented ? `${clock(seconds)} / ${clock(session.current.limit ?? 600)}` : `${seconds}s / 120s`}</button>
           : <button type="button" className="action-button" disabled={!available || busy} onClick={() => void start()}><Mic size={17} />{original || phase === "failed" ? "重新录音" : "开始录音"}</button>}
         {busy && phase !== "recording" && <p className="voice-stage" role="status"><Loader2 size={16} className="spin" />{phase === "starting" ? "正在准备麦克风…" : phase === "transcribing" ? "百炼正在转文字…" : "DeepSeek 正在整理…"}</p>}
         {original && <label>识别原文<textarea aria-label="语音识别原文" readOnly={capture} value={original} maxLength={20_000} disabled={busy} rows={4} onChange={event => { if (!capture) { setOriginal(event.target.value); setPrompt(""); } }} /></label>}
@@ -171,6 +246,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
           <ul>{missingDetails.slice(0, 5).map((detail, index) => <li key={index}>{({ number: "数字", literal: "路径或标识", negation: "否定或禁止" })[detail.kind]}：{detail.text}</li>)}</ul>
           {missingDetails.length > 5 && <p>等 {missingDetails.length} 项</p>}
         </div>}
+        {notice && <p className="voice-stage" role="status">{notice}</p>}
         {error && <p className="voice-error" role="alert">{error}</p>}
         {phase === "failed" && <div className="voice-actions">
           <button type="button" className="action-button" onClick={() => { if (session.current) void transcribe(session.current); }}>重新转写</button>

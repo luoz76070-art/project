@@ -39,7 +39,7 @@
 | W4b | Agent 通道的回合对应：Claude/DeepSeek/OpenCode 适配器给出“消费了某条 clientMessageId 的回合”及其结果（三家的消息 ID、回合 ID 各不相同，不能猜） | 三通道各完成一轮自动进入待验证；忙碌、排队时不误绑 | M | 6-astra xhigh |
 | W5 | 事项页（待处理/进行中/待验证/完成） | 窄屏、150% 字号 | M | 6-astra high |
 | W6+V6 | 保留策略 + 语音历史：默认 30 天、可关录音、删卡连带删资产 | 到期清理单测 | S–M | 6.1-sol |
-| V5 | 长录音分段（30 秒一段、实时文字、上限约 10 分钟）；依赖 V1 | 5 分钟录音完成 | L | 6-astra high |
+| V5 | **已完成（11-14，待随下一版 APK 发布）：原生按 ADTS 帧在 25–35 秒的停顿处切段，网页逐段转写并实时显示，上限 10 分钟；模拟器 2 分钟录音 5 段验证通过。** 长录音分段（30 秒一段、实时文字、上限约 10 分钟）；依赖 V1 | 5 分钟录音完成 | L | 6-astra high |
 | B2 | 去 Kelivo 化（可见部分）：界面 30 处文字、关于页、启动页、tag/APK 命名；保留 AGPL 许可、版权与“基于 Kelivo”说明 | 只在“关于 → 开源许可”可见 Kelivo | M | 6.1-sol |
 | C0 | **已完成设计（11-14，[文档](2026-11-14-c0-cc-desk-control.md)）：不需要上游 PR，改为网关直连服务端协议；当前服务端 0.3.2 只够只读，写操作要服务端 ≥0.3.3，待用户决定。** 原定：CC Desk IPC 设计：桌面端（Electron 主进程）新增本地 IPC（unix socket 0600，JSON-RPC：会话列表/订阅事件/发消息/审批/停止），薄封装其服务端 WebSocket 协议；向上游 sun168567/cc-desk-tunnel 提 PR，不被接受则维护补丁版 | 设计文档 + 上游沟通结论 | S–M | 6-astra xhigh |
 | C2 | CcDeskAdapter 替换 ClaudeAdapter：经 IPC 做会话、历史、发送、审批/提问、停止，状态对接 S1；新会话可用 schedules.json 兜底 | CC Desk 会话进统一 Agent 列表，语音与交接可用 | M–L | 6-astra xhigh |

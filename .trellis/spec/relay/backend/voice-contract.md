@@ -27,6 +27,8 @@
 
 新APK29原生MediaRecorder.OutputFormat.AAC_ADTS/.aac、单声道16kHz48kbps，DataURI audio/aac。ADTS逐帧检查sync/layer/sample-index/帧长与边界；旧M4A对31使用audio/mp4，Qwen3在请求前拒绝并提示升级，不谎称旧容器是AAC、不自动转码。录音120秒/2MiB，取消/后台/audiofocus丢失释放并删临时文件。
 
+V5分段（11-14）：start带segmentMs/maxMs时原生回`segmented:true`，录音不停，按ADTS整帧从增长中的文件切段（AdtsSegments，每帧1024样本=64ms）；每100ms取getMaxAmplitude，满25秒后遇到低于本段平均1/6（且≤300起）的安静点就切，满35秒切在25秒后最安静的点；每段以`segment`事件{index,startMs,durationMs,dataBase64}送到网页，最后一段在stop后送出（不足0.3秒的尾巴丢弃），`finished`只带segments总数与durationMs、不再带音频。上限10分钟/8MiB，单段读取≤1MiB；录音期间FLAG_KEEP_SCREEN_ON；切后台或焦点丢失时分段录音保留已录内容并在finished带`interrupted:true`，不再整段丢弃。网关接口不变：每段是一次独立的transcribe（≤121秒），网页按段序号逐段请求，响应丢失先按同一requestId查结果、查不到才用同一ID重发，失败段重试换新ID，已成功的段不重发；全部完成后按序拼接（只在两段都是拉丁字母或数字相接时加空格），再走原有整理流程。旧原生（不回segmented）仍走120秒单段流程。
+
 V4：31原生parameters.vocabulary将手机参考和固定手机会话/聊天会话/Codex/DeepSeek去重合并，均低权重1；含非ASCII的单条截到15个Unicode字符，纯ASCII截到7个空格片段。新加坡子空间不支持热词；按有效目标域名判断，显式workspace或新加坡maas专属域名保守省略整份词表。Qwen3仅在有手机参考时将参考与固定词表去重，作为首条system.content换行文本提供识别背景，不发送vocabulary或传统角色指令。其他模型不附加参考参数。
 
 2026-11-14匿名在线核验：[热词及限制](https://help.aliyun.com/zh/model-studio/improve-asr-accuracy)、[31原生HTTP](https://help.aliyun.com/zh/model-studio/qwen-audio-asr-http-api)、[Qwen3兼容API](https://help.aliyun.com/zh/model-studio/qwen-asr-api-reference)。31也支持前置user/input_text上下文（每轮400字符、最近5轮），本实现选用与现有行为一致的即时热词；旧fun-asr-flash页面现在描述Fun-ASR，不再作为31协议依据。
