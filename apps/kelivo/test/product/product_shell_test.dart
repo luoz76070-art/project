@@ -46,7 +46,9 @@ void main() {
         palette['composerOutline'],
         tinted(dark ? scheme.onSurface : scheme.outline, dark ? 0.1 : 0.2),
       );
-      expect(palette['secondaryText'], tinted(scheme.onSurface, 0.5));
+      expect(palette['secondaryText'], tinted(scheme.onSurfaceVariant, 1));
+      expect(palette['signal'], tinted(scheme.tertiary, 1));
+      expect(palette['error'], tinted(scheme.error, 1));
       expect(
         palette['navigationIndicator'],
         '#${scheme.secondaryContainer.toARGB32().toRadixString(16).substring(2)}',
@@ -54,7 +56,7 @@ void main() {
       expect(palette['userBubble'], isNot(palette['primaryContainer']));
       expect(
         palette['outline'],
-        '#${Color.alphaBlend(semantic.hairline, scheme.surface).toARGB32().toRadixString(16).substring(2)}',
+        '#${Color.alphaBlend(scheme.outline, scheme.surface).toARGB32().toRadixString(16).substring(2)}',
       );
     }
   });

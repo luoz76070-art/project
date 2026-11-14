@@ -30,6 +30,8 @@ Map<String, String> productPalette(ThemeData theme) {
     'primary': hex(cs.primary),
     'onPrimary': hex(cs.onPrimary),
     'primaryContainer': hex(cs.primaryContainer),
+    'signal': hex(cs.tertiary),
+    'error': hex(cs.error),
     // Match the AI page's default message and input surfaces, rather than
     // using the saturated primaryContainer for every remote component.
     'userBubble': surfaceTint(cs.primary, dark ? 0.15 : 0.08),
@@ -42,13 +44,13 @@ Map<String, String> productPalette(ThemeData theme) {
       dark ? cs.onSurface : cs.outline,
       dark ? 0.1 : 0.2,
     ),
-    'secondaryText': surfaceTint(cs.onSurface, 0.5),
+    'secondaryText': hex(cs.onSurfaceVariant),
     'messageAuthor': surfaceTint(cs.onSurface, 0.7),
     'navigationIndicator': hex(
       theme.navigationBarTheme.indicatorColor ?? cs.secondaryContainer,
     ),
     'navigationText': hex(cs.onSurface),
-    'outline': hex(semantic.hairline),
+    'outline': hex(cs.outline),
   };
 }
 
