@@ -15,11 +15,11 @@ const turn = (turnId, status = 'completed') => ({ turnId, status, reason: { code
 async function fixture(t, { root: existing, sessionId = randomUUID(), lastTurn = null } = {}) {
   const root = existing ?? await fs.mkdtemp(path.join(os.tmpdir(), 'work-item-progress-'));
   const desktopListeners = new Set(), agentListeners = new Set(), calls = [];
-  const state = { outcome: 'confirmed', busy: false, messages: [], lastTurn, agentLastTurn: null };
+  const state = { outcome: 'confirmed', busy: false, messages: [], lastTurn, agentLastTurn: null, consumedTurns: undefined };
   const desktopSnapshot = () => ({ threadId: sessionId, status: state.busy ? 'inProgress' : 'idle', messages: state.messages, lastTurn: state.lastTurn,
     control: { transport: 'native', token: 'fixture-token', activeTurnId: state.busy ? 'turn-busy' : null, canSend: true, submission: null, queue: { items: [] } } });
   const agentView = agentId => ({ agentId, session: { id: sessionId, title: '目标会话', directory: root, updatedAt: new Date().toISOString() }, connected: true,
-    status: 'idle', messages: [], questions: [], permissions: [], activity: 'thinking', historyCursor: null, partialText: false, lastTurn: state.agentLastTurn,
+    status: 'idle', messages: [], questions: [], permissions: [], activity: 'thinking', historyCursor: null, partialText: false, lastTurn: state.agentLastTurn, consumedTurns: state.consumedTurns,
     submission: null, control: { token: 'fixture-token', canSend: true, canSteer: true, canInterrupt: true } });
   const desktop = { stop: async () => {}, messageQueue: { stop: async () => {}, revoke: async () => {} },
     followThread() { return () => {}; }, getStreamSnapshot: desktopSnapshot,
@@ -137,8 +137,8 @@ test('relay restart resumes tracking from the persisted binding', async t => {
   await fs.rm(first.root, { recursive: true, force: true });
 });
 
-test('agent channels: delivery moves the card to in_progress, then no watch and no guessed turn result (W4b)', async t => {
-  for (const agent of ['claude', 'deepseek', 'opencode']) {
+test('agents without turn binding: delivery moves the card to in_progress, then no watch and no guessed turn result', async t => {
+  for (const agent of ['claude', 'opencode']) {
     const f = await fixture(t), { uid } = await f.handoff(agent);
     let card = await f.until(uid, value => value.state === 'in_progress', `${agent} in progress`);
     for (const deadline = Date.now() + 2000; f.watchers() && Date.now() < deadline;) await settle(5);
@@ -146,6 +146,31 @@ test('agent channels: delivery moves the card to in_progress, then no watch and 
     f.state.agentLastTurn = turn('whatever'); f.emit(); await settle();
     card = await f.item(uid); assert.equal(card.state, 'in_progress'); assert.equal(card.currentAttempt.agentId, agent);
   }
+});
+
+test('DeepSeek (W4b): only the bridge-reported consuming turn is bound; its own result moves the card', async t => {
+  const f = await fixture(t), { uid, id } = await f.handoff('deepseek');
+  let card = await f.until(uid, value => value.state === 'in_progress', 'deepseek in progress');
+  assert.equal(card.currentAttempt.channel, 'agent'); assert.equal(card.currentAttempt.turnId, null);
+  f.state.agentLastTurn = turn('7'); f.emit(); await settle();
+  card = await f.item(uid); assert.equal(card.state, 'in_progress', 'an old bridge without bindings is never guessed'); assert.equal(card.currentAttempt.turnId, null);
+  f.state.consumedTurns = [{ clientMessageId: randomUUID(), turnId: '7' }, { clientMessageId: id, turnId: '8' }]; f.emit();
+  card = await f.until(uid, value => value.currentAttempt.turnId === '8', 'consuming turn bound');
+  assert.equal(card.state, 'in_progress', "the busy turn's result does not move the card");
+  f.state.agentLastTurn = turn('8'); f.emit();
+  card = await f.until(uid, value => value.state === 'to_verify', 'completed turn waits for verification');
+  assert.equal(card.lastTransition.actor, 'system'); assert.equal(card.currentAttempt.lastTurn.turnId, '8');
+  for (const deadline = Date.now() + 2000; f.watchers() && Date.now() < deadline;) await settle(5);
+  assert.equal(f.watchers(), 0, 'the watch closes once the turn result is written');
+  assert.equal(f.calls.length, 1, 'progress tracking never sends');
+});
+
+test('DeepSeek (W4b): a failed consuming turn returns the card with its reason', async t => {
+  const f = await fixture(t), { uid, id } = await f.handoff('deepseek');
+  await f.until(uid, value => value.state === 'in_progress', 'deepseek in progress');
+  f.state.consumedTurns = [{ clientMessageId: id, turnId: '3' }]; f.state.agentLastTurn = turn('3', 'failed'); f.emit();
+  const card = await f.until(uid, value => value.state === 'returned', 'failed turn returned');
+  assert.equal(card.currentAttempt.turnId, '3'); assert.equal(card.lastTransition.reason, reasons.failed[1]);
 });
 
 test('progressCandidate ignores old, foreign-attempt and already-settled cards', () => {
@@ -160,4 +185,6 @@ test('progressCandidate ignores old, foreign-attempt and already-settled cards',
   const running = { ...base, state: 'in_progress', currentAttempt: { attemptId: 'a', delivery: 'delivered', channel: 'codex-desktop', clientMessageId: record.handoffId, lastTurn: null } };
   assert.equal(progressCandidate(running, now), record);
   assert.equal(progressCandidate({ ...running, currentAttempt: { ...running.currentAttempt, channel: 'agent' } }, now), null);
+  assert.equal(progressCandidate({ ...running, currentAttempt: { ...running.currentAttempt, channel: 'agent', agentId: 'deepseek' } }, now), record);
+  for (const agentId of ['claude', 'opencode', null]) assert.equal(progressCandidate({ ...running, currentAttempt: { ...running.currentAttempt, channel: 'agent', agentId } }, now), null);
 });

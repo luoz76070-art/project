@@ -189,6 +189,47 @@ test('S1 DeepSeek interrupt ACK and status change alone never claim interruption
   await until(() => current(f).status === 'idle'); assert.equal(current(f).lastTurn, null);
 });
 
+test('W4b DeepSeek binds the turn that consumed a queued phone message, never the busy turn or desktop input', async t => {
+  const f = await fixture(t, { running: true, nativeQueue: true }); let close = await f.watch();
+  const input = { ...operation(current(f)), text: 'handoff while busy', delivery: 'queue' };
+  await f.adapter.sendMessage(f.id, input);
+  await until(() => current(f).submission?.clientMessageId === input.clientMessageId);
+  f.event('user/message', user({ source: { kind: 'user' }, content: [{ type: 'text', text: 'desktop input in the busy turn' }] }));
+  f.event('turn/end', { turn: 1, reason: { kind: 'completed' } });
+  await until(() => current(f).lastTurn?.turnId === '1');
+  assert.deepEqual(current(f).consumedTurns, [], 'the busy turn and desktop input bind nothing');
+  // A claimed message whose step is rejected emits no user/message: nothing is bound.
+  f.event('turn/start', { turn: 2 }); f.event('turn/end', { turn: 2, reason: { kind: 'aborted' } });
+  await until(() => current(f).lastTurn?.turnId === '2');
+  assert.deepEqual(current(f).consumedTurns, []);
+  const queued = f.agent.inbox.nextTurn.shift();
+  f.event('turn/start', { turn: 3 }); f.event('user/message', queued);
+  await until(() => current(f).consumedTurns?.length === 1);
+  assert.deepEqual(current(f).consumedTurns, [{ clientMessageId: input.clientMessageId, turnId: '3' }]);
+  assert.equal(current(f).submission.delivery, 'confirmed');
+  f.event('turn/end', { turn: 3, reason: { kind: 'completed' } });
+  await until(() => current(f).lastTurn?.turnId === '3');
+  close(); close = await f.watch();
+  assert.deepEqual(current(f).consumedTurns, [{ clientMessageId: input.clientMessageId, turnId: '3' }], 'bindings survive resubscribe');
+  close();
+});
+
+test('W4b DeepSeek binds an idle-session prompt to the turn it starts and keeps only recent bindings', async t => {
+  const f = await fixture(t, { nativeQueue: true }); await f.watch();
+  const ids = [];
+  for (let turn = 1; turn <= 18; turn++) {
+    const input = { ...operation(current(f)), text: `task ${turn}`, delivery: 'queue' }; ids.push(input.clientMessageId);
+    await f.adapter.sendMessage(f.id, input);
+    const message = f.calls.at(-1).message;
+    f.agent.status = 'running'; f.event('turn/start', { turn }); f.event('user/message', message);
+    f.event('turn/end', { turn, reason: { kind: 'completed' } }); f.agent.status = 'idle'; f.emit('agent/status', { agent: f.agent, status: 'idle' });
+    await until(() => current(f).consumedTurns?.at(-1)?.clientMessageId === input.clientMessageId && current(f).status === 'idle' && current(f).control.canSend);
+  }
+  assert.equal(current(f).consumedTurns.length, 16);
+  assert.deepEqual(current(f).consumedTurns.at(-1), { clientMessageId: ids.at(-1), turnId: '18' });
+  assert.equal(current(f).consumedTurns.some(item => item.clientMessageId === ids[0]), false);
+});
+
 test('dsh queued mobile input is visible and cancel removes only its original native inbox item', async t => {
   const f = await fixture(t, { running: true, nativeQueue: true }); await f.watch();
   const desktop = user({ source: { kind: 'user' }, content: [{ type: 'text', text: 'desktop-owned queue' }] });
@@ -336,7 +377,7 @@ test('dsh accepted input followed by model failure remains delivered and shows o
   close();
 });
 
-for (const harnessVersion of ['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1']) test(`dsh ${harnessVersion} reports the loaded runtime and passes the gateway handshake`, async t => {
+for (const harnessVersion of ['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.3']) test(`dsh ${harnessVersion} reports the loaded runtime and passes the gateway handshake`, async t => {
   const f = await fixture(t, { harnessVersion, initial: true });
   const info = await f.client.json('/info', deepSeekInfo);
   assert.equal(info.harnessVersion, harnessVersion);

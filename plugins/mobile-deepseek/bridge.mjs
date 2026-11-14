@@ -7,7 +7,7 @@ import { mobileQueueSnapshot, queuedMobileInput } from './queue.mjs';
 import path from 'node:path';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
-export const supportedHarnessVersions = Object.freeze(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1']);
+export const supportedHarnessVersions = Object.freeze(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.3']);
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u;
 const fail = (code, status = 409) => Object.assign(new Error(`DEEPSEEK_${code}`), { status });
 const iso = value => new Date(Number.isSafeInteger(value) && value >= 0 && value <= 8.64e15 ? value : Date.now()).toISOString();
@@ -32,6 +32,17 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
     results.delete(hostId);
     results.set(hostId, { seq: event.seq, lastTurn: turnResult(event, previous?.lastTurn) });
     while (results.size > 128) results.delete(results.keys().next().value);
+  }
+  // W4b: the turn that consumed each phone message, per original session. dsh records a claimed prompt
+  // as the user/message between that turn's turn/start and turn/end (a rejected step emits none), so the
+  // turn open at confirmation is exact. Kept without subscribers, like results.
+  const consumed = new Map();
+  function rememberConsumed(hostId, clientMessageId, turn) {
+    if (!hostId || !uuid.test(clientMessageId) || !Number.isSafeInteger(turn) || turn < 0) return;
+    const list = (consumed.get(hostId) ?? []).filter(item => item.clientMessageId !== clientMessageId);
+    list.push({ clientMessageId, turnId: String(turn) });
+    consumed.delete(hostId); consumed.set(hostId, list.slice(-16));
+    while (consumed.size > 128) consumed.delete(consumed.keys().next().value);
   }
   let stopped = false;
   const interactions = createDeepSeekInteractions(ctx);
@@ -92,6 +103,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
       agentId: 'deepseek', session: catalog ? catalog.row(entry.id).session : session(agent), connected: true, updatedAt: iso(Date.now()),
       status: agent?.status ?? 'idle', activity: entry.stream?.text ? 'outputting' : entry.activity,
       lastTurn: results.get(agent?.id ?? catalog?.row(entry.id).hostId)?.lastTurn ?? null,
+      consumedTurns: (consumed.get(agent?.id ?? catalog?.row(entry.id).hostId) ?? []).map(item => ({ ...item })),
       messages: entry.messages, ...requests, historyCursor: entry.historyCursor ?? null, partialText: true,
       control: { token: entry.token, canSend: ready, canSteer: ready && Boolean(agent) && entry.turn !== null, canInterrupt: ready && agent?.status === 'running' && entry.turn !== null },
       submission: entry.submission ? { clientMessageId: entry.submission.clientMessageId, action: entry.submission.action, delivery: entry.submission.delivery } : null,
@@ -136,7 +148,10 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
     }
     const message = event.type === 'user/message' && data?.source?.kind === 'user' ? data : event.type === 'assistant/message' ? data.message : null;
     if (message) {
-      if (event.type === 'user/message' && entry.submission && (entry.submission.messageId === message.id || (entry.submission.rpcId && entry.submission.rpcId === message.source?.rpcId))) entry.submission.delivery = 'confirmed';
+      if (event.type === 'user/message' && entry.submission && (entry.submission.messageId === message.id || (entry.submission.rpcId && entry.submission.rpcId === message.source?.rpcId))) {
+        entry.submission.delivery = 'confirmed';
+        if (entry.submission.action === 'message') rememberConsumed(entry.agent?.id ?? catalog?.row(entry.id).hostId, entry.submission.clientMessageId, entry.turn);
+      }
       if (entry.clients.size) {
         if (event.type === 'assistant/message' && entry.stream?.turn === data.turn && entry.stream?.step === data.step) {
           entry.messages = entry.messages.filter(item => item.id !== entry.stream.id); entry.stream = null;

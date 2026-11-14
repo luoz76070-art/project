@@ -90,9 +90,9 @@ export function openHandoffTarget(deps: { gateway: AgentGateway; desktop: Deskto
         if (view.submission?.clientMessageId !== id || view.submission.action !== 'message') return null;
         return view.submission.delivery === 'confirmed' ? 'delivered' : view.submission.delivery === 'uncertain' ? 'unknown' : null;
       };
-      // Agent snapshots carry no clientMessageId on messages and their turn IDs differ per host, so no exact binding yet (W4b).
+      // Agent messages carry no clientMessageId; only a host-reported binding counts (DeepSeek bridge 0.2.8+, W4b). Others stay null.
       return { target: () => ({ ...key, title: current()!.session.title, cwd: directory(current()?.session.directory) }), writable, evidence, close,
-        turnFor: () => null, lastTurn: () => current()?.lastTurn ?? null,
+        turnFor: (id: string) => current()?.consumedTurns?.find(v => v.clientMessageId === id)?.turnId ?? null, lastTurn: () => current()?.lastTurn ?? null,
         async send(text, id) {
           if (!writable()) throw workItemError('work_item_handoff_control_unavailable');
           const result = await abortable(adapter.sendMessage(key.sessionId, { text, clientMessageId: id, controlToken: current()!.control!.token, delivery: 'queue' }), signal);

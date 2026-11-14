@@ -52,7 +52,7 @@ async function fixture(t) {
     outcome: value => { outcome = value; }, evidence: value => { evidence = value; }, busy: () => { busy = true; }, cwd: value => { cwd = value; }, gate: value => { gate = value; } };
 }
 for (const agent of ['codex','claude','deepseek','opencode']) test(`${agent}: exact text, managed path, immutable raw voice and receipt; delivery moves the card to in_progress, never further`, async t => {
-  const f = await fixture(t), captureId = randomUUID(), assetId = randomUUID();
+  const f = await fixture(t), captureId = randomUUID(), assetId = randomUUID(), watched = agent === 'codex' || agent === 'deepseek';
   const upload = await f.request('POST','/api/uploads',{purpose:'capture',assetId,captureId,role:'original',originalAssetId:null,fileName:'截图.png',mimeType:'image/png',dataBase64:png().toString('base64')});
   assert.equal(upload.statusCode,200,upload.body);
   const item = await f.create({capture:{id:captureId,mode:'voice',createdAt:new Date().toISOString(),assetIds:[assetId],rawTranscript:'这是语音原文'}});
@@ -64,7 +64,7 @@ for (const agent of ['codex','claude','deepseek','opencode']) test(`${agent}: ex
   assert.ok(result.text.includes('这是语音原文')); assert.ok(result.text.includes('备注 原样\n第二行')); assert.ok(result.text.includes(JSON.stringify(await fs.realpath(path.join(f.root,upload.json().upload.relativePath)))));
   assert.equal(result.attachments.length,1); assert.equal(result.attachments[0].orientation,1);
   assert.equal(f.calls[0].delivery,agent==='codex'?'start':'queue');
-  let latest; for (const deadline=Date.now()+5000; Date.now()<deadline;) { latest=(await f.request('GET',`/api/work-items/${item.item.uid}`)).json().item; if (latest.state!=='todo' && f.listeners.size===(agent==='codex'?1:0)) break; await new Promise(r=>setTimeout(r,5)); }
+  let latest; for (const deadline=Date.now()+5000; Date.now()<deadline;) { latest=(await f.request('GET',`/api/work-items/${item.item.uid}`)).json().item; if (latest.state!=='todo' && f.listeners.size===(watched?1:0)) break; await new Promise(r=>setTimeout(r,5)); }
   assert.equal(latest.state,'in_progress'); assert.equal(latest.lastTransition.actor,'system'); assert.equal(latest.everDispatched,true);
   assert.equal(latest.currentAttempt.delivery,'delivered'); assert.equal(latest.currentAttempt.clientMessageId,input.handoffId); assert.equal(latest.currentAttempt.lastTurn,null);
   assert.equal(latest.currentAttempt.channel,agent==='codex'?'codex-desktop':'agent'); assert.equal(latest.currentAttempt.agentId,agent==='codex'?null:agent);
@@ -72,7 +72,7 @@ for (const agent of ['codex','claude','deepseek','opencode']) test(`${agent}: ex
   assert.equal((await f.request('POST',`/api/work-items/${latest.uid}/verify`,{mutationId:randomUUID(),expectedRevision:latest.revision,decision:'accept'})).statusCode,409);
   assert.deepEqual((await f.submit(item.item.uid,input)).json(),response.json()); assert.equal(f.calls.length,1);
   assert.equal((await f.submit(item.item.uid,{...input,previewHash:'0'.repeat(64)})).statusCode,409);
-  assert.equal(f.listeners.size,agent==='codex'?1:0,'only a Codex Desktop card keeps one progress watch until its turn ends');
+  assert.equal(f.listeners.size,watched?1:0,'only Codex Desktop and DeepSeek (W4b) cards keep one progress watch until the bound turn ends');
 });
 test('concurrent replay returns the same receipt and invokes adapter once', async t => {
   const f=await fixture(t), item=await f.create(), input=await f.prepare(item,'claude'); let release;

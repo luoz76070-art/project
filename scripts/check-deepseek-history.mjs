@@ -10,11 +10,11 @@ const runtime = process.argv[2];
 if (!runtime || !path.isAbsolute(runtime) || process.argv.length !== 3) throw new Error('Usage: node scripts/check-deepseek-history.mjs <absolute-isolated-runtime-directory>');
 const packages = path.join(runtime, 'node_modules/@deepseek-ai');
 const version = JSON.parse(await fs.readFile(path.join(runtime, 'node_modules/@deepseek-ai/dsh-llm/package.json'), 'utf8')).version;
-assert.ok(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1'].includes(version), 'Unsupported isolated runtime');
+assert.ok(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.3'].includes(version), 'Unsupported isolated runtime');
 const load = name => import(pathToFileURL(path.join(packages, name, 'lib/index.js')).href);
 const official = path.join(packages, 'dsh-api-session-controller/lib/index.js');
 assert.equal(JSON.parse(await fs.readFile(path.join(packages, 'dsh-api-session-controller/package.json'), 'utf8')).version, version);
-const splitHistory = version === '0.2.2-rc.1';
+const splitHistory = version.startsWith('0.2.2-');
 const copy = path.join(path.dirname(official), `mobile-history-check-${randomUUID()}.mjs`);
 // Export the actual bundled algorithms; 0.2.2 separates passive history from Web activation.
 await fs.writeFile(copy, (await fs.readFile(official, 'utf8')) + `\nexport { ApiSessionList, ${splitHistory ? 'HistoryController' : 'SessionHistoryController'} as OfficialHistoryController, SessionCommandController };\n`);

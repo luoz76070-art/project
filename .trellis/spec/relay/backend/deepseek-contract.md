@@ -144,3 +144,14 @@ messages.mjs/messageOf 同时拥有实时 bridge 与只读历史投影。仅官�
 固定新增版本配Cordis4.1.0/Node>=24.9.0；旧三个固定版本仍配Cordis4.0.5，未知版本继续拒绝。原followup/steer/cancel、inbox.remove、SessionQuery及审批结算指纹保持。官方隔离Loader需挂载sessionProjections后AgentRegistry才可用；历史探针按新版实际拆分模块加载并等待ApiSessionList.initialize，生产仍调用原宿主公共list/page/prompt，不能用探针构造替代原服务。
 
 计划review允许官方可选callId（非空有界字符串），仍拒绝未知intent字段；新approval intent未适配，保留不可手机处理说明和原待答项。普通tool/result的isError可缺省，非法类型仍拒绝；PTC必填保持。必须以新旧官方隔离及合成负例核验，审批方法指纹不得跳过。ELECTRON_RUN_AS_NODE执行官方检查时，子CLI dump需继承该标志，避免意外启动第二桌面实例。
+
+## 0.2.2-rc.3宿主兼容与回合对应（插件0.2.8）
+
+2026-11-14 桌面版自动升级到 0.2.2-rc.3（Cordis 4.1.0），0.2.7 被版本门拒绝，9876 不再监听。manifest、bridge、网关握手和三个官方检查脚本同时加入 rc.3；0.2.2 系列共用拆分历史和 Cordis 4.1.0 分支，未知 rc.2/rc.4 继续拒绝。
+
+已做静态核对（只读 app.asar 提取的 rc.3 源码）：followup/steer/cancel、inbox.remove/nextTurn、SessionQuery.observeSession、sessionController.prompt、turn/end 原因种类与 rc.1 契约一致；审批结算 settleRemoteEvent/finishRemoteEvent 指纹与插件常量逐字一致。`agent/inbox/spliced` 在 rc.3 是会话日志事件，桥接的同名 ctx 监听不会触发，待发项显示依赖 250ms 轮询，行为不变。
+
+**官方隔离检查（runtime/history/interactions）尚未执行**：执行需在隔离目录运行宿主自带模块和同版官方 testkit，本次被权限策略拦截，等待用户决定。未通过前不得把 0.2.8 装进原 profile。
+
+W4b：bridge 在手机提交的 `user/message` 确认时，以当时打开的回合号记录 `consumedTurns`（每个原会话最近16条，最多128个会话，无订阅也保留）。Relay `deepSeekSnapshot.consumedTurns` 可选，旧桥接缺省时 `turnFor` 为 null，不猜。`progressCandidate` 只对 `turnBindingAgents`（deepseek）的进行中卡片保持观察；Claude 归入 C2，OpenCode 未配置不做。
+

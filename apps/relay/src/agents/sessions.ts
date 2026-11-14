@@ -16,6 +16,8 @@ export type AgentSessionSnapshot = {
   activeTurnId?: string | null;
   activityEvidence?: ActivityEvidence | null;
   lastTurn?: LastTurn | null;
+  /** Native turn that consumed each recent clientMessageId, when the host can say so exactly (DeepSeek, W4b). */
+  consumedTurns?: { clientMessageId: string; turnId: string }[];
   agentId: string; session: AgentSession; connected: boolean; updatedAt: string;
   status: "idle" | "running"; activity: "thinking" | "working" | "outputting";
   messages: AgentMessage[]; questions: AgentQuestion[]; permissions: AgentPermission[];

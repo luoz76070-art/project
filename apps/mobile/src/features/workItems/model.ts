@@ -6,7 +6,7 @@ export const workItemTabs: { state: WorkItemState; label: string }[] = [
 ];
 export const stateHints: Record<WorkItemState, string> = {
   todo: '还没交给 Agent，或者交接还没送达。',
-  in_progress: 'Agent 正在处理。Codex 桌面端做完会自动转到待验证，其他 Agent 需要你手动标记。',
+  in_progress: 'Agent 正在处理。Codex 桌面端和 DeepSeek 做完会自动转到待验证，其他 Agent 需要你手动标记。',
   to_verify: 'Agent 已经做完，等你验收。验收通过才算完成。',
   done: '你已经验收通过的事项。',
   returned: '没做好或不再需要的事项，可以重新打开再交接。',

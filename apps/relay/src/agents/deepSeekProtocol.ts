@@ -17,7 +17,7 @@ export const deepSeekConfigSchema = z.object({
 export type DeepSeekConfig = z.infer<typeof deepSeekConfigSchema>;
 export const deepSeekSessionId = z.string().uuid();
 const session = z.object({ id: deepSeekSessionId, title: z.string().max(256), directory: z.string().max(4096), updatedAt: z.string().datetime() });
-export const deepSeekInfo = z.object({ protocol: z.literal(1), harnessVersion: z.enum(["0.2.1-rc.2", "0.2.1-rc.3", "0.2.1-rc.5", "0.2.2-rc.1"]), messagePhases: z.boolean().optional(), toolMessages: z.literal(1).optional(), interactions: z.boolean().optional(), scope: z.literal("all").optional(), history: z.boolean().optional() });
+export const deepSeekInfo = z.object({ protocol: z.literal(1), harnessVersion: z.enum(["0.2.1-rc.2", "0.2.1-rc.3", "0.2.1-rc.5", "0.2.2-rc.1", "0.2.2-rc.3"]), messagePhases: z.boolean().optional(), toolMessages: z.literal(1).optional(), interactions: z.boolean().optional(), scope: z.literal("all").optional(), history: z.boolean().optional() });
 export const deepSeekSessions = z.object({ sessions: z.array(session).max(128), cursor: z.string().uuid().nullable() });
 export const deepSeekDelivery = z.object({ ok: z.literal(true), delivery: z.enum(["submitted", "confirmed", "uncertain"]) });
 const messages = z.array(z.object({ id: z.string().max(512), timestamp: z.string().datetime(), role: z.enum(["user", "assistant", "tool"]), text: z.string().max(32768), kind: z.enum(["user_message", "agent_message", "function_call", "function_call_output"]), turnId: z.string().max(512).optional(), phase: z.enum(["commentary", "final_answer"]).optional() })).max(120);
@@ -26,6 +26,8 @@ export const deepSeekSnapshot = z.object({
   activeTurnId: z.string().min(1).max(512).nullable().optional(),
   activityEvidence: activityEvidenceSchema.nullable().optional(),
   lastTurn: lastTurnSchema.nullable().optional(),
+  /** W4b, bridge 0.2.8+: the native turn that consumed each recent phone message. */
+  consumedTurns: z.array(z.object({ clientMessageId: z.string().uuid(), turnId: z.string().min(1).max(512) })).max(16).optional(),
   agentId: z.literal("deepseek"), session, connected: z.literal(true), updatedAt: z.string().datetime(),
   status: z.enum(["idle", "running"]), activity: z.enum(["thinking", "working", "outputting"]),
   messages,

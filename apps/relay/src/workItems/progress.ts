@@ -5,6 +5,8 @@ import { applyTurnResult, bindTurn, recordDelivery } from './stateMachine.js';
 import type { WorkItemStore } from './store.js';
 
 export const progressLimits = { watches: 8, maxAgeMs: 24 * 60 * 60 * 1000, openMs: 30_000, retryMs: 60_000 };
+/** Agents whose host reports the turn that consumed a clientMessageId (W4b). Claude follows with C2; OpenCode is not configured. */
+export const turnBindingAgents: ReadonlySet<string> = new Set(['deepseek']);
 type Watch = { handoffId: string; controller: AbortController; connection?: HandoffConnection; queue: Promise<void>; timer?: ReturnType<typeof setTimeout> };
 
 /** The card's last handoff when it still needs automatic progress; null otherwise. */
@@ -13,8 +15,9 @@ export function progressCandidate(item: WorkItem, now = Date.now()): HandoffReco
   if (!record || now - Date.parse(record.createdAt) > progressLimits.maxAgeMs) return null;
   if (item.state === 'todo') return attempt.attemptId === record.attemptId && attempt.delivery === 'none'
     && ['submitted', 'queued', 'delivered'].includes(record.status) ? record : null;
-  // Only Codex Desktop can bind the consuming turn exactly; agent cards wait for the user after delivery (W4b).
-  if (item.state === 'in_progress') return attempt.channel === 'codex-desktop' && attempt.clientMessageId === record.handoffId && !attempt.lastTurn ? record : null;
+  // Codex Desktop and turn-binding agents bind the consuming turn exactly; other agent cards wait for the user after delivery.
+  const binds = attempt.channel === 'codex-desktop' || (attempt.channel === 'agent' && attempt.agentId !== null && turnBindingAgents.has(attempt.agentId));
+  if (item.state === 'in_progress') return binds && attempt.clientMessageId === record.handoffId && !attempt.lastTurn ? record : null;
   return null;
 }
 

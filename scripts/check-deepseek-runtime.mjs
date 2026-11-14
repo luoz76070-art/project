@@ -16,11 +16,11 @@ if (!runtime || !path.isAbsolute(runtime) || process.argv.length !== 3) {
 const modules = path.join(runtime, 'node_modules');
 async function manifest(name) { return JSON.parse(await fs.readFile(path.join(modules, name, 'package.json'), 'utf8')); }
 const version = (await manifest('@deepseek-ai/dsh')).version;
-assert.ok(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1'].includes(version), 'Unsupported isolated runtime');
+assert.ok(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.3'].includes(version), 'Unsupported isolated runtime');
 for (const name of ['dsh', 'dsh-app-boot', 'dsh-agent', 'dsh-agent-loop', 'dsh-session', 'dsh-session-query', 'dsh-llm', 'dsh-agent-loop-testkit']) {
   assert.equal((await manifest(`@deepseek-ai/${name}`)).version, version, `Unexpected official ${name} version`);
 }
-const cordisVersion = version === '0.2.2-rc.1' ? '4.1.0' : '4.0.5';
+const cordisVersion = version.startsWith('0.2.2-') ? '4.1.0' : '4.0.5';
 assert.equal((await manifest('@deepseek-ai/cordis')).version, cordisVersion);
 const load = name => import(pathToFileURL(path.join(modules, '@deepseek-ai', name, 'lib/index.js')).href);
 const [{ Context }, { default: Loader }, boot, { AgentRegistry, emitAgentEvent }, { SessionStore }, { default: SessionQuery }, { default: Projections }, { createUserMessage, LlmAdapter }, testkit] = await Promise.all([
@@ -58,7 +58,7 @@ try {
   await fs.cp(fileURLToPath(new URL('../plugins/mobile-deepseek', import.meta.url)), plugin, { recursive: true });
   const pluginManifest = JSON.parse(await fs.readFile(path.join(plugin, 'package.json'), 'utf8'));
   assert.equal(boot.evaluatePluginCompatibility(pluginManifest, undefined, version), undefined);
-  for (const unsupported of ['0.2.1-rc.1', '0.2.1-rc.4', '0.2.1-rc.6', '0.2.1', '0.2.2', '0.2.2-rc.2']) {
+  for (const unsupported of ['0.2.1-rc.1', '0.2.1-rc.4', '0.2.1-rc.6', '0.2.1', '0.2.2', '0.2.2-rc.2', '0.2.2-rc.4']) {
     assert.ok(boot.evaluatePluginCompatibility(pluginManifest, undefined, unsupported));
   }
   checks.officialVersionGate = true;
