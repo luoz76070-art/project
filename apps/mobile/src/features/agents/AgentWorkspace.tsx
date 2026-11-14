@@ -5,7 +5,7 @@ import { deviceRevokedMessage } from "../connection/authorization";
 import { ComposerSessionStatus } from "../chat/SessionStatus";
 import { agentSessionStatus } from "../chat/sessionStatusModel";
 import { loadReadingPositions, saveReadingPositions } from "../chat/readingPositions";
-import { productBeforeNavigate, isKelivoHost } from "../product/host";
+import { productBeforeNavigate } from "../product/host";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { registerVoiceAgentDrafts } from "../voice/draftRecovery";
 import type { VoiceRecoveryPort } from "../voice/useVoiceRecovery";
@@ -48,7 +48,7 @@ const friendlyError = (error: unknown) => {
 
 export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCapture, endpoint, token, scope, onBack, voiceRecovery }: { handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
   const deviceRevoked = useDeviceRevoked(endpoint, token);
-  const restoreView = useRef(isKelivoHost ? loadAgentView(scope) : null);
+  const restoreView = useRef(loadAgentView(scope));
   const [agents, setAgents] = useState<Agent[]>([]), [agent, setAgent] = useState<Agent | null>(null);
   const [sessions, setSessions] = useState<AgentSession[]>([]), [selected, setSelected] = useState<AgentSession | null>(null);
   const [query, setQuery] = useState(""), [cursor, setCursor] = useState<string | null>(null);
@@ -109,7 +109,7 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
   }
   async function loadSessions(target: Agent, append = false, selectedRange = range, silent = false) {
     const request = begin(silent); setAgent(target);
-    if (isKelivoHost && !restoreView.current) saveAgentView(scope, target.id, null);
+    if (!restoreView.current) saveAgentView(scope, target.id, null);
     try {
       const params = new URLSearchParams({ ...(query.trim() ? { search: query.trim() } : {}), ...(append && cursor ? { cursor } : {}), ...(target.id === "deepseek" ? { range: selectedRange } : {}) });
       const data = await apiGet<{ sessions: AgentSession[]; cursor: string | null }>(buildUrl(endpoint, `/api/agents/${target.id}/sessions?${params}`), token, request.signal);
@@ -143,7 +143,7 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
   }, [handoffTarget, agents, onTargetOpened]);
   function back() {
     if (!window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) return;
-    if (isKelivoHost) saveAgentView(scope, selected ? agent?.id ?? null : null, null);
+    saveAgentView(scope, selected ? agent?.id ?? null : null, null);
     if (selected) { setSelected(null); if (agent) void loadSessions(agent); }
     else if (agent) { ++requestId.current; controller.current?.abort(); setAgent(null); setSessions([]); setCursor(null); setError(""); setLoading(false); }
     else onBack();
@@ -151,7 +151,7 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
   /** U4: tapping the title goes straight back to the Agent list, from any depth. */
   function switchAgent() {
     if (!agent || !window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) return;
-    if (isKelivoHost) saveAgentView(scope, null, null);
+    saveAgentView(scope, null, null);
     setSelected(null); ++requestId.current; controller.current?.abort(); setAgent(null); setSessions([]); setCursor(null); setError(""); setLoading(false);
   }
   // Codex lives in the phone workspace; its row uses the thread list cached there, and the gateway answering stands for online.
@@ -187,7 +187,7 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
           {agent.id === "deepseek" && <SessionRangeControl range={range} disabled={loading} onChange={next => { setRange(next); void loadSessions(agent, false, next); }} />}
           <form className="search-field" onSubmit={event => { event.preventDefault(); void loadSessions(agent); }}><input aria-label="搜索 Agent 会话" placeholder="搜索会话" value={query} maxLength={200} onChange={event => setQuery(event.target.value)} /><button type="submit" disabled={loading}>搜索</button></form>
           {<ProjectGroups key={agent.id} scope={scope} agentId={agent.id} groups={groupByProject(sessions, session => session.directory)} search={query}>
-            {session => <button className="agent-session-row" key={session.id} onClick={() => { if (isKelivoHost) saveAgentView(scope, agent.id, session.id); setSelected(session); }}><strong>{session.title || "未命名会话"}</strong><time>{new Date(session.updatedAt).toLocaleString()}</time></button>}
+            {session => <button className="agent-session-row" key={session.id} onClick={() => { saveAgentView(scope, agent.id, session.id); setSelected(session); }}><strong>{session.title || "未命名会话"}</strong><time>{new Date(session.updatedAt).toLocaleString()}</time></button>}
           </ProjectGroups>}
           {!loading && !sessions.length && !error && <EmptyState compact title="没有会话">{agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</EmptyState>}
           {cursor && <button className="action-button" disabled={loading} onClick={() => void loadSessions(agent, true)}>加载更多会话</button>}

@@ -27,8 +27,8 @@ import { loadReadingPositions, saveReadingPositions } from "../features/chat/rea
 import { loadWorkspaceCache, saveWorkspaceCache } from "../features/threads/cache";
 import { PairingPanel } from "../features/connection/PairingPanel";
 import React, { useState, useRef, useMemo, useEffect, useCallback } from "react";
-import { type ConnectionProfile, type ThemeMode, type SplitMode, type ApprovalPolicy, type SandboxMode, type ThreadSummary, type ThreadRuntime, type DiagnosticStep, type RelayStatus, type UpdateState, type HotUpdateState, type LoadThreadsOptions, type HotUpdateManifest, type DesktopActiveResponse, type CodexMessage, type LiveTurnSnapshot, type SendRoute, type PendingAttachment, type DesktopControlResponse, type UploadResponse, type DesktopStreamSnapshot, type LiveApproval, type LiveApprovalDecision, type UserInputRequest } from "./types";
-import { defaultProfileId, defaultTheme, defaultSplitMode, defaultApprovalPolicy, defaultSandboxMode, defaultSidePaneSize, defaultTopPaneSize, newThreadId, updateManifestUrl, appVersionCode as standaloneVersionCode, hotUpdateManifestUrl, desktopPollActiveMs, desktopPollIdleMs, liveSnapshotThrottleMs, livePollFallbackMs, statusKeepaliveMs, appVersionLabel as standaloneVersionLabel } from "./config";
+import { type ConnectionProfile, type ThemeMode, type SplitMode, type ApprovalPolicy, type SandboxMode, type ThreadSummary, type ThreadRuntime, type DiagnosticStep, type RelayStatus, type LoadThreadsOptions, type DesktopActiveResponse, type CodexMessage, type LiveTurnSnapshot, type SendRoute, type PendingAttachment, type DesktopControlResponse, type UploadResponse, type DesktopStreamSnapshot, type LiveApproval, type LiveApprovalDecision, type UserInputRequest } from "./types";
+import { defaultProfileId, defaultTheme, defaultSplitMode, defaultApprovalPolicy, defaultSandboxMode, defaultSidePaneSize, defaultTopPaneSize, newThreadId, appVersionCode as standaloneVersionCode, desktopPollActiveMs, desktopPollIdleMs, liveSnapshotThrottleMs, livePollFallbackMs, statusKeepaliveMs, appVersionLabel as standaloneVersionLabel } from "./config";
 import { loadThreadRuntimeCache, readThreadMessageCacheForDiagnostics, defaultRuntime, getRuntime, saveThreadRuntimeCache, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, approvalResponsePatch, threadCacheSaveNotice, type ThreadCacheSaveResult } from "../features/chat/runtime";
 import { makeMessageDiagnostics, readDiagnosticDom } from "../features/chat/messageDiagnostics";
 import { readDiagnosticEnvironment, makeDiagnosticsExport, saveDiagnosticFile } from "../features/chat/diagnosticExport";
@@ -45,13 +45,12 @@ import { assertSecureEndpoint, toFriendlyFetchError, apiGet as requestGet, build
 import { makeDiagnosticText, openHealthUrl } from "../features/connection/diagnostics";
 import { Capacitor } from "@capacitor/core";
 import { NativeHotUpdate } from "../features/updates/native";
-import { useApkUpdate } from "../features/updates/useApkUpdate";
-import { apkBusy, apkCanContinue, apkStatusText, readAndroidUpdateManifest } from "../features/updates/apk";
-import { ApkUpdateProgress } from "../features/updates/ApkUpdateProgress";
 import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mimeTypeFromName, revokeAttachmentPreviews } from "../features/chat/attachments";
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
-import { clamp, applyTheme } from "../shared/preferences";
-import { ListTodo, Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, ArrowUp, ChevronDown, Download } from "lucide-react";
+import { clamp } from "../shared/preferences";
+import { chatFontScales, loadProductDisplay, saveProductDisplay, saveThemeMode, type ProductDisplay } from "../features/product/standalone";
+import { stageHotUpdate } from "../features/updates/hotUpdate";
+import { ListTodo, Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, Copy, Activity, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, ChevronDown, Download } from "lucide-react";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { MessageBubble, MessageTimeline, ApprovalCard, AttachmentTray } from "../features/chat/components";
 import { MessageMediaProvider } from "../features/chat/MessageImage";
@@ -81,20 +80,30 @@ export function App() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false), [openItemUid, setOpenItemUid] = useState<string | null>(null);
   const recoveredVoice = useVoiceRecovery(scope, normalizeEndpoint(connection.endpoint), connection.token);
-  const [agentMode, setAgentMode] = useState(() => { try { return isKelivoHost && localStorage.getItem("productRemoteMode") === "agent"; } catch { return false; } });
+  const [agentMode, setAgentMode] = useState(() => { try { return localStorage.getItem("productRemoteMode") === "agent"; } catch { return false; } });
   const [handoff, setHandoff] = useState<ProductHandoff | null>(null);
   const receiveHandoff = useCallback((value: ProductHandoff | null) => {
     setHandoff(value);
     if (value) setAgentMode(false);
   }, []);
   function selectAgentMode(value: boolean) {
-    if (isKelivoHost) { try { localStorage.setItem("productRemoteMode", value ? "agent" : "codex"); } catch { /* In-memory selection remains. */ } }
+    try { localStorage.setItem("productRemoteMode", value ? "agent" : "codex"); } catch { /* In-memory selection remains. */ }
     setAgentMode(value);
   }
   const openComputerSettings = useCallback(() => {
     setAgentMode(false);
     try { localStorage.setItem("productRemoteMode", "codex"); } catch { /* The current settings page is still usable. */ }
   }, []);
+  useEffect(() => {
+    const back = (event: Event) => {
+      if (event.defaultPrevented) return;
+      if (captureOpen) { event.preventDefault(); setCaptureOpen(false); }
+      else if (itemsOpen) { event.preventDefault(); setItemsOpen(false); }
+    };
+    // Capture phase: these sheets sit above the workspace's own back handling.
+    window.addEventListener("product-back", back, { capture: true });
+    return () => window.removeEventListener("product-back", back, { capture: true });
+  }, [captureOpen, itemsOpen]);
   function openHandoffTarget(target: HandoffTarget) {
     setCaptureOpen(false); setItemsOpen(false); setHandoffTarget(target); selectAgentMode(target.agentId !== 'codex');
   }
@@ -134,6 +143,12 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
   const [draftEndpoint, setDraftEndpoint] = useState(endpoint);
   const [draftToken, setDraftToken] = useState(token);
   const [theme, setTheme] = useState<ThemeMode>(defaultTheme);
+  const [display, setDisplay] = useState<ProductDisplay>(loadProductDisplay);
+  function changeDisplay(patch: Partial<ProductDisplay>) {
+    const next = { ...display, ...patch };
+    setDisplay(next);
+    saveProductDisplay(next);
+  }
   const [splitMode, setSplitMode] = useState<SplitMode>(defaultSplitMode);
   const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy>(defaultApprovalPolicy);
   const [sandboxMode, setSandboxMode] = useState<SandboxMode>(defaultSandboxMode);
@@ -174,26 +189,6 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
   const [liveStreamFallbackTurnId, setLiveStreamFallbackTurnId] = useState<string | null>(null);
   const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [updateState, setUpdateState] = useState<UpdateState>({
-    checking: false,
-    manifest: null,
-    available: false,
-    error: "",
-    lastCheckedAt: "",
-  });
-  const [hotUpdateState, setHotUpdateState] = useState<HotUpdateState>({
-    checking: false,
-    installing: false,
-    manifest: null,
-    status: null,
-    available: false,
-    error: "",
-  });
-  const apkUpdate = useApkUpdate();
-  const apkUpdating = apkUpdate.pending || apkBusy(apkUpdate.status);
-  const apkDownloading = apkUpdate.status?.phase === "downloading" || apkUpdate.status?.phase === "verifying";
-  const apkReady = apkCanContinue(apkUpdate.status);
-  const updateCheckLock = useRef(false);
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -535,135 +530,6 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
     }
     if (data.activeDesktopThread?.id) setActiveDesktopThreadId(data.activeDesktopThread.id);
     return data;
-  }
-
-  async function checkForUpdates(manual: boolean) {
-    if (updateCheckLock.current || apkUpdating || hotUpdateState.installing) return;
-    if (!updateManifestUrl) {
-      const detail = "当前构建未配置在线更新地址";
-      setUpdateState((current) => ({
-        ...current,
-        checking: false,
-        error: manual ? detail : "",
-        lastCheckedAt: manual ? new Date().toISOString() : current.lastCheckedAt,
-      }));
-      if (manual) setStatus(detail);
-      return;
-    }
-    updateCheckLock.current = true;
-    setUpdateState((current) => ({ ...current, checking: true, error: "" }));
-    try {
-      const manifest = await readAndroidUpdateManifest(updateManifestUrl, url => requestGet(url));
-      const available = Number(manifest.versionCode) > appVersionCode;
-      setUpdateState({
-        checking: false,
-        manifest,
-        available,
-        error: "",
-        lastCheckedAt: new Date().toISOString(),
-      });
-      if (manual) setStatus(available ? `发现新版本 v${manifest.versionName}` : "当前已是最新版本");
-    } catch (error) {
-      const detail = toFriendlyFetchError(error);
-      setUpdateState((current) => ({
-        ...current,
-        checking: false,
-        available: false,
-        manifest: null,
-        error: detail,
-        lastCheckedAt: new Date().toISOString(),
-      }));
-      if (manual) setStatus(`检查更新失败：${detail}`);
-    } finally {
-      updateCheckLock.current = false;
-    }
-  }
-
-  async function installApkUpdate() {
-    if (hotUpdateState.installing || updateState.checking || apkDownloading || apkUpdate.pending) return;
-    if (apkUpdate.supported) {
-      await apkUpdate.start(updateState.manifest);
-      return;
-    }
-    const url = updateState.manifest?.apkUrl;
-    if (!url) {
-      setStatus("没有可下载的更新包");
-      return;
-    }
-    window.open(url, "_blank", "noopener,noreferrer");
-    setStatus("请在浏览器下载并覆盖安装；新版 Android App 支持应用内下载与安装");
-  }
-
-  async function checkHotUpdate(manual: boolean) {
-    if (!Capacitor.isNativePlatform() || !hotUpdateManifestUrl) {
-      setHotUpdateState((current) => ({
-        ...current,
-        checking: false,
-        error: manual && !hotUpdateManifestUrl ? "当前构建未配置热更新地址" : "",
-      }));
-      return;
-    }
-
-    setHotUpdateState((current) => ({ ...current, checking: true, error: "" }));
-    try {
-      const [manifest, nativeStatus] = await Promise.all([
-        apiGet<HotUpdateManifest>(`${hotUpdateManifestUrl}?t=${Date.now()}`),
-        NativeHotUpdate.getStatus(),
-      ]);
-      const maxNativeVersionCode = manifest.maxNativeVersionCode ?? 2_147_483_647;
-      const compatible =
-        appVersionCode >= manifest.minNativeVersionCode &&
-        appVersionCode <= maxNativeVersionCode &&
-        nativeStatus.nativeVersionCode === appVersionCode;
-      const available = compatible && nativeStatus.activeVersion !== manifest.version;
-      setHotUpdateState({
-        checking: false,
-        installing: false,
-        manifest,
-        status: nativeStatus,
-        available,
-        error: compatible ? "" : "热更新与当前 APK 版本不兼容，请安装新版 APK",
-      });
-      if (manual) {
-        setStatus(available ? `发现热更新 ${manifest.version}` : compatible ? "当前热更新已是最新" : "需要安装新版 APK");
-      }
-    } catch (error) {
-      const detail = toFriendlyFetchError(error);
-      setHotUpdateState((current) => ({ ...current, checking: false, error: detail }));
-      if (manual) setStatus(`检查热更新失败：${detail}`);
-    }
-  }
-
-  async function applyHotUpdate() {
-    if (apkUpdating) return;
-    const manifest = hotUpdateState.manifest;
-    if (!manifest || !hotUpdateState.available) return;
-    setHotUpdateState((current) => ({ ...current, installing: true, error: "" }));
-    setStatus(`正在安装热更新 ${manifest.version}`);
-    try {
-      await NativeHotUpdate.install({
-        url: manifest.htmlUrl,
-        sha256: manifest.sha256,
-        version: manifest.version,
-        minNativeVersionCode: manifest.minNativeVersionCode,
-        maxNativeVersionCode: manifest.maxNativeVersionCode ?? 2_147_483_647,
-      });
-    } catch (error) {
-      const detail = toFriendlyFetchError(error);
-      setHotUpdateState((current) => ({ ...current, installing: false, error: detail }));
-      setStatus(`热更新失败：${detail}`);
-    }
-  }
-
-  async function rollbackHotUpdate() {
-    if (apkUpdating || hotUpdateState.installing) return;
-    if (!Capacitor.isNativePlatform()) return;
-    setStatus("正在回退热更新");
-    try {
-      await NativeHotUpdate.rollback();
-    } catch (error) {
-      setStatus(`回退失败：${toFriendlyFetchError(error)}`);
-    }
   }
 
   async function refreshActiveDesktopThread() {
@@ -1351,16 +1217,17 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
     window.addEventListener("pointercancel", stopResize);
   }
 
+  useEffect(() => { if (!isKelivoHost) saveThemeMode(theme); }, [theme]);
+  // Android back closes the settings sheet or the thread drawer before leaving.
   useEffect(() => {
-    if (isKelivoHost) return;
-    applyTheme(theme);
-    localStorage.setItem("themeMode", theme);
-    if (theme !== "system") return;
-    const query = window.matchMedia("(prefers-color-scheme: dark)");
-    const listener = () => applyTheme("system");
-    query.addEventListener("change", listener);
-    return () => query.removeEventListener("change", listener);
-  }, [theme]);
+    const back = (event: Event) => {
+      if (event.defaultPrevented) return;
+      if (settingsOpen) { event.preventDefault(); setSettingsOpen(false); }
+      else if (sidebarOpen && (selected || isNewThread)) { event.preventDefault(); setSidebarOpen(false); }
+    };
+    window.addEventListener("product-back", back);
+    return () => window.removeEventListener("product-back", back);
+  }, [settingsOpen, sidebarOpen, selected, isNewThread]);
 
   useEffect(() => {
     localStorage.setItem("splitMode", splitMode);
@@ -1715,9 +1582,10 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
     const readyTimer = window.setTimeout(() => {
       if (!failed && Capacitor.isNativePlatform()) void NativeHotUpdate.markReady().catch(() => undefined);
     }, 5000);
-    if (!isKelivoHost) void Promise.all([checkForUpdates(false), checkHotUpdate(false)]);
+    const stageTimer = isKelivoHost ? 0 : window.setTimeout(() => void stageHotUpdate(appVersionCode), 8000);
     return () => {
       window.clearTimeout(readyTimer);
+      window.clearTimeout(stageTimer);
       window.removeEventListener("error", onError);
       window.removeEventListener("unhandledrejection", onError);
     };
@@ -2059,75 +1927,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
           {messageDiagnosticsStatus && <p className="update-note" role="status">{messageDiagnosticsStatus}</p>}
         </details></div>
         </details></section>
-        {isKelivoHost ? <section className="settings-section"><h3>应用版本</h3><p>{appVersionLabel}</p><button className="action-button" onClick={() => window.dispatchEvent(new Event(productOpenUpdates))}><Download size={18} /><span>应用更新</span></button></section> : <section className="settings-section"><details className="settings-disclosure"><DisclosureSummary>版本与更新</DisclosureSummary>
-          <div className="version-card">
-            <span>手机版本</span>
-            <strong>{appVersionLabel}</strong>
-            <span>热更新</span>
-            <strong>
-              {hotUpdateState.checking
-                ? "检查中"
-                : hotUpdateState.installing
-                  ? "安装中"
-                  : hotUpdateState.available
-                    ? `可更新到 ${hotUpdateState.manifest?.version}`
-                    : hotUpdateState.status?.activeVersion
-                      ? hotUpdateState.status.activeVersion
-                      : !hotUpdateManifestUrl
-                        ? "未配置"
-                        : hotUpdateState.error
-                          ? "不可用"
-                          : "内置资源"}
-            </strong>
-            <span>更新状态</span>
-            <strong>
-              {apkStatusText(apkUpdate.status) || (updateState.checking
-                ? "检查中"
-                : updateState.available
-                  ? `可升级到 v${updateState.manifest?.versionName}`
-                  : !updateManifestUrl
-                    ? "未配置更新源"
-                  : updateState.error
-                    ? "检查失败"
-                    : "已是最新")}
-            </strong>
-          </div>
-          {hotUpdateState.manifest?.notes && <p className="update-note">{hotUpdateState.manifest.notes}</p>}
-          {updateState.manifest?.notes && <p className="update-note">{updateState.manifest.notes}</p>}
-          {updateState.error && <p className="update-note" role="alert">检查更新失败：{updateState.error}</p>}
-          <ApkUpdateProgress status={apkUpdate.status} error={apkUpdate.error} />
-          {!apkUpdate.supported && updateState.available && <p className="update-note">此环境需在浏览器下载安装包；覆盖安装新版 Android App 后，即可在 App 内完成后续更新。</p>}
-          <div className="settings-actions">
-            <button
-              className="action-button"
-              onClick={() => void Promise.all([checkForUpdates(true), checkHotUpdate(true)])}
-              disabled={updateState.checking || hotUpdateState.checking || apkUpdating || hotUpdateState.installing}
-            >
-              {updateState.checking || hotUpdateState.checking ? <Loader2 size={16} className="spin" /> : <RefreshCcw size={16} />}
-              <span>检查更新</span>
-            </button>
-            <button
-              className="action-button primary"
-              onClick={() => void applyHotUpdate()}
-              disabled={!hotUpdateState.available || hotUpdateState.installing || apkUpdating}
-            >
-              {hotUpdateState.installing ? <Loader2 size={16} className="spin" /> : <RefreshCcw size={16} />}
-              <span>应用热更新</span>
-            </button>
-            <button className="action-button primary" onClick={() => void installApkUpdate()} disabled={(!updateState.available && !apkReady) || apkDownloading || apkUpdate.pending || hotUpdateState.installing || updateState.checking}>
-              {apkDownloading || apkUpdate.pending ? <Loader2 size={16} className="spin" /> : <ArrowUp size={16} />}
-              <span>{apkDownloading ? apkStatusText(apkUpdate.status) : apkReady ? apkUpdate.status?.phase === "permission_required" ? "允许安装并继续" : "继续安装" : apkUpdate.supported ? "下载并安装" : "浏览器下载 APK"}</span>
-            </button>
-            <button
-              className="action-button"
-              onClick={() => void rollbackHotUpdate()}
-              disabled={!hotUpdateState.status?.activeVersion || hotUpdateState.installing || apkUpdating}
-            >
-              <CircleStop size={16} />
-              <span>回退热更新</span>
-            </button>
-          </div>
-        </details></section>}
+        <section className="settings-section"><h3>应用版本</h3><p>{appVersionLabel}</p><button className="action-button" onClick={() => window.dispatchEvent(new Event(productOpenUpdates))}><Download size={18} /><span>应用更新</span></button></section>
 
         <section className="settings-section">
           <h3>外观与触感</h3>
@@ -2145,6 +1945,15 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
               <span>深色</span>
             </button>
           </div>}
+          {!isKelivoHost && <>
+            <div className="display-setting"><span>聊天字号</span><div className="segmented four" role="radiogroup" aria-label="聊天字号">{chatFontScales.map(option => <button key={option.value} role="radio" aria-checked={display.chatFontScale === option.value} className={display.chatFontScale === option.value ? "active" : ""} onClick={() => changeDisplay({ chatFontScale: option.value })}><span>{option.label}</span></button>)}</div></div>
+            <label className="haptics-setting">显示工具卡片
+              <button type="button" className="action-button" role="switch" aria-label="显示工具卡片" aria-checked={display.showToolCards} onClick={() => changeDisplay({ showToolCards: !display.showToolCards })}>{display.showToolCards ? "已开启" : "已关闭"}</button>
+            </label>
+            <label className="haptics-setting">显示工具结果摘要
+              <button type="button" className="action-button" role="switch" aria-label="显示工具结果摘要" aria-checked={display.showToolResultSummary} onClick={() => changeDisplay({ showToolResultSummary: !display.showToolResultSummary })}>{display.showToolResultSummary ? "已开启" : "已关闭"}</button>
+            </label>
+          </>}
           <label className="haptics-setting">发送和审批时轻微震动
             <button type="button" className="action-button" role="switch" aria-label="发送和审批时轻微震动" aria-checked={haptics}
               onClick={() => { setHapticsEnabled(!haptics); setHaptics(!haptics); }}>{haptics ? "已开启" : "已关闭"}</button>

@@ -37,12 +37,21 @@ public class HotUpdatePlugin extends Plugin {
         result.put("activeVersion", HotUpdateStore.activeVersion(context));
         result.put("pendingVersion", HotUpdateStore.pendingVersion(context));
         result.put("previousVersion", HotUpdateStore.previousVersion(context));
+        result.put("stagedVersion", HotUpdateStore.stagedVersion(context));
         result.put("nativeVersionCode", HotUpdateStore.currentNativeVersionCode(context));
         call.resolve(result);
     }
 
-    @PluginMethod
-    public void install(PluginCall call) {
+    /** Validated download request; rejects the call and returns null otherwise. */
+    private static final class Request {
+        final String url, sha256, version;
+        final int min, max;
+        Request(String url, String sha256, String version, int min, int max) {
+            this.url = url; this.sha256 = sha256; this.version = version; this.min = min; this.max = max;
+        }
+    }
+
+    private Request request(PluginCall call) {
         String url = call.getString("url");
         String expectedSha256 = call.getString("sha256");
         String version = call.getString("version");
@@ -51,44 +60,88 @@ public class HotUpdatePlugin extends Plugin {
 
         if (url == null || url.trim().isEmpty()) {
             call.reject("Hot update URL is required");
-            return;
+            return null;
         }
         if (expectedSha256 == null || expectedSha256.trim().isEmpty()) {
             call.reject("Hot update SHA-256 is required");
-            return;
+            return null;
         }
         if (!isSha256(expectedSha256)) {
             call.reject("Hot update SHA-256 is invalid");
-            return;
+            return null;
         }
         if (!HotUpdatePaths.isSafeVersion(version)) {
             call.reject("Hot update version is invalid");
-            return;
+            return null;
         }
         if (minNativeVersionCode > maxNativeVersionCode) {
             call.reject("Hot update native version range is invalid");
-            return;
+            return null;
         }
         if (!isAllowedUpdateUrl(url)) {
             call.reject("Hot update URL must use HTTPS (localhost HTTP is allowed for development)");
-            return;
+            return null;
         }
 
+        return new Request(url, expectedSha256.trim(), version, minNativeVersionCode, maxNativeVersionCode);
+    }
+
+    @PluginMethod
+    public void install(PluginCall call) {
+        Request request = request(call);
+        if (request == null) return;
         executor.execute(() -> {
             try {
-                File bundle = downloadAndVerify(url, expectedSha256.trim(), version);
-                String path = HotUpdateStore.activate(getContext(), version, minNativeVersionCode, maxNativeVersionCode);
-                getBridge().executeOnMainThread(() -> {
-                    getBridge().setServerBasePath(path);
-                    JSObject result = new JSObject();
-                    result.put("version", version);
-                    result.put("path", bundle.getParentFile().getAbsolutePath());
-                    result.put("reloading", true);
-                    call.resolve(result);
-                });
+                downloadAndVerify(request.url, request.sha256, request.version);
+                String path = HotUpdateStore.activate(getContext(), request.version, request.min, request.max);
+                reload(call, request.version, path);
             } catch (Exception error) {
                 call.reject("Hot update failed: " + error.getMessage(), error);
             }
+        });
+    }
+
+    /** Downloads and verifies a bundle that becomes a trial activation on the next launch. */
+    @PluginMethod
+    public void stage(PluginCall call) {
+        Request request = request(call);
+        if (request == null) return;
+        executor.execute(() -> {
+            try {
+                if (!request.version.equals(HotUpdateStore.stagedVersion(getContext()))) {
+                    downloadAndVerify(request.url, request.sha256, request.version);
+                    HotUpdateStore.stage(getContext(), request.version, request.min, request.max);
+                }
+                JSObject result = new JSObject();
+                result.put("version", request.version);
+                result.put("staged", true);
+                call.resolve(result);
+            } catch (Exception error) {
+                call.reject("Hot update failed: " + error.getMessage(), error);
+            }
+        });
+    }
+
+    @PluginMethod
+    public void applyStaged(PluginCall call) {
+        executor.execute(() -> {
+            String path = HotUpdateStore.promoteStaged(getContext());
+            if (path == null) {
+                call.reject("No usable staged hot update");
+                return;
+            }
+            reload(call, HotUpdateStore.activeVersion(getContext()), path);
+        });
+    }
+
+    private void reload(PluginCall call, String version, String path) {
+        getBridge().executeOnMainThread(() -> {
+            getBridge().setServerBasePath(path);
+            JSObject result = new JSObject();
+            result.put("version", version);
+            result.put("path", path);
+            result.put("reloading", true);
+            call.resolve(result);
         });
     }
 

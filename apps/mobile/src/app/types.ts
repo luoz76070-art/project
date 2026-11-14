@@ -278,6 +278,8 @@ export type HotUpdateStatus = {
   activeVersion: string;
   pendingVersion: string;
   previousVersion: string;
+  /** Downloaded and verified; becomes active on the next launch. */
+  stagedVersion?: string;
   nativeVersionCode: number;
 };
 
@@ -311,6 +313,14 @@ export type HotUpdatePlugin = {
     minNativeVersionCode: number;
     maxNativeVersionCode: number;
   }): Promise<{ version: string; path: string; reloading: boolean }>;
+  stage(options: {
+    url: string;
+    sha256: string;
+    version: string;
+    minNativeVersionCode: number;
+    maxNativeVersionCode: number;
+  }): Promise<{ version: string; staged: boolean }>;
+  applyStaged(): Promise<{ version: string; reloading: boolean }>;
   markReady(): Promise<void>;
   rollback(): Promise<{ activeVersion: string; reloading: boolean }>;
   clear(): Promise<void>;

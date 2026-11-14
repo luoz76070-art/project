@@ -367,6 +367,8 @@ button {
   padding: var(--space-12);
   display: grid;
   grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+  /* Content may not widen the drawer past its own width. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-12);
   background: var(--panel-solid);
   transition: transform 190ms ease, opacity 190ms ease;
@@ -396,18 +398,27 @@ button {
   gap: var(--space-8);
 }
 
+/* A long status line wraps to two lines instead of widening the drawer. */
+.sidebar-title > div {
+  min-width: 0;
+}
+
+.sidebar-title > svg {
+  flex: none;
+}
+
 .sidebar-title strong {
   display: block;
   font-size: var(--font-size-15);
 }
 
 .sidebar-title span {
-  display: block;
+  display: -webkit-box;
   margin-top: var(--space-4);
   font-size: var(--font-size-12);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .sidebar-close,
@@ -2502,6 +2513,7 @@ button.workspace-switch:active, button.workspace-switch:focus-visible { backgrou
 .voice-sheet { animation: sheetUp 220ms cubic-bezier(.2, .8, .2, 1) both; }
 .settings-sheet { transition: transform 220ms cubic-bezier(.2, .8, .2, 1), visibility 0s linear 220ms; }
 .settings-sheet.open { transition: transform 220ms cubic-bezier(.2, .8, .2, 1), visibility 0s linear 0s; }
+.display-setting { display: flex; flex-direction: column; gap: var(--space-8); color: var(--text); font-size: var(--font-size-15); }
 .haptics-setting { display: flex; align-items: center; justify-content: space-between; gap: var(--space-12); color: var(--text); font-size: var(--font-size-15); }
 
 /* U6: brand empty states and content-shaped skeletons. */
