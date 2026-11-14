@@ -5189,13 +5189,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'You\'ve already been through this door.';
 
   @override
-  String get aboutPageUpstreamSource => 'Upstream open source';
+  String get aboutPageUpstreamSource =>
+      'Based on the open-source project Kelivo (AGPL-3.0)';
 
   @override
   String get aboutPageAppName => 'MobiCodex';
 
   @override
-  String get aboutPageAppDescription => 'Open-source AI Assistant';
+  String get aboutPageAppDescription =>
+      'MobiCodex · AI assistant and computer workspace';
 
   @override
   String get aboutPageNoQQGroup => 'No QQ group yet';

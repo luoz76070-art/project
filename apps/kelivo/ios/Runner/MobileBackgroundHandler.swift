@@ -18,7 +18,7 @@ struct BackgroundGenerationTask {
   init(_ map: [String: Any]) {
     id = map["id"] as? String ?? ""
     conversationId = map["conversationId"] as? String ?? ""
-    title = String((map["title"] as? String ?? "Kelivo").prefix(120))
+    title = String((map["title"] as? String ?? "MobiCodex").prefix(120))
     detail = String((map["detail"] as? String ?? "").prefix(180))
     startedAt = Date(timeIntervalSince1970: ((map["startedAt"] as? NSNumber)?.doubleValue ?? 0) / 1000)
     tokens = map["tokens"] as? Int ?? 0
@@ -236,7 +236,7 @@ final class MobileBackgroundHandler: NSObject, CLLocationManagerDelegate {
 
   private func requestPermission(_ permission: String, result: @escaping FlutterResult) {
     guard UIApplication.shared.applicationState == .active else {
-      result(FlutterError(code: "foreground_required", message: "Open Kelivo to request permission.", details: nil)); return
+      result(FlutterError(code: "foreground_required", message: "Open MobiCodex to request permission.", details: nil)); return
     }
     switch permission {
     case "notifications":
@@ -499,7 +499,7 @@ final class MobileBackgroundHandler: NSObject, CLLocationManagerDelegate {
       activeTaskCount: tasks.count,
       conversationId: task.conversationId,
       outcome: finished ? task.outcome : "",
-      staleMessage: labels["stale"] ?? "Open Kelivo to check the task.")
+      staleMessage: labels["stale"] ?? "Open MobiCodex to check the task.")
   }
 
   @available(iOS 16.1, *)

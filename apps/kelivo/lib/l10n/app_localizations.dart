@@ -9496,7 +9496,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutPageUpstreamSource.
   ///
   /// In en, this message translates to:
-  /// **'Upstream open source'**
+  /// **'Based on the open-source project Kelivo (AGPL-3.0)'**
   String get aboutPageUpstreamSource;
 
   /// No description provided for @aboutPageAppName.
@@ -9508,7 +9508,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutPageAppDescription.
   ///
   /// In en, this message translates to:
-  /// **'Open-source AI Assistant'**
+  /// **'MobiCodex · AI assistant and computer workspace'**
   String get aboutPageAppDescription;
 
   /// No description provided for @aboutPageNoQQGroup.

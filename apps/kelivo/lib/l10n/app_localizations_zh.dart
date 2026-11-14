@@ -5004,13 +5004,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutPageKelivoSearchAlreadyUnlocked => '这扇门你已经推开过了。';
 
   @override
-  String get aboutPageUpstreamSource => '上游开源项目';
+  String get aboutPageUpstreamSource => '基于开源项目 Kelivo（AGPL-3.0）';
 
   @override
   String get aboutPageAppName => 'MobiCodex';
 
   @override
-  String get aboutPageAppDescription => '开源AI 助手';
+  String get aboutPageAppDescription => 'MobiCodex · AI 助手与电脑工作台';
 
   @override
   String get aboutPageNoQQGroup => '暂无QQ群';
@@ -20078,13 +20078,13 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   String get aboutPageKelivoSearchAlreadyUnlocked => '这扇门你已经推开过了。';
 
   @override
-  String get aboutPageUpstreamSource => '上游开源项目';
+  String get aboutPageUpstreamSource => '基于开源项目 Kelivo（AGPL-3.0）';
 
   @override
   String get aboutPageAppName => 'MobiCodex';
 
   @override
-  String get aboutPageAppDescription => '开源 AI 助手';
+  String get aboutPageAppDescription => 'MobiCodex · AI 助手与电脑工作台';
 
   @override
   String get aboutPageNoQQGroup => '暂无QQ群';
@@ -30006,6 +30006,150 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
   @override
   String get recoveryCopiesNeedUpdate =>
       '部分副本来自更新版本的 MobiCodex，请升级 App 后再恢复。这些副本仍然保留。';
+
+  @override
+  String get ttsServicesFieldWorkspaceIdLabel => '业务空间 ID';
+
+  @override
+  String get ttsServicesFieldRegionLabel => '地域';
+
+  @override
+  String get ttsServicesFieldFormatLabel => '音频格式';
+
+  @override
+  String get ttsServicesFieldOutputFormatLabel => '输出格式';
+
+  @override
+  String get ttsServicesFieldSampleRateLabel => '采样率';
+
+  @override
+  String get ttsServicesFieldVolumeLabel => '音量';
+
+  @override
+  String get ttsServicesFieldPitchLabel => '音调';
+
+  @override
+  String get ttsServicesFieldLanguageBoostLabel => '语言增强';
+
+  @override
+  String get ttsServicesFieldBitrateLabel => '比特率';
+
+  @override
+  String get ttsServicesFieldChannelLabel => '声道数';
+
+  @override
+  String get ttsServicesFieldSubtitlesLabel => '生成字幕';
+
+  @override
+  String get ttsServicesFieldPronunciationDictionaryLabel => '发音词典（每行一项）';
+
+  @override
+  String get ttsServicesFieldInstructionLabel => '风格／音色描述';
+
+  @override
+  String get ttsServicesFieldStreamingLabel => '流式输出';
+
+  @override
+  String get ttsServicesFieldOptimizeTextPreviewLabel => '优化播报文本';
+
+  @override
+  String get ttsServicesFieldReferenceAudioLabel => '参考音频（WAV/MP3 数据 URI）';
+
+  @override
+  String get ttsServicesFieldChooseReferenceAudioButton => '选择参考音频';
+
+  @override
+  String get ttsServicesFieldTemperatureLabel => '随机度';
+
+  @override
+  String get ttsServicesFieldTopPLabel => 'Top P';
+
+  @override
+  String get ttsServicesFieldLatencyLabel => '延迟模式';
+
+  @override
+  String get ttsServicesEmotionAutoLabel => '自动匹配';
+
+  @override
+  String get ttsServicesValidationReferenceIdRequired => '音色／参考 ID 不能为空';
+
+  @override
+  String get ttsServicesValidationInstructionRequired => '音色描述不能为空';
+
+  @override
+  String ttsServicesValidationSampleRate(String format, String rates) {
+    return '$format 格式要求使用 $rates Hz。';
+  }
+
+  @override
+  String get imageContextTitle => '图片上下文';
+
+  @override
+  String get imageContextAutomatic => '自动管理历史图片';
+
+  @override
+  String get imageContextDescription => '管理本轮使用的图片，原图仍保留在聊天中。';
+
+  @override
+  String get imageContextIncluded => '本轮发送';
+
+  @override
+  String get imageContextOmitted => '本轮不发送';
+
+  @override
+  String get imageContextPin => '固定图片';
+
+  @override
+  String get imageContextUnpin => '取消固定';
+
+  @override
+  String get imageContextAttachAgain => '再次添加到输入框';
+
+  @override
+  String get imageContextEmpty => '还没有图片';
+
+  @override
+  String get imageContextUnavailable => '当前上下文无法读取这张图片。';
+
+  @override
+  String get imageContextEntryDescription => '查看和管理本轮使用的图片';
+
+  @override
+  String get imageContextAutomaticDescription => '优先保留你上传的图片，分批收起较早的工具图片。';
+
+  @override
+  String get imageContextActionsHint => '固定以优先保留，或再次添加到输入框。';
+
+  @override
+  String get imageContextEmptyDescription => '发送图片或让工具读取图片后，会显示在这里。';
+
+  @override
+  String get imageContextUserImages => '你上传的图片';
+
+  @override
+  String get imageContextToolImages => '工具图片';
+
+  @override
+  String get imageContextAssistantImages => '生成的图片';
+
+  @override
+  String imageContextImageNumber(int index) {
+    return '图片 $index';
+  }
+
+  @override
+  String imageContextIncludedCount(int included, int total) {
+    return '本轮发送 $included / $total 张';
+  }
+
+  @override
+  String get imageContextMissing => '图片不可用';
+
+  @override
+  String get imageContextLoadFailed => '暂时无法加载图片，请重试。';
+
+  @override
+  String get imageContextUpdateFailed => '未能保存修改，请重试。';
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -35006,13 +35150,13 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get aboutPageKelivoSearchAlreadyUnlocked => '這扇門你已經推開過了。';
 
   @override
-  String get aboutPageUpstreamSource => '上游開源專案';
+  String get aboutPageUpstreamSource => '基於開源專案 Kelivo（AGPL-3.0）';
 
   @override
   String get aboutPageAppName => 'MobiCodex';
 
   @override
-  String get aboutPageAppDescription => '開源 AI 助理';
+  String get aboutPageAppDescription => 'MobiCodex · AI 助理與電腦工作台';
 
   @override
   String get aboutPageNoQQGroup => '暫無QQ群';
@@ -45016,4 +45160,74 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   @override
   String get recoveryCopiesNeedUpdate =>
       '部分副本來自更新版本的 MobiCodex，請升級 App 後再還原。這些副本仍然保留。';
+
+  @override
+  String get imageContextTitle => '圖片上下文';
+
+  @override
+  String get imageContextAutomatic => '自動管理歷史圖片';
+
+  @override
+  String get imageContextDescription => '管理本輪使用的圖片，原圖仍保留在聊天中。';
+
+  @override
+  String get imageContextIncluded => '本輪傳送';
+
+  @override
+  String get imageContextOmitted => '本輪不傳送';
+
+  @override
+  String get imageContextPin => '固定圖片';
+
+  @override
+  String get imageContextUnpin => '取消固定';
+
+  @override
+  String get imageContextAttachAgain => '再次新增到輸入框';
+
+  @override
+  String get imageContextEmpty => '還沒有圖片';
+
+  @override
+  String get imageContextUnavailable => '目前上下文無法讀取這張圖片。';
+
+  @override
+  String get imageContextEntryDescription => '檢視和管理本輪使用的圖片';
+
+  @override
+  String get imageContextAutomaticDescription => '優先保留你上傳的圖片，分批收起較早的工具圖片。';
+
+  @override
+  String get imageContextActionsHint => '固定以優先保留，或再次新增到輸入框。';
+
+  @override
+  String get imageContextEmptyDescription => '傳送圖片或讓工具讀取圖片後，會顯示在這裡。';
+
+  @override
+  String get imageContextUserImages => '你上傳的圖片';
+
+  @override
+  String get imageContextToolImages => '工具圖片';
+
+  @override
+  String get imageContextAssistantImages => '產生的圖片';
+
+  @override
+  String imageContextImageNumber(int index) {
+    return '圖片 $index';
+  }
+
+  @override
+  String imageContextIncludedCount(int included, int total) {
+    return '本輪傳送 $included / $total 張';
+  }
+
+  @override
+  String get imageContextMissing => '圖片無法使用';
+
+  @override
+  String get imageContextLoadFailed => '暫時無法載入圖片，請重試。';
+
+  @override
+  String get imageContextUpdateFailed => '未能儲存修改，請重試。';
 }
