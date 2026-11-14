@@ -19,7 +19,8 @@ GitHub Release 里的 APK 由 GitHub Actions 构建，使用构建机临时生�
 - GitHub Release（[Run 12](https://github.com/luoz76070-art/MobiCodex/actions/runs/43555102583)）：APK 62,644,329 字节，SHA256 `85ce69b63b6b99e1…`（完整值见 Release 的 `SHA256SUMS`），GitHub Actions 临时证书签名。
 - App 内更新与[下载页](https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/index.html)：同一次构建用原预览证书重签，62,721,844 字节，SHA256 `eac306dc4170117429f065f4b9e336d74d6d7c4a092c31979c8159e134acb860`；与 GitHub 版 1021 个条目内容逐项相同，只差签名文件。更新清单 latest 为 code11，previous 保留 code10。
 - 对应源码 25,127,632 字节，SHA256 `2f8a635365a2a688ea08b5059cffc6bb39bad8c2f3e79c561ec0063c7ac81438`；B1 有意删除的 13 个上游旧图标文件记录在 `removedUpstreamPaths`，其余 5039 个上游文件全部包含。
-- 公网核对：APK 与源码完整回下载逐字节一致，APK 支持 Range（206）与 CORS，App 自带的清单解析读出 code11；旧 Android、preview、热更新通道未改动。手机实际安装待用户确认。
+- 公网核对：APK 与源码完整回下载逐字节一致，APK 支持 Range（206）与 CORS，App 自带的清单解析读出 code11；旧 Android、preview、热更新通道未改动。
+- 2026-11-14 用户确认：已通过 App 内更新安装，能正常使用，震动反馈有效。
 
 ## 本版内容（相对 0.1.8）
 
@@ -36,6 +37,6 @@ GitHub Release 里的 APK 由 GitHub Actions 构建，使用构建机临时生�
 
 ## 验证
 
-发布提交上：类型检查、lint、构建、插件构建通过；后端 533 项中 532 项一次通过，1 项为测试收尾删除临时目录的并发偶发（单独重跑 3 次均通过）；手机网页 424 项、语音 140 项通过。Dart 分析、Flutter 测试、Android lint/单元测试与构建由发布工作流执行。界面改动均在合成数据页面做过浅色/深色/320 宽 150% 字号截图检查。真机安装、触感和完整功能对照待用户确认。
+发布提交上：类型检查、lint、构建、插件构建通过；后端 533 项中 532 项一次通过，1 项为测试收尾删除临时目录的并发偶发（单独重跑 3 次均通过）；手机网页 424 项、语音 140 项通过。Dart 分析、Flutter 测试、Android lint/单元测试与构建由发布工作流执行。界面改动均在合成数据页面做过浅色/深色/320 宽 150% 字号截图检查。用户已确认真机安装、正常使用及震动反馈；完整功能对照不在本轮范围。
 
 整合发行按随附 GNU AGPL v3 提供，Kelivo 固定 v1.3.4（4a7da9b6）及原 MIT/第三方声明随源码保留；许可证及内部兼容标识不做品牌替换。
