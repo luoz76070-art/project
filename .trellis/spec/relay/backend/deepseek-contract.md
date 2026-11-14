@@ -151,7 +151,7 @@ messages.mjs/messageOf 同时拥有实时 bridge 与只读历史投影。仅官�
 
 已做静态核对（只读 app.asar 提取的 rc.3 源码）：followup/steer/cancel、inbox.remove/nextTurn、SessionQuery.observeSession、sessionController.prompt、turn/end 原因种类与 rc.1 契约一致；审批结算 settleRemoteEvent/finishRemoteEvent 指纹与插件常量逐字一致。`agent/inbox/spliced` 在 rc.3 是会话日志事件，桥接的同名 ctx 监听不会触发，待发项显示依赖 250ms 轮询，行为不变。
 
-**官方隔离检查（runtime/history/interactions）尚未执行**：执行需在隔离目录运行宿主自带模块和同版官方 testkit，本次被权限策略拦截，等待用户决定。未通过前不得把 0.2.8 装进原 profile。
+官方隔离检查经用户同意执行（隔离运行时：app.asar 只读提取 + npm 官方 dsh-agent-loop-testkit 0.2.2-rc.3，sha512 校验；宿主自带 Node 24.21.0）：history 4、interactions 12、runtime 14，共 30 项通过；外部模型请求 0，夹具模型请求 3，未改用户 profile、未读原会话。
 
 W4b：bridge 在手机提交的 `user/message` 确认时，以当时打开的回合号记录 `consumedTurns`（每个原会话最近16条，最多128个会话，无订阅也保留）。Relay `deepSeekSnapshot.consumedTurns` 可选，旧桥接缺省时 `turnFor` 为 null，不猜。`progressCandidate` 只对 `turnBindingAgents`（deepseek）的进行中卡片保持观察；Claude 归入 C2，OpenCode 未配置不做。
 

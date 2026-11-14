@@ -1,0 +1,64 @@
+{
+  "date": "2026-11-14",
+  "harness": "0.2.2-rc.3",
+  "plugin": "0.2.8",
+  "node": "24.21.0 (Harness bundled)",
+  "results": {
+    "history": {
+      "version": "0.2.2-rc.3",
+      "checks": {
+        "officialMetadataNoLogRead": true,
+        "officialPreparedPagesNoActivation": true,
+        "officialPromptRpcConfirmation": true,
+        "officialRequestDeduplication": true
+      },
+      "externalModelRequests": 0,
+      "userProfilesChanged": false,
+      "originalUserSessionsRead": false
+    },
+    "interactions": {
+      "version": "0.2.2-rc.3",
+      "checks": {
+        "officialGatewayFingerprint": true,
+        "officialQuestionAndPlan": true,
+        "officialCompleteToolArguments": true,
+        "officialApprovalAndAudit": true,
+        "officialReject": true,
+        "officialCancellation": true,
+        "officialPtcApproval": true,
+        "officialApprovalIntentUnavailable": true,
+        "officialDesktopFirst": true,
+        "officialFingerprintReplacement": true,
+        "officialContinuedQuestion": true,
+        "noPendingLeak": true
+      },
+      "externalModelRequests": 0,
+      "userProfilesChanged": false,
+      "actualUserApprovalPerformed": false
+    },
+    "runtime": {
+      "version": "0.2.2-rc.3",
+      "cordis": "4.1.0",
+      "checks": {
+        "officialVersionGate": true,
+        "bundleComposition": true,
+        "officialCliDump": true,
+        "waitsForServices": true,
+        "officialLoaderActive": true,
+        "officialSessionQueryAndEventBus": true,
+        "officialScopedStreamAndStatus": true,
+        "dependencyLossClosesListener": true,
+        "reloadAndAsyncUnload": true,
+        "realAgentLoopQueue": true,
+        "realAgentLoopCancelsOnlyMobileQueuedInput": true,
+        "realAgentLoopSteerAndCanonicalText": true,
+        "realAgentLoopInterruptKeepsInbox": true,
+        "realAgentLoopRejectsOldTurnControl": true
+      },
+      "externalModelRequests": 0,
+      "fixtureModelRequests": 3,
+      "userProfilesChanged": false,
+      "originalSessionControlVerified": false
+    }
+  }
+}
