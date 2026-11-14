@@ -4,6 +4,7 @@ import { voiceApi } from "./api";
 import { voiceError, type VoiceConfig } from "./model";
 
 import { voiceContextEnabled, setVoiceContextEnabled } from "./preferences";
+import { VoiceHistory } from "./VoiceHistory";
 
 export function VoiceSettings({ endpoint, token }: { endpoint: string; token: string }) {
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false);
@@ -44,6 +45,7 @@ export function VoiceSettings({ endpoint, token }: { endpoint: string; token: st
       <button type="button" className="action-button" role="switch" aria-label="识别时参考当前会话（项目名、标题、文件名）" aria-checked={useContext} onClick={() => { const next = !useContext; setVoiceContextEnabled(next); setUseContext(next); }}>{useContext ? "已开启" : "已关闭"}</button>
     </label>
     <p className="setting-description">开启后，项目名、会话标题和近期文件名会发给语音识别服务商；不发送完整路径或消息正文。关闭立即生效。</p>
+    <VoiceHistory />
     {busy && <p role="status">正在处理配置…</p>}
     {config && <>
       <label>百炼地域<select value={region} onChange={event => {

@@ -128,10 +128,11 @@ export function CapturePanel({ itemUid = null, endpoint, token, scope, open, onC
       </>}
       {item && <><p>状态：{{ todo: '待处理', in_progress: '进行中', to_verify: '待验证', done: '完成', returned: '退回' }[item.state]}</p>
         <ItemStateActions item={item} send={api.request} disabled={controlsDisabled || locked} onItem={setItem} />
+        {item.capture?.assetsPurgedAt ? <p>图片已按保留期从电脑上清理，文字仍然保留。</p> : <>
         <button disabled={controlsDisabled} onClick={() => void run(evidence)}>查看图片预览</button>
         <ul>{item.assets.map(a => <li key={a.id}><button disabled={controlsDisabled} onClick={() => void run(async () => {
           const value = await api.image(a.id); setImages([{ id: a.id, src: `data:${value.asset.mimeType};base64,${value.dataBase64}`, label: `${a.fileName}（原图，方向 ${value.asset.orientation}）` }]);
-        })}>{a.fileName} · 查看原图</button></li>)}</ul></>}
+        })}>{a.fileName} · 查看原图</button></li>)}</ul></>}</>}
       {images.map(image => <figure key={image.id}><img src={image.src} alt={image.label} /><figcaption>{image.label}</figcaption></figure>)}
       {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
       {tx.current && !tx.current.confirmed && <p>当前保存内容已固定，请重试同一事项；关闭应用后未确认内容无法恢复。</p>}

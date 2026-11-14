@@ -14,6 +14,8 @@ export type RelayConfig = {
   opencode?: OpenCodeConfig;
   claude?: ClaudeConfig;
   deepseek?: DeepSeekConfig;
+  /** Days a done/returned capture card keeps its images; 0 keeps them forever. */
+  retentionDays?: number;
 };
 
 export function loadConfig(): RelayConfig {
@@ -33,6 +35,8 @@ export function loadConfig(): RelayConfig {
   const deepSeekUrl = process.env.MOBILE_CODEX_DEEPSEEK_URL;
   const deepseek = deepSeekUrl ? deepSeekConfigSchema.safeParse({ url: deepSeekUrl, token: process.env.MOBILE_CODEX_DEEPSEEK_TOKEN, directory: process.env.MOBILE_CODEX_DEEPSEEK_DIRECTORY }) : null;
   if (deepseek && (!deepseek.success || [configuredToken || "dev-local-token", claudeToken].includes(deepseek.data.token))) throw new Error("DEEPSEEK_CONFIG_INVALID");
+  const retentionDays = Number(process.env.MOBILE_CODEX_RETENTION_DAYS ?? 30);
+  if (!Number.isInteger(retentionDays) || retentionDays < 0 || retentionDays > 3650) throw new Error("MOBILE_CODEX_RETENTION_DAYS must be an integer from 0 to 3650.");
   if (desktopTransport !== "legacy" && desktopTransport !== "native") throw new Error("MOBILE_CODEX_DESKTOP_TRANSPORT must be legacy or native.");
   if (!configuredToken && !isLoopbackHost(host)) {
     throw new Error("MOBILE_CODEX_TOKEN is required when Relay listens on a non-loopback address.");
@@ -44,6 +48,7 @@ export function loadConfig(): RelayConfig {
     codexHome: process.env.CODEX_HOME ?? path.join(home, ".codex"),
     defaultCwd: process.env.MOBILE_CODEX_DEFAULT_CWD ?? process.cwd(),
     desktopTransport,
+    retentionDays,
     ...(opencode?.success ? { opencode: opencode.data } : {}),
     ...(claude?.success ? { claude: claude.data } : {}),
     ...(deepseek?.success ? { deepseek: deepseek.data } : {}),

@@ -140,8 +140,37 @@ export class WorkItemStore {
       entry.deleted = { at: new Date().toISOString(), mutationId: mutation.mutationId, fingerprint: signature, revision: item.revision + 1 };
       await this.commit(next, [uid], guard);
       return { uid, deleted: true as const, revision: entry.deleted.revision, ...this.info() };
+    }).then(async result => {
+      // The card is gone and was never dispatched: its images go too. A failure here is retried by the retention sweep.
+      const item = this.data?.entries.find(e => e.item.uid === uid)?.item;
+      if (item?.capture) await this.captures.remove(item.capture.assetIds).catch(() => {});
+      return result;
     });
   }
+  /**
+   * W6 retention. Done/returned capture cards older than `days` (by their last transition) keep their text but lose their
+   * images; uploads no live card references are removed after a day. Never touches todo/in_progress/to_verify cards.
+   */
+  async retention(now: number, days: number) {
+    const purge = days > 0 ? this.serialize(async () => {
+      const next = clone(this.snapshot()), changed: string[] = [], ids: string[] = [], at = new Date(now).toISOString();
+      for (const entry of next.entries) {
+        const item = entry.item, ended = Date.parse(item.lastTransition?.at ?? item.updatedAt);
+        if (entry.deleted || !item.capture || item.capture.assetsPurgedAt || !['done', 'returned'].includes(item.state) || now - ended < days * 86_400_000) continue;
+        ids.push(...item.capture.assetIds);
+        entry.item = { ...item, capture: { ...item.capture, assetsPurgedAt: at }, revision: item.revision + 1, updatedAt: at };
+        changed.push(item.uid);
+      }
+      if (changed.length) await this.commit(next, changed, () => {});
+      return { cards: changed.length, ids };
+    }) : Promise.resolve({ cards: 0, ids: [] as string[] });
+    const { cards, ids } = await purge;
+    const live = new Set(this.snapshot().entries.filter(e => !e.deleted && !e.item.capture?.assetsPurgedAt).flatMap(e => e.item.capture?.assetIds ?? []));
+    const orphans = (await this.captures.list()).filter(a => !live.has(a.id) && now - Date.parse(a.createdAt) >= 86_400_000).map(a => a.id);
+    const removed = await this.captures.remove([...ids, ...orphans]);
+    return { purgedCards: cards, removedAssets: removed };
+  }
+  isDeleted(uid: string) { return Boolean(this.snapshot().entries.find(e => e.item.uid === uid)?.deleted); }
   uids() { return this.snapshot().entries.filter(e => !e.deleted).map(e => e.item.uid); }
   /** System progress write-back (W4). run must go through the W1 state machine; returning the same item is a no-op. */
   progress(uid: string, run: (item: WorkItem) => WorkItem) {

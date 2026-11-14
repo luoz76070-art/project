@@ -42,7 +42,7 @@ const settingsSource = await fs.readFile(new URL('../apps/mobile/src/features/vo
 const settingsAst = ts.createSourceFile('VoiceSettings.tsx', settingsSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const settingsBody = settingsAst.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(settingsAst)).join('\n').replace('export function VoiceSettings', 'function VoiceSettings');
 const settingsJs = ts.transpileModule(settingsBody, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, jsxFactory: 'h', jsxFragmentFactory: 'Fragment' } }).outputText;
-const settingsFactory = new Function('useState', 'useRef', 'useEffect', 'voiceContextEnabled', 'setVoiceContextEnabled', 'h', 'Fragment', 'DisclosureSummary', settingsJs + ';return VoiceSettings');
+const settingsFactory = new Function('useState', 'useRef', 'useEffect', 'voiceContextEnabled', 'setVoiceContextEnabled', 'h', 'Fragment', 'DisclosureSummary', 'VoiceHistory', settingsJs + ';return VoiceSettings');
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function storage() { const data = new Map(); return { data, getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: k => data.delete(k) }; }
@@ -121,7 +121,7 @@ test('voice settings switch toggles the production privacy preference and disclo
   try {
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: store });
     setVoiceContextEnabled(true);
-    const Settings = settingsFactory(useState, () => ({ current: null }), () => {}, voiceContextEnabled, setVoiceContextEnabled, h, 'fragment', 'summary');
+    const Settings = settingsFactory(useState, () => ({ current: null }), () => {}, voiceContextEnabled, setVoiceContextEnabled, h, 'fragment', 'summary', 'voice-history');
     const render = () => { cursor = 0; return Settings({ endpoint: 'https://synthetic.invalid', token: 'synthetic' }); };
     const first = render(), toggle = flatten(first).find(node => node.props?.role === 'switch');
     assert.equal(toggle.props['aria-checked'], true);
@@ -583,3 +583,16 @@ test('refinement guard handles maximum-length text and numeric runs without trun
     assert.deepEqual(findMissingVoiceDetails(original, original), []);
   }
 });
+
+test('a successful transcription is offered to voice history exactly once; failures record nothing', async t => {
+  const store = storage(); let asr = 0;
+  const manager = coordinator(t, store); manager.setVisible(true);
+  const driver = inputDriver(t, manager, { transcribe: async () => { if (++asr === 1) throw new Error('lost'); return '记录这一句'; } });
+  await record(driver);
+  await until(() => driver.button('重新转写'));
+  assert.deepEqual(driver.transcripts, []);
+  driver.click('重新转写');
+  await until(() => driver.original() === '记录这一句');
+  assert.deepEqual(driver.transcripts, ['记录这一句']);
+});
+

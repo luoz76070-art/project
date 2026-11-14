@@ -115,5 +115,21 @@ export class CaptureAssetStore {
     });
     this.writes = run.catch(() => {}); return run;
   }
+  /** Asset identity and age only, for retention. */
+  async list() { await this.load(); return [...this.entries.values()].map(e => ({ id: e.asset.id, captureId: e.asset.captureId, createdAt: e.asset.createdAt })); }
+  /** Deletes managed assets (directory per asset); unknown IDs are ignored. Serialized with uploads. */
+  remove(ids: string[]): Promise<number> {
+    const run = this.writes.then(async () => {
+      await this.load(); let removed = 0;
+      for (const id of new Set(ids)) {
+        if (!this.entries.has(id)) continue;
+        uuid.parse(id);
+        await fs.rm(path.join(this.directory, id), { recursive: true, force: true });
+        this.entries.delete(id); removed++;
+      }
+      return removed;
+    });
+    this.writes = run.catch(() => {}); return run;
+  }
   async drain() { await this.writes; }
 }

@@ -73,7 +73,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const readImage = createProjectImageReader();
   const agentSessionRoutes = createAgentSessionRoutes({ gateway: agentGateway, owners, devices, streams, deviceStreams, submissions, readImage });
   const captures = new CaptureAssetStore(config.defaultCwd);
-  const workItemRoutes = createWorkItemRoutes({ root: config.defaultCwd, captures, owners, devices, streams, deviceStreams, openHandoff: openHandoffTarget({ gateway: agentGateway, desktop: desktopControl, codex: store }) });
+  const workItemRoutes = createWorkItemRoutes({ retentionDays: config.retentionDays, root: config.defaultCwd, captures, owners, devices, streams, deviceStreams, openHandoff: openHandoffTarget({ gateway: agentGateway, desktop: desktopControl, codex: store }) });
   // A route may still await its upstream's first frame before reply.send(stream).
   // Cancel adapters before HTTP drain, otherwise onClose cannot release that wait.
   app.addHook("preClose", async () => { voice.stop(); workItemRoutes.cancelHandoffs(); for (const stream of streams) stream.destroy(); await Promise.all([agentGateway.stop(), desktopControl.messageQueue?.stop()]); });

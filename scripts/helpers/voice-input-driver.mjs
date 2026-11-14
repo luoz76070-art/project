@@ -8,10 +8,11 @@ const source = await fs.readFile(new URL('../../apps/mobile/src/features/voice/V
 const ast = ts.createSourceFile('VoiceInput.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n').replace('export function VoiceInput', 'function VoiceInput');
 const js = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.React, jsxFactory: 'h', jsxFragmentFactory: 'Fragment' } }).outputText;
-const dependencies = ['useEffect', 'useRef', 'useState', 'createPortal', 'VoiceRecorder', 'voiceRecordingSupported', 'voiceApi', 'mergeVoiceDraft', 'voiceError', 'writeClipboard', 'voiceDraftHash', 'document', 'HTMLElement', 'h', 'Fragment', 'Mic', 'X', 'Square', 'Loader2', 'Copy', 'findMissingVoiceDetails', 'buildAsrHints', 'voiceContextEnabled'];
+const dependencies = ['useEffect', 'useRef', 'useState', 'createPortal', 'VoiceRecorder', 'voiceRecordingSupported', 'voiceApi', 'mergeVoiceDraft', 'voiceError', 'writeClipboard', 'voiceDraftHash', 'document', 'HTMLElement', 'h', 'Fragment', 'Mic', 'X', 'Square', 'Loader2', 'Copy', 'findMissingVoiceDetails', 'buildAsrHints', 'voiceContextEnabled', 'recordVoiceTranscript'];
 const component = new Function(...dependencies, `${js}\nreturn VoiceInput;`);
 
 export function voiceInputDriver({ api, recovery, mergeVoiceDraft, voiceError, voiceDraftHash, findMissingVoiceDetails, buildAsrHints, voiceContextEnabled }) {
+  const transcripts = [];
   let cursor = 0, tree, dirty = false, listener, mounted = true;
   const slots = [], effects = [], listeners = new Map(), calls = { start: 0, cancel: 0 };
   const drafts = [];
@@ -32,7 +33,7 @@ export function voiceInputDriver({ api, recovery, mergeVoiceDraft, voiceError, v
     if (!previous || deps.some((value, i) => value !== previous.deps[i])) effects.push(() => { previous?.cleanup?.(); slots[index] = { deps, cleanup: setup() }; });
   };
   const h = (type, props, ...children) => ({ type, props: { ...props, children } });
-  const Component = component(useEffect, useRef, useState, child => child, native, () => true, () => api, mergeVoiceDraft, voiceError, async () => {}, voiceDraftHash, document, class {}, h, 'fragment', ...Array(5).fill('icon'), findMissingVoiceDetails, buildAsrHints, voiceContextEnabled);
+  const Component = component(useEffect, useRef, useState, child => child, native, () => true, () => api, mergeVoiceDraft, voiceError, async () => {}, voiceDraftHash, document, class {}, h, 'fragment', ...Array(5).fill('icon'), findMissingVoiceDetails, buildAsrHints, voiceContextEnabled, text => { transcripts.push(text); });
   function render(patch = {}) {
     assert.ok(mounted); Object.assign(props, patch);
     do { dirty = false; cursor = 0; tree = Component(props); for (const run of effects.splice(0)) run(); } while (dirty);
@@ -46,7 +47,7 @@ export function voiceInputDriver({ api, recovery, mergeVoiceDraft, voiceError, v
   const text = node => Array.isArray(node) ? node.map(text).join('') : node && typeof node === 'object' ? text(node.props.children) : node ?? '';
   function button(label) { render(); return nodes(tree).find(node => node.type === 'button' && (node.props['aria-label'] === label || text(node) === label)); }
   render();
-  return {
+  return { transcripts,
     render, calls, drafts, document,
     button, click(label) { const target = button(label); assert.ok(target, `missing button: ${label}`); assert.ok(!target.props.disabled, `disabled button: ${label}`); target.props.onClick({}); render(); },
     recording(value = {}) { assert.ok(listener, 'recording listener must be installed'); listener({ sessionId: calls.sessionId, dataBase64: 'synthetic-audio', durationMs: 1000, ...value }); render(); },

@@ -126,7 +126,7 @@ test('capture API authenticates images, derives source, freezes evidence, CAS ed
   assert.equal((await f.request('GET','/api/work-items?source=capture')).json().items.length,0);
   const restored=await WorkItemStore.open(f.root); assert.throws(()=>restored.get(body.uid),{statusCode:410});
   assert.equal((await restored.deleteCapture(body.uid,deletion,'admin',()=>{})).deleted,true);
-  assert.deepEqual(await fs.readFile(path.join(f.root,a.relativePath)),png());
+  await assert.rejects(fs.readFile(path.join(f.root,a.relativePath)),{code:'ENOENT'},'W6: the deleted card took its original image with it');
   const legacy=await f.request('POST','/api/uploads',{fileName:'note.txt',dataBase64:Buffer.from('legacy').toString('base64')}); assert.equal(legacy.statusCode,200);
 });
 test('voice original is immutable; non-todo and previously dispatched cards cannot be deleted', async t => {
@@ -154,7 +154,7 @@ test('delete SSE has only identity and revocation stops assets and writes',{time
   await f.request('DELETE',`/api/devices/${device.device.id}`);
   for(const url of [`/api/capture-assets/${p.assetId}`,'/api/work-items']) assert.equal((await f.request('GET',url,undefined,device.token)).statusCode,401);
   assert.equal((await f.request('POST','/api/uploads',payload(),device.token)).statusCode,401);
-  assert.equal((await f.request('GET',`/api/capture-assets/${p.assetId}`,undefined,other.token)).statusCode,200);
+  assert.equal((await f.request('GET',`/api/capture-assets/${p.assetId}`,undefined,other.token)).statusCode,404,'W6: deleting the card removed its images for every device');
   abort.abort();
 });
 test('revoked upload cannot publish receipt after disk wait; corrupt asset receipts fail closed',async t=>{

@@ -14,14 +14,23 @@ import { CaptureAssetStore } from '../capture/store.js';
 import { WorkItemStore } from '../workItems/store.js';
 import { bytes, captureSchema, fieldsSchema, limits, mutationSchema, stateSchema, uuid, workItemError } from '../workItems/schema.js';
 
-export function createWorkItemRoutes(context: { openHandoff?: OpenHandoffTarget; root: string; captures?: CaptureAssetStore; owners: WeakMap<FastifyRequest, string>; devices: DeviceRegistry;
+export function createWorkItemRoutes(context: { retentionDays?: number; openHandoff?: OpenHandoffTarget; root: string; captures?: CaptureAssetStore; owners: WeakMap<FastifyRequest, string>; devices: DeviceRegistry;
   streams: Set<PassThrough>; deviceStreams: Map<string, Set<PassThrough>> }) {
   const { owners, devices, streams, deviceStreams } = context;
   let pending: Promise<WorkItemStore> | undefined;
   const captures = context.captures ?? new CaptureAssetStore(context.root);
   const openHandoff = context.openHandoff ?? (async () => { throw workItemError('work_item_handoff_unavailable', 503); });
   const progress = new WorkItemProgress(openHandoff);
-  const store = () => pending ??= WorkItemStore.open(context.root, captures).then(opened => { progress.attach(opened); return opened; });
+  let retentionTimer: ReturnType<typeof setInterval> | undefined, stopped = false;
+  const store = () => pending ??= WorkItemStore.open(context.root, captures).then(opened => {
+    progress.attach(opened);
+    if (!stopped && !retentionTimer) {
+      // W6: purge expired card images and abandoned uploads now and every 6 hours.
+      const sweep = () => void opened.retention(Date.now(), context.retentionDays ?? 30).catch(() => {});
+      sweep(); retentionTimer = setInterval(sweep, 6 * 3_600_000); retentionTimer.unref?.();
+    }
+    return opened;
+  });
   // Resume progress tracking after a relay restart, without creating a store for workspaces that never used work items.
   if (context.openHandoff) void fs.access(path.join(context.root, '.mobile-codex', 'work-items.json')).then(() => store()).catch(() => {});
   const handoffs = new HandoffService(context.root, captures, store, openHandoff);
@@ -37,7 +46,7 @@ export function createWorkItemRoutes(context: { openHandoff?: OpenHandoffTarget;
     owner(raw: string) { return valid(raw)?.owner ?? null; },
     revoke(owner: string) { handoffs.revoke(owner); for (const [id, value] of tokens) if (value.owner === owner) tokens.delete(id); },
     cancelHandoffs() { handoffs.stop(); progress.stop(); },
-    async stop() { handoffs.stop(); progress.stop(); if (pending) await (await pending).drain().catch(() => {}); },
+    async stop() { stopped = true; clearInterval(retentionTimer); handoffs.stop(); progress.stop(); if (pending) await (await pending).drain().catch(() => {}); },
     register(app: FastifyInstance) {
       app.register(async routes => {
         routes.setErrorHandler((error, _request, reply) => {
@@ -77,6 +86,8 @@ export function createWorkItemRoutes(context: { openHandoff?: OpenHandoffTarget;
           const { uid: id, mutationId, expectedRevision, capture, storeId, ...fields } = fieldsSchema.extend({ capture: captureSchema.optional(), storeId: uuid.optional(), uid: uuid, ...mutationSchema.shape }).strict().parse(request.body);
           if (capture && storeId !== (await store()).info().storeId) throw workItemError('work_item_store_changed');
           if (capture) {
+            // A replayed create of a deleted card answers 410 even though W6 already removed its images.
+            if ((await store()).isDeleted(id)) throw workItemError('work_item_deleted', 410);
             if (fields.assets.length) throw workItemError('work_item_capture_assets_invalid', 400);
             fields.assets = (await captures.validate(capture.assetIds, capture.id, owners.get(request)!)).filter(a => a.role === 'original');
           }

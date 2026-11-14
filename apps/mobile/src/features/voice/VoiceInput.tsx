@@ -12,6 +12,7 @@ import type { VoiceRecoveryPort } from "./useVoiceRecovery";
 
 import { buildAsrHints, type VoiceContextSource } from "./asrContext";
 import { voiceContextEnabled } from "./preferences";
+import { recordVoiceTranscript } from "./history";
 
 type Phase = "idle" | "starting" | "recording" | "transcribing" | "failed" | "refining" | "preview";
 export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, recovery, context, capture = false, onCapture }: { endpoint: string; token: string; draft: string; onDraft: (value: string) => void; scope: string; thread: string; recovery: VoiceRecoveryPort; context?: VoiceContextSource; capture?: boolean; onCapture?: (raw: string) => void }) {
@@ -95,7 +96,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
     try {
       const text = await submit("asr", active, id => api.transcribe(id, active.recording!.dataBase64, active.recording!.durationMs, active.abort.signal, voiceContextEnabled() ? active.hints : undefined));
       if (session.current !== active) return;
-      active.requestId = undefined; active.recording = undefined; setOriginal(text);
+      active.requestId = undefined; active.recording = undefined; setOriginal(text); recordVoiceTranscript(text);
       if (active.mode === "prompt") await refine(text, active);
       else { active.finished = true; setPhase("preview"); }
     } catch (caught) {

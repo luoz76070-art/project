@@ -16,7 +16,7 @@ const legacyAssetSchema = z.object({ id: uuid, relativePath: bytes(4096).min(1),
   size: z.number().int().min(1).max(limits.assetBytes), managed: z.literal(false) }).strict();
 export const assetSchema = z.union([legacyAssetSchema, captureAssetSchema]);
 export const captureSchema = z.object({ id: uuid, mode: z.enum(['image', 'voice']), createdAt: z.string().datetime(),
-  assetIds: z.array(uuid).max(32), rawTranscript: bytes(64 * 1024).nullable() }).strict().superRefine((value, ctx) => {
+  assetIds: z.array(uuid).max(32), rawTranscript: bytes(64 * 1024).nullable(), assetsPurgedAt: z.string().datetime().optional() }).strict().superRefine((value, ctx) => {
   if (new Set(value.assetIds).size !== value.assetIds.length || (value.mode === 'voice' ? !value.rawTranscript?.trim() : value.rawTranscript !== null || !value.assetIds.length))
     ctx.addIssue({ code: 'custom', message: 'capture_invalid' });
 });
