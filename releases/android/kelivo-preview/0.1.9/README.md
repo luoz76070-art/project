@@ -14,6 +14,13 @@ GitHub Release 里的 APK 由 GitHub Actions 构建，使用构建机临时生�
 
 已安装 MobiCodex 的手机请用「设置 → 应用更新 → 检查更新」。更新通道提供的是同一次构建，用原预览证书（SHA256 `3ffb81f3524a590f469b80476951a22fbc6e441a470b9270079a8c1d452c4a38`）重新签名，包名不变，覆盖升级，数据保留。两份 APK 的 SHA 不同，内容只差签名；具体值见发布记录。
 
+## 发布结果
+
+- GitHub Release（[Run 12](https://github.com/luoz76070-art/MobiCodex/actions/runs/43555102583)）：APK 62,644,329 字节，SHA256 `85ce69b63b6b99e1…`（完整值见 Release 的 `SHA256SUMS`），GitHub Actions 临时证书签名。
+- App 内更新与[下载页](https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/index.html)：同一次构建用原预览证书重签，62,721,844 字节，SHA256 `eac306dc4170117429f065f4b9e336d74d6d7c4a092c31979c8159e134acb860`；与 GitHub 版 1021 个条目内容逐项相同，只差签名文件。更新清单 latest 为 code11，previous 保留 code10。
+- 对应源码 25,127,632 字节，SHA256 `2f8a635365a2a688ea08b5059cffc6bb39bad8c2f3e79c561ec0063c7ac81438`；B1 有意删除的 13 个上游旧图标文件记录在 `removedUpstreamPaths`，其余 5039 个上游文件全部包含。
+- 公网核对：APK 与源码完整回下载逐字节一致，APK 支持 Range（206）与 CORS，App 自带的清单解析读出 code11；旧 Android、preview、热更新通道未改动。手机实际安装待用户确认。
+
 ## 本版内容（相对 0.1.8）
 
 - **语音**：转写结果在电脑端缓存 15 分钟，网络中断后可找回；转写失败保留录音可重转；整理稿丢了数字、路径或否定词时提醒并推荐原文；识别时参考项目名、会话标题等热词；转写文字可在手机上保留 30 天（不存录音，可关闭）。
