@@ -1,5 +1,6 @@
 package com.mobilecodex.app;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
@@ -11,6 +12,7 @@ final class HotUpdateStore {
     private static final String ACTIVE_VERSION = "activeVersion";
     private static final String PREVIOUS_VERSION = "previousVersion";
     private static final String PENDING_VERSION = "pendingVersion";
+    private static final String STAGED_VERSION = "stagedVersion";
     private static final String MIN_NATIVE_VERSION_PREFIX = "minNativeVersionCode:";
     private static final String MAX_NATIVE_VERSION_PREFIX = "maxNativeVersionCode:";
 
@@ -36,6 +38,9 @@ final class HotUpdateStore {
             prefs.edit().putString(ACTIVE_VERSION, previous == null ? "" : previous).remove(PENDING_VERSION).apply();
         }
 
+        // A bundle downloaded during the previous run starts here, as a trial.
+        String promoted = promoteStaged(context);
+        if (promoted != null) return promoted;
         String active = prefs.getString(ACTIVE_VERSION, "");
         if (!isUsable(context, active, prefs)) {
             if (active != null && !active.isEmpty()) {
@@ -56,6 +61,32 @@ final class HotUpdateStore {
 
     static String previousVersion(Context context) {
         return prefs(context).getString(PREVIOUS_VERSION, "");
+    }
+
+    static String stagedVersion(Context context) {
+        return prefs(context).getString(STAGED_VERSION, "");
+    }
+
+    // Written synchronously: the download ran on a worker thread and the app may be closed right after.
+    @SuppressLint("ApplySharedPref")
+    static void stage(Context context, String version, int minNativeVersionCode, int maxNativeVersionCode) {
+        prefs(context).edit()
+            .putString(STAGED_VERSION, version)
+            .putInt(MIN_NATIVE_VERSION_PREFIX + version, minNativeVersionCode)
+            .putInt(MAX_NATIVE_VERSION_PREFIX + version, maxNativeVersionCode)
+            .commit();
+    }
+
+    /** Activates the staged bundle as a pending trial; null when none is usable. */
+    @SuppressLint("ApplySharedPref")
+    static String promoteStaged(Context context) {
+        SharedPreferences prefs = prefs(context);
+        String staged = prefs.getString(STAGED_VERSION, "");
+        if (staged == null || staged.isEmpty()) return null;
+        prefs.edit().remove(STAGED_VERSION).commit();
+        if (!isUsable(context, staged, prefs)) return null;
+        return activate(context, staged, prefs.getInt(MIN_NATIVE_VERSION_PREFIX + staged, 0),
+            prefs.getInt(MAX_NATIVE_VERSION_PREFIX + staged, Integer.MAX_VALUE));
     }
 
     static String activate(Context context, String version, int minNativeVersionCode, int maxNativeVersionCode) {
@@ -127,11 +158,12 @@ final class HotUpdateStore {
     private static void prune(Context context) {
         String active = activeVersion(context);
         String previous = previousVersion(context);
+        String staged = stagedVersion(context);
         File[] bundles = root(context).listFiles();
         if (bundles == null) return;
         for (File bundle : bundles) {
             String name = bundle.getName();
-            if (name.equals(active) || name.equals(previous)) continue;
+            if (name.equals(active) || name.equals(previous) || name.equals(staged)) continue;
             try { HotUpdatePaths.deleteTree(root(context), bundle); } catch (RuntimeException ignored) { /* retry on next launch */ }
         }
     }

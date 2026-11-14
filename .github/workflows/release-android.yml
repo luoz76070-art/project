@@ -30,6 +30,10 @@ concurrency:
 env:
   CI: true
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+  # The app checks the same public channel as its install page; the GitHub
+  # Release keeps an archive copy with its own manifests.
+  MOBICODEX_UPDATE_MANIFEST_URL: https://zyzlz.xin/mobile-codex/releases/android/preview/latest.json
+  MOBICODEX_HOT_MANIFEST_URL: https://zyzlz.xin/mobile-codex/releases/hot/latest.json
 
 jobs:
   quality:
@@ -178,10 +182,8 @@ jobs:
           printf 'version_code=%s\n' "$version_code" >> "$GITHUB_OUTPUT"
           printf 'release_tag=%s\n' "$release_tag" >> "$GITHUB_OUTPUT"
           printf 'prerelease=%s\n' "$prerelease" >> "$GITHUB_OUTPUT"
-          printf 'update_manifest_url=https://github.com/%s/releases/download/%s/android-latest.json\n' \
-            "$GITHUB_REPOSITORY" "$release_tag" >> "$GITHUB_OUTPUT"
-          printf 'hot_manifest_url=https://github.com/%s/releases/download/%s/hot-latest.json\n' \
-            "$GITHUB_REPOSITORY" "$release_tag" >> "$GITHUB_OUTPUT"
+          printf 'update_manifest_url=%s\n' "$MOBICODEX_UPDATE_MANIFEST_URL" >> "$GITHUB_OUTPUT"
+          printf 'hot_manifest_url=%s\n' "$MOBICODEX_HOT_MANIFEST_URL" >> "$GITHUB_OUTPUT"
 
       - name: Prepare release workspace
         run: mkdir -p ci-artifacts/release
@@ -227,12 +229,25 @@ jobs:
           JAVA_HOME: ${{ steps.jdk21.outputs.path }}
         run: |
           set -euo pipefail
-          : "${ANDROID_KEYSTORE_BASE64:?Set repository secret ANDROID_KEYSTORE_BASE64 to the existing app signing keystore.}"
-          : "${ANDROID_KEYSTORE_PASSWORD:?Set repository secret ANDROID_KEYSTORE_PASSWORD.}"
-          : "${ANDROID_KEY_ALIAS:?Set repository secret ANDROID_KEY_ALIAS.}"
-          : "${ANDROID_KEY_PASSWORD:?Set repository secret ANDROID_KEY_PASSWORD.}"
           keystore="$RUNNER_TEMP/mobicodex-release.keystore"
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          if [[ -n "${ANDROID_KEYSTORE_BASE64:-}" ]]; then
+            : "${ANDROID_KEYSTORE_PASSWORD:?Set repository secret ANDROID_KEYSTORE_PASSWORD.}"
+            : "${ANDROID_KEY_ALIAS:?Set repository secret ANDROID_KEY_ALIAS.}"
+            : "${ANDROID_KEY_PASSWORD:?Set repository secret ANDROID_KEY_PASSWORD.}"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          else
+            # Without the signing secret the archive APK gets a one-off CI key;
+            # the in-app channel publishes the same build re-signed with the
+            # preview certificate, so installed phones keep updating in place.
+            echo "::notice::No ANDROID_KEYSTORE_BASE64 secret; signing the archive APK with a one-off CI key."
+            ANDROID_KEYSTORE_PASSWORD="$(openssl rand -hex 16)"
+            ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+            ANDROID_KEY_ALIAS=mobicodex-ci
+            export ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_PASSWORD ANDROID_KEY_ALIAS
+            keytool -genkeypair -noprompt -keystore "$keystore" -storetype PKCS12 \
+              -storepass "$ANDROID_KEYSTORE_PASSWORD" -keypass "$ANDROID_KEY_PASSWORD" \
+              -alias "$ANDROID_KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=MobiCodex CI"
+          fi
           chmod 600 "$keystore"
           unsigned_apk="$(find apps/mobile/android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | sort | head -1)"
           [[ -n "$unsigned_apk" && -f "$unsigned_apk" ]] || { echo "Release APK was not produced." >&2; exit 1; }

@@ -2,11 +2,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import { MessageCircle, Monitor, Settings } from "lucide-react";
 import { applyProductAppearance, isKelivoHost, navigateProduct, ProductHost, productAppearanceChanged, productBeforeNavigate, productOpenUpdates, setProductSettingsLaunch, type ProductAppearance } from "./host";
 import { ProductUpdatesPage } from "./ProductUpdatesPage";
+import { startStandaloneAppearance } from "./standalone";
 import type { ProductHandoff } from './handoff';
 
 export function ProductRemoteShell({ children, onComputerSettings, onHandoff }: { children: ReactNode; onComputerSettings: () => void; onHandoff: (value: ProductHandoff | null) => void }) {
   const [ready, setReady] = useState(!isKelivoHost), [error, setError] = useState("");
   const [updates, setUpdates] = useState(false);
+  useEffect(() => isKelivoHost ? undefined : startStandaloneAppearance(), []);
   useEffect(() => {
     if (!isKelivoHost) return;
     let active = true;
@@ -32,18 +34,26 @@ export function ProductRemoteShell({ children, onComputerSettings, onHandoff }: 
     return () => { active = false; window.removeEventListener(productAppearanceChanged, update); };
   }, [onComputerSettings, onHandoff]);
   useEffect(() => {
-    if (!isKelivoHost) return;
     const open = () => {
       if (window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) setUpdates(true);
     };
     const back = (event: Event) => {
-      if (updates) { event.preventDefault(); void navigate("settings"); }
+      if (!updates) return;
+      event.preventDefault();
+      if (isKelivoHost) void navigate("settings");
+      else leaveUpdates();
     };
     window.addEventListener(productOpenUpdates, open);
     window.addEventListener("product-back", back);
     return () => { window.removeEventListener(productOpenUpdates, open); window.removeEventListener("product-back", back); };
   }, [updates]);
-  if (!isKelivoHost) return children;
+  function leaveUpdates() {
+    if (window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) setUpdates(false);
+  }
+  // The standalone app keeps the same page frame, without Kelivo's AI and settings tabs.
+  if (!isKelivoHost) return <div className="product-remote-shell product-standalone">
+    <div className="product-remote-content">{updates ? <ProductUpdatesPage onBack={leaveUpdates} /> : children}</div>
+  </div>;
   async function navigate(tab: "ai" | "settings") {
     try { setError(""); await navigateProduct(tab); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "切换失败，请重试。"); }
