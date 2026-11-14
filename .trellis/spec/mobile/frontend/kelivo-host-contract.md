@@ -20,6 +20,12 @@ Web 仅 `VITE_KELIVO_HOST=android` 启用 ProductRemoteShell；先取得 Product
 
 电脑页以同App的AI聊天页为视觉基准。primaryContainer仅为强调色，用户气泡、头像、输入框/轮廓、次要文字和导航由Flutter提供独立可选颜色；透明色先混到实际surface再输出六位hex。缺字段回退CSS浅深默认值。过程内容和助手正文开放式排列，保留原控制；不为模仿工具栏增加无实际能力的按钮。回归检查新旧快照及迟到事件不串色。
 
+U0 A1「墨夜琥珀」是 `ThemePalettes.defaultPalette`，持久化 ID 仍为 `default`；原默认颜色完整保存在新增的 `classic`（经典）选项，其他 ID 和已选配色不变。`surfaceContainer*` 仍由现有 SurfaceLadder/theme_factory 生成；动态、自定义、纯底、分层设置继续生效。
+
+`productPalette` 增加可选六位 hex `signal`（ColorScheme.tertiary）和 `error`（ColorScheme.error），Web 分别接收为 `--signal`/`--danger`；非法、缺失或迟到旧快照按既有规则清除覆盖、回退当前浅深默认。`secondaryText` 使用 onSurfaceVariant，`outline` 使用 ColorScheme.outline 混合到 surface。CSS 非宿主默认值与 A1 默认移动端语义表一致；合成快照是公式投影，不代表 Flutter 真机像素测量。
+
+网页主操作使用墨色 primary；琥珀仅用于运行、待处理、光标等信号。状态文字使用中性 `--status-surface`，避免琥珀文字叠填充色降低对比度。圆角限定8/12/16/24/胶囊，间距按4倍数，字号12/13/15/17/20以rem定义，等宽字体统一 `--font-mono`；保留零值、控件几何/断点/安全区和宿主字号缩放。默认正文与声明的状态色对检查AA，动态/自定义配色需单独验证。`scripts/test-mobile-design-tokens.mjs` 与宿主映射测试保护这些契约。
+
 Android WebView的`prefers-color-scheme`可能与Flutter及系统明暗不一致；宿主模式按Flutter提供的`appearance.dark`及palette绘制。Flutter同时提供实际主题生成处的`palettes.light/dark`（包含动态/自定义配色）；mode=system时原生按当前Android配置选择，避免Flutter在电脑前台停止绘制后快照滞后。显式light/dark优先，原生不重写Flutter设置或重算调色算法。ProductHost监听原生appearance偏好及configuration/resume变化，发送`product-appearance-changed`窗口事件，Web在卸载时移除监听；迟到的启动快照不能覆盖更新。Android35+边缘布局需同时避让systemBars/displayCutout/IME，取合并insets的最大值；键盘收起后恢复系统栏，不重复叠加底部高度。
 
 远控原生窗口底色与系统栏图标同样由Flutter appearance拥有，启动及偏好变化均更新；不能只同步Web正文留下旧窗口主题。Android24/25导航栏使用黑底保证旧系统图标可见；真实最低版本设备仍需实测。Android35+窗口底色承托透明系统栏，系统对比度遮罩关闭，与IME边距各有唯一所有者。

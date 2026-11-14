@@ -21,6 +21,7 @@ class ThemePalette {
 
 class ThemePalettes {
   static const String defaultId = 'default';
+  static const String classicId = 'classic';
   static const String blueId = 'blue';
   static const String greenId = 'green';
   static const String purpleId = 'purple';
@@ -30,10 +31,102 @@ class ThemePalettes {
   static const String monochromeId = 'monochrome';
   static const String docThemeId = 'doc_theme';
 
+  // A1: ink surfaces and primary actions; amber is reserved for signals.
   static const ThemePalette defaultPalette = ThemePalette(
     id: defaultId,
-    zhName: '默认',
-    enName: 'Default',
+    zhName: 'MobiCodex',
+    enName: 'MobiCodex',
+    light: ColorScheme(
+      brightness: Brightness.light,
+      primary: Color(0xFF1F2228),
+      onPrimary: Color(0xFFF5F1EA),
+      primaryContainer: Color(0xFFE7E3DA),
+      onPrimaryContainer: Color(0xFF16181D),
+      secondary: Color(0xFF6B6F78),
+      onSecondary: Color(0xFFFFFFFF),
+      secondaryContainer: Color(0xFFECE8DF),
+      onSecondaryContainer: Color(0xFF16181D),
+      tertiary: Color(0xFFB45309),
+      onTertiary: Color(0xFFFFFFFF),
+      tertiaryContainer: Color(0xFFFDE7C2),
+      onTertiaryContainer: Color(0xFF3D2405),
+      error: Color(0xFFB42318),
+      onError: Color(0xFFFFFFFF),
+      errorContainer: Color(0xFFFDE4E1),
+      onErrorContainer: Color(0xFF410E09),
+      surface: Color(0xFFF6F4EF),
+      onSurface: Color(0xFF16181D),
+      onSurfaceVariant: Color(0xFF5E6066),
+      outline: Color(0x1A000000),
+      outlineVariant: Color(0xFF000000),
+      shadow: Color(0xFF000000),
+      scrim: Color(0xFF000000),
+      inverseSurface: Color(0xFF111317),
+      onInverseSurface: Color(0xFFF5F1EA),
+      inversePrimary: Color(0xFFF5F1EA),
+      surfaceTint: Color(0xFF1F2228),
+      primaryFixed: Color(0xFFE7E3DA),
+      primaryFixedDim: Color(0xFFCBC7BE),
+      onPrimaryFixed: Color(0xFF16181D),
+      onPrimaryFixedVariant: Color(0xFF363B46),
+      secondaryFixed: Color(0xFFECE8DF),
+      secondaryFixedDim: Color(0xFFD0CCC3),
+      onSecondaryFixed: Color(0xFF16181D),
+      onSecondaryFixedVariant: Color(0xFF454850),
+      tertiaryFixed: Color(0xFFFDE7C2),
+      tertiaryFixedDim: Color(0xFFF6C780),
+      onTertiaryFixed: Color(0xFF3D2405),
+      onTertiaryFixedVariant: Color(0xFF6B3906),
+    ),
+    dark: ColorScheme(
+      brightness: Brightness.dark,
+      primary: Color(0xFFF5F1EA),
+      onPrimary: Color(0xFF16181D),
+      primaryContainer: Color(0xFF2A2E37),
+      onPrimaryContainer: Color(0xFFF5F1EA),
+      secondary: Color(0xFFA8A49B),
+      onSecondary: Color(0xFF16181D),
+      secondaryContainer: Color(0xFF2A2E37),
+      onSecondaryContainer: Color(0xFFF5F1EA),
+      tertiary: Color(0xFFF59E0B),
+      onTertiary: Color(0xFF3D2405),
+      tertiaryContainer: Color(0xFF4A3410),
+      onTertiaryContainer: Color(0xFFFDE7C2),
+      error: Color(0xFFF97066),
+      onError: Color(0xFF2B0A07),
+      errorContainer: Color(0xFF5C1A14),
+      onErrorContainer: Color(0xFFFDE4E1),
+      surface: Color(0xFF111317),
+      onSurface: Color(0xFFF5F1EA),
+      onSurfaceVariant: Color(0xFFB9B6AE),
+      outline: Color(0x1FFFFFFF),
+      outlineVariant: Color(0xFFFFFFFF),
+      shadow: Color(0xFF000000),
+      scrim: Color(0xFF000000),
+      inverseSurface: Color(0xFFF6F4EF),
+      onInverseSurface: Color(0xFF16181D),
+      inversePrimary: Color(0xFF1F2228),
+      surfaceTint: Color(0xFFF5F1EA),
+      primaryFixed: Color(0xFFE7E3DA),
+      primaryFixedDim: Color(0xFFCBC7BE),
+      onPrimaryFixed: Color(0xFF16181D),
+      onPrimaryFixedVariant: Color(0xFF363B46),
+      secondaryFixed: Color(0xFFECE8DF),
+      secondaryFixedDim: Color(0xFFD0CCC3),
+      onSecondaryFixed: Color(0xFF16181D),
+      onSecondaryFixedVariant: Color(0xFF454850),
+      tertiaryFixed: Color(0xFFFDE7C2),
+      tertiaryFixedDim: Color(0xFFF6C780),
+      onTertiaryFixed: Color(0xFF3D2405),
+      onTertiaryFixedVariant: Color(0xFF6B3906),
+    ),
+  );
+
+  // Preserve the previous default as an opt-in palette.
+  static const ThemePalette classic = ThemePalette(
+    id: classicId,
+    zhName: '经典',
+    enName: 'Classic',
     light: ColorScheme(
       brightness: Brightness.light,
       primary: Color(0xFF4D5C92),
@@ -632,6 +725,7 @@ class ThemePalettes {
   );
   static const List<ThemePalette> all = <ThemePalette>[
     defaultPalette,
+    classic,
     blue,
     green,
     purple,
