@@ -48,7 +48,7 @@ import { NativeHotUpdate } from "../features/updates/native";
 import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mimeTypeFromName, revokeAttachmentPreviews } from "../features/chat/attachments";
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
 import { clamp } from "../shared/preferences";
-import { chatFontScales, loadProductDisplay, saveProductDisplay, saveThemeMode, type ProductDisplay } from "../features/product/standalone";
+import { cachedSystemPalette, chatFontScales, loadProductDisplay, saveProductDisplay, saveThemeMode, type ProductDisplay } from "../features/product/standalone";
 import { stageHotUpdate } from "../features/updates/hotUpdate";
 import { ListTodo, Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, Copy, Activity, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, ChevronDown, Download } from "lucide-react";
 import { UserInputCard } from "../features/chat/UserInputCard";
@@ -1946,6 +1946,9 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
             </button>
           </div>}
           {!isKelivoHost && <>
+            {cachedSystemPalette() && <label className="haptics-setting">跟随系统取色
+              <button type="button" className="action-button" role="switch" aria-label="跟随系统取色" aria-checked={display.dynamicColor} onClick={() => changeDisplay({ dynamicColor: !display.dynamicColor })}>{display.dynamicColor ? "已开启" : "已关闭"}</button>
+            </label>}
             <div className="display-setting"><span>聊天字号</span><div className="segmented four" role="radiogroup" aria-label="聊天字号">{chatFontScales.map(option => <button key={option.value} role="radio" aria-checked={display.chatFontScale === option.value} className={display.chatFontScale === option.value ? "active" : ""} onClick={() => changeDisplay({ chatFontScale: option.value })}><span>{option.label}</span></button>)}</div></div>
             <label className="haptics-setting">显示工具卡片
               <button type="button" className="action-button" role="switch" aria-label="显示工具卡片" aria-checked={display.showToolCards} onClick={() => changeDisplay({ showToolCards: !display.showToolCards })}>{display.showToolCards ? "已开启" : "已关闭"}</button>

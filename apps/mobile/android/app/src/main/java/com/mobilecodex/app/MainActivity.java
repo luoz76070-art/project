@@ -23,7 +23,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ProductWindowPlugin.class);
         super.onCreate(savedInstanceState);
         boolean dark = ProductWindow.systemDark(this);
-        ProductWindow.apply(this, dark, dark ? ProductWindow.DARK_BACKGROUND : ProductWindow.LIGHT_BACKGROUND);
+        ProductWindow.apply(this, dark, ProductWindow.lastBackground(this, dark));
         WebView webView = getBridge().getWebView();
         webView.getSettings().setTextZoom(Math.round(getResources().getConfiguration().fontScale * 100));
         if (Build.VERSION.SDK_INT >= 35) ProductWindow.installInsets(webView);

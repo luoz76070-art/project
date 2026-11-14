@@ -52,6 +52,53 @@ const kelivoPalettes = {
   }
 };
 
+// The same check with "System Dynamic Colors" on (Kelivo's default): the
+// Android 16 emulator's system palette as the Activity reports it, and the
+// palettes Kelivo derived from it through Flutter's dynamic_color.
+const emulatorSystemPalette = ["#000000", "#001849", "#182e60", "#314578", "#495d92", "#6275ac", "#7c8fc8", "#96aae4", "#b2c5ff", "#dae2ff", "#eef0ff", "#fefbff", "#ffffff", "#000000", "#151b2c", "#2a3042", "#414659", "#585e71", "#71768b", "#8b90a5", "#a5aac1", "#c0c6dd", "#dde2f9", "#eef0ff", "#fefbff", "#ffffff", "#000000", "#2b122b", "#422741", "#5a3d59", "#735471", "#8d6d8b", "#a986a5", "#c4a0c0", "#e1bbdc", "#fed6f9", "#ffebf9", "#fffbff", "#ffffff", "#000000", "#1a1b21", "#2f3036", "#46464c", "#5d5e64", "#76777d", "#909097", "#abaab1", "#c6c6cd", "#e3e2e9", "#f1f0f7", "#fefbff", "#ffffff", "#000000", "#191b23", "#2e3038", "#45464f", "#5c5e67", "#757780", "#8f909a", "#aaaab4", "#c5c6d0", "#e1e2ec", "#f0f0fa", "#fefbff", "#ffffff"];
+const kelivoDynamicPalettes = {
+  "light": {
+    "avatar": "#ecebf4",
+    "background": "#fefbff",
+    "composer": "#faf8fd",
+    "composerOutline": "#e3e1e6",
+    "error": "#bb0947",
+    "fill": "#f3f0f4",
+    "messageAuthor": "#5e5e64",
+    "muted": "#45464f",
+    "navigationText": "#1a1b21",
+    "onPrimary": "#ffffff",
+    "outline": "#757780",
+    "panel": "#ffffff",
+    "primary": "#495d92",
+    "primaryContainer": "#dae2ff",
+    "secondaryText": "#45464f",
+    "signal": "#735471",
+    "text": "#1a1b21",
+    "userBubble": "#f0eef6"
+  },
+  "dark": {
+    "avatar": "#292c37",
+    "background": "#1a1b21",
+    "composer": "#28292f",
+    "composerOutline": "#2e2f35",
+    "error": "#fcb4bd",
+    "fill": "#3a3b41",
+    "messageAuthor": "#a7a6ad",
+    "muted": "#c5c6d0",
+    "navigationText": "#e3e2e9",
+    "onPrimary": "#182e60",
+    "outline": "#8f909a",
+    "panel": "#313237",
+    "primary": "#b2c5ff",
+    "primaryContainer": "#314578",
+    "secondaryText": "#c5c6d0",
+    "signal": "#e1bbdc",
+    "text": "#e3e2e9",
+    "userBubble": "#313542"
+  }
+};
+
 const root = fileURLToPath(new URL('../', import.meta.url));
 const temp = await mkdtemp(path.join(tmpdir(), 'mobile-standalone-'));
 const shim = path.join(temp, 'capacitor.mjs');
@@ -90,11 +137,20 @@ test('standalone palette is exactly what Kelivo sent for the MobiCodex theme', (
   }
 });
 
+test('with system dynamic colour the palette is what Kelivo derived, harmonized error included', () => {
+  for (const mode of ['light', 'dark']) {
+    const mine = m.standalonePalette(mode === 'dark', emulatorSystemPalette);
+    for (const [role, value] of Object.entries(kelivoDynamicPalettes[mode])) assert.equal(mine[role], value, `${mode} ${role}`);
+  }
+  assert.equal(m.validSystemPalette(emulatorSystemPalette), true);
+  for (const bad of [null, emulatorSystemPalette.slice(1), [...emulatorSystemPalette.slice(1), 'red']]) assert.equal(m.validSystemPalette(bad), false);
+});
+
 test('display preferences keep Kelivo defaults and clamp stored values', t => {
   page(t);
-  assert.deepEqual(m.loadProductDisplay(), { chatFontScale: 1, showToolCards: true, showToolResultSummary: false });
-  storage.set('mobicodexDisplayV1', '{"chatFontScale":9,"showToolCards":false,"showToolResultSummary":true}');
-  assert.deepEqual(m.loadProductDisplay(), { chatFontScale: 2, showToolCards: false, showToolResultSummary: true });
+  assert.deepEqual(m.loadProductDisplay(), { chatFontScale: 1, showToolCards: true, showToolResultSummary: false, dynamicColor: true });
+  storage.set('mobicodexDisplayV1', '{"chatFontScale":9,"showToolCards":false,"showToolResultSummary":true,"dynamicColor":false}');
+  assert.deepEqual(m.loadProductDisplay(), { chatFontScale: 2, showToolCards: false, showToolResultSummary: true, dynamicColor: false });
   storage.set('mobicodexDisplayV1', 'not json');
   assert.equal(m.loadProductDisplay().chatFontScale, 1);
   storage.set('themeMode', 'sepia');
@@ -114,13 +170,37 @@ test('appearance follows theme, display changes and the system in the browser', 
   assert.equal(properties.get('--bg-0'), kelivoPalettes.dark.background);
   m.saveThemeMode('light');
   assert.equal(dataset.theme, 'light');
-  m.saveProductDisplay({ chatFontScale: 1.3, showToolCards: false, showToolResultSummary: true });
+  m.saveProductDisplay({ chatFontScale: 1.3, showToolCards: false, showToolResultSummary: true, dynamicColor: true });
   assert.equal(properties.get('--remote-chat-scale'), '1.3');
   assert.equal(dataset.showToolCards, 'false');
   assert.equal(dataset.showToolSummary, 'true');
   stop();
   m.saveThemeMode('dark');
   assert.equal(dataset.theme, 'light', 'stopped appearance ignores later changes');
+});
+
+test('system colours follow the Activity, persist for the next launch and can be switched off', async t => {
+  const { properties } = page(t);
+  globalThis.__native = true;
+  let state = { dark: false, palette: emulatorSystemPalette }, listener;
+  globalThis.__plugins.ProductWindow = { getState: async () => state, apply: async () => {}, addListener: async (_, callback) => { listener = callback; return { remove: async () => {} }; } };
+  const stop = m.startStandaloneAppearance();
+  assert.equal(properties.get('--bg-0'), kelivoPalettes.light.background, 'ink until the system answers');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(properties.get('--bg-0'), kelivoDynamicPalettes.light.background);
+  assert.equal(properties.get('--danger'), kelivoDynamicPalettes.light.error);
+  assert.deepEqual(m.cachedSystemPalette(), emulatorSystemPalette);
+  stop();
+  const next = m.startStandaloneAppearance();
+  assert.equal(properties.get('--bg-0'), kelivoDynamicPalettes.light.background, 'a relaunch starts from the cached system colours');
+  m.saveProductDisplay({ ...m.loadProductDisplay(), dynamicColor: false });
+  assert.equal(properties.get('--bg-0'), kelivoPalettes.light.background, 'switched off: the MobiCodex ink theme');
+  m.saveProductDisplay({ ...m.loadProductDisplay(), dynamicColor: true });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  listener({ dark: true });
+  assert.equal(properties.get('--bg-0'), kelivoPalettes.dark.background, 'a system without dynamic colour falls back to ink');
+  assert.equal(m.cachedSystemPalette(), null);
+  next();
 });
 
 test('the Activity, not the WebView media query, decides system dark mode and paints the bars', async t => {
