@@ -12,10 +12,10 @@ import { turnResult } from '../plugins/mobile-deepseek/turnResult.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-rendering-'));
 const output = path.join(temp, 'render.cjs');
-await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { DisclosureSummary } from './apps/mobile/src/shared/DisclosureSummary'; export { SidebarScrim } from './apps/mobile/src/features/threads/SidebarScrim'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources'; export { HandoffCard } from './apps/mobile/src/features/product/HandoffCard'; export { HandoffMigrationNotice } from './apps/mobile/src/features/product/HandoffMigrationNotice';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
+await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { ThreadRow } from './apps/mobile/src/features/threads/ThreadRow'; export { SessionRangeControl } from './apps/mobile/src/features/threads/SessionRangeControl'; export { DisclosureSummary } from './apps/mobile/src/shared/DisclosureSummary'; export { SidebarScrim } from './apps/mobile/src/features/threads/SidebarScrim'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources'; export { HandoffCard } from './apps/mobile/src/features/product/HandoffCard'; export { HandoffMigrationNotice } from './apps/mobile/src/features/product/HandoffMigrationNotice';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
 const originalStorage = globalThis.localStorage;
 globalThis.localStorage = { getItem: () => null };
-const { default: { h, render, DisclosureSummary, SidebarScrim, MessageContent, MessageTimeline, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence, HandoffCard, HandoffMigrationNotice } } = await import(pathToFileURL(output).href);
+const { default: { h, render, ThreadRow, SessionRangeControl, DisclosureSummary, SidebarScrim, MessageContent, MessageTimeline, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence, HandoffCard, HandoffMigrationNotice } } = await import(pathToFileURL(output).href);
 globalThis.localStorage = originalStorage;
 test.after(() => fs.rm(temp, { recursive: true, force: true }));
 const tool = index => ({ id: `t${index}`, role: 'tool', kind: 'commandExecution', text: `Command: rg query-${index}`, turnId: 'turn-a', timestamp: '2026-11-07T00:00:00Z' });
@@ -252,4 +252,56 @@ test('U10 latest-message pill occupies composer flow and settings use rotating L
   assert.match(css, /\.settings-disclosure > summary::-webkit-details-marker \{ display: none/);
   assert.match(css, /\.settings-disclosure > summary::marker \{ content: ""/);
   assert.match(css, /\.settings-disclosure\[open\] > summary \.settings-chevron \{ transform: rotate\(90deg\)/);
+});
+
+
+test('U11 thread rows omit repeated paths and only label sources outside the filter expectation', () => {
+  const base = { thread: { id: 'thread', threadName: ' 当前   会话 ', cwd: '/workspace/project', source: 'vscode', originator: 'Codex Desktop', updatedAt: '2026-11-14T00:00:00Z' }, selected: true, activeDesktop: false, sourceFilter: 'all', onOpen() {} };
+  for (const [source, filter, label] of [
+    ['vscode', 'all', ''], ['vscode', 'desktop', ''], ['vscode', 'relay', '电脑发起'],
+    ['appServer', 'all', '手机发起'], ['appServer', 'desktop', '手机发起'], ['appServer', 'relay', ''],
+    ['cli', 'relay', 'CLI'], ['exec', 'all', 'Exec'], [null, 'all', '未知'],
+  ]) {
+    const html = render(h(ThreadRow, { ...base, sourceFilter: filter, thread: { ...base.thread, source, originator: '' } }));
+    assert.match(html, /当前 会话/);
+    assert.doesNotMatch(html, /thread-path|workspace|project/);
+    if (label) { assert.match(html, /class="thread-source /); assert.ok(html.includes(`>${label}</span>`)); }
+    else assert.doesNotMatch(html, /thread-source|>桌面</);
+  }
+  const desktopAlias = render(h(ThreadRow, { ...base, thread: { ...base.thread, source: null } }));
+  assert.doesNotMatch(desktopAlias, /thread-source/);
+  let opened = 0;
+  const row = ThreadRow({ ...base, activeDesktop: true, onOpen: () => opened++ });
+  assert.match(render(row), /class="thread-row active"/); assert.match(render(row), /当前桌面/);
+  row.props.onClick(); assert.equal(opened, 1);
+});
+
+test('U11 earlier sessions keep range toggling and disabled behavior with a text-link appearance', async () => {
+  const selected = [];
+  for (const [range, label, next] of [['recent', '查看更早会话', 'all'], ['all', '只看近 30 天', 'recent']]) {
+    const control = SessionRangeControl({ range, disabled: false, onChange: value => selected.push(value) });
+    const html = render(control);
+    assert.match(html, /<button type="button" class="session-range-link"/);
+    assert.ok(html.includes(label)); assert.doesNotMatch(html, /history-button|href=/);
+    control.props.children[1].props.onClick(); assert.equal(selected.at(-1), next);
+    assert.match(render(h(SessionRangeControl, { range, disabled: true, onChange() {} })), /disabled=""/);
+  }
+  const css = await fs.readFile(path.join(root, 'apps/mobile/src/styles.css'), 'utf8');
+  assert.match(css, /\.session-range-link \{[^}]*min-height: 44px;[^}]*border: 0;[^}]*background: transparent;[^}]*text-decoration: underline/);
+});
+
+test('U11 sidebar keeps two actions and source values, while testing connections lives in connection settings', async () => {
+  const app = await fs.readFile(path.join(root, 'apps/mobile/src/app/App.tsx'), 'utf8');
+  const tools = app.slice(app.indexOf('<div className="sidebar-tools">'), app.indexOf('<div className="host-filter"'));
+  assert.equal((tools.match(/<button /g) ?? []).length, 2);
+  assert.match(tools, /新线程/); assert.match(tools, /桌面/); assert.doesNotMatch(tools, /testConnection|检测/);
+  assert.match(app, /setSourceFilter\("all"\)\}>全部/);
+  assert.match(app, /setSourceFilter\("desktop"\)\}>电脑发起/);
+  assert.match(app, /setSourceFilter\("relay"\)\}>手机发起/);
+  const connection = app.slice(app.indexOf('<h3>手动连接</h3>'), app.indexOf('<VoiceSettings'));
+  assert.match(connection, /onClick=\{\(\) => void testConnection\(\)\}/);
+  assert.match(connection, /disabled=\{connectionState === "testing"\}/);
+  assert.match(connection, /测试连接/);
+  assert.equal((app.match(/onClick=\{\(\) => void testConnection\(\)\}/g) ?? []).length, 1);
+  assert.doesNotMatch(app, /threadListDetail|className="thread-path"/);
 });

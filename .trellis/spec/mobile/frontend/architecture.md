@@ -78,3 +78,5 @@ Agent 附件沿原 /api/uploads，元数据序列化到原有有界草稿字符�
 MessageMediaProvider 目标为 threadId 或 agentId+sessionId 的互斥联合，所有通道共用鉴权取图、错误映射、重试、大图及原尺寸；目标/凭证改变中止旧请求并清旧图。未来适配器仍须保证已订阅原会话的权威绝对 directory，手机不能上传根目录。
 
 U10：消息中的本地Markdown文件链接显示为不可导航的文件名标签，完整目的路径放title；只HTTP(S)链接可作外链，代码块/行内代码保持原文。路径展示统一正斜杠，不改变原始路径或项目持久化身份。抽屉侧栏和遮罩同读sidebarOpen，无选中项仅用于初始化；关闭后不隐式重开，分屏切换仍关闭抽屉。遮罩浅深色复用--scrim。设置details保留原生展开/键盘操作，summary使用共享Lucide箭头并隐藏原生marker。
+
+U11：线程行由ThreadRow展示标题/时间，项目路径只留分组标题（同名项目仍有消歧路径）。全部筛选隐藏常规桌面来源，手机/CLI/Exec/未知保留小标签；desktop隐藏桌面，relay隐藏appServer，其他来源显式保留。all/desktop/relay过滤语义不变，不将CLI伪称手机。当前桌面的唯一标记保留。连接检测只留设置的手动连接区；更早会话保留原range行为和44px命中区域，使用文字链接外观。
