@@ -1,5 +1,7 @@
 import { SystemNotice } from "../shared/SystemNotice";
 import { ConnectionCard } from "../features/connection/ConnectionCard";
+import { AgentIcon } from "../features/agents/AgentIcon";
+import { PullToRefresh } from "../shared/PullToRefresh";
 import { WorkItemsPage } from "../features/workItems/WorkItemsPage";
 import { ThreadRow } from "../features/threads/ThreadRow";
 import { SidebarScrim } from "../features/threads/SidebarScrim";
@@ -31,7 +33,7 @@ import { createConnectionJournal } from "../features/connection/diagnosticJourna
 import { createPollScope } from "../features/chat/sync";
 import { createRuntimeSync } from "../features/chat/runtimeSync";
 import { messagesForRender, capMessages, mergeMessages, mergeMessagesById, turnStatusText, desktopActionText, canUseEventSource } from "../features/chat/messages";
-import { groupThreadsByProject, mergeThreads, shortPath, isDesktopSource, firstLine, sourceClass, sourceLabel, retainCodexThread, sessionInRange, sessionListRefreshMs, type SessionRange, type SourceFilter } from "../features/threads/model";
+import { groupThreadsByProject, projectGroupLabel, mergeThreads, shortPath, isDesktopSource, firstLine, sourceClass, sourceLabel, retainCodexThread, sessionInRange, sessionListRefreshMs, type SessionRange, type SourceFilter } from "../features/threads/model";
 import { ProjectGroups } from "../features/threads/ProjectGroups";
 import { SessionRangeControl } from "../features/threads/SessionRangeControl";
 import { loadConnectionProfiles, saveConnectionSettings, profileNameFromEndpoint, upsertConnectionProfile, saveConnectionProfiles } from "../features/connection/profiles";
@@ -226,7 +228,10 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
   }, [threads, query, sourceFilter, threadRange, selected?.id, threadState]);
   const groupedFiltered = useMemo(() => groupThreadsByProject(filtered), [filtered]);
 
-  const workspaceTitle = selected?.threadName || (isNewThread ? "新线程" : "Mobile Codex");
+  const workspaceTitle = selected?.threadName || (isNewThread ? "新线程" : "MobiCodex");
+  const workspaceProject = selected?.cwd ? projectGroupLabel(selected.cwd) : "";
+  const workspaceReady = Boolean(endpoint && token) && connectionState !== "error";
+  const workspaceConnectionLabel = connectionState === "ok" ? "已连接" : connectionState === "testing" ? "正在连接" : connectionState === "error" ? "连接不上" : "未连接";
   const workspaceSubtitle =
     selected?.cwd ||
     (connectionState === "ok" ? "已连接电脑" : connectionState === "testing" ? "正在检测连接" : "打开设置连接电脑");
@@ -1726,21 +1731,19 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
           <Menu size={22} />
         </button>
         <div className="workspace-title">
-          <span className={`status-dot ${connectionState === "error" ? "error" : connectionState === "ok" ? "ok" : ""}`} />
-          <div>
-            <h1>{workspaceTitle}</h1>
-            <p>{selected ? shortPath(selected.cwd ?? "") || connection.name : connection.name}</p>
-          </div>
+          <button type="button" className="workspace-switch" onClick={onOpenAgents} title="切换 Agent"
+            aria-label={`${workspaceTitle}，${workspaceConnectionLabel}${workspaceProject ? `，项目 ${workspaceProject}` : ""}，点按切换 Agent`}>
+            <span className="agent-glyph"><AgentIcon id="codex" size={18} /></span>
+            <span className="workspace-switch-text">
+              <span className="workspace-name"><strong>{workspaceTitle}</strong><span className={`status-dot ${connectionState === "error" ? "error" : connectionState === "ok" ? "ok" : ""}`} /></span>
+              {workspaceProject ? <span className="project-chip">{workspaceProject}</span> : <small>{connection.name}</small>}
+            </span>
+          </button>
         </div>
         <div className="top-actions">
-          <button className="icon-button" onClick={onCapture} aria-label="事项" title="事项"><ListTodo size={18} /></button>
-          <button className="icon-button" onClick={onOpenAgents} aria-label="切换 Agent"><Server size={18} /></button>
-          <button className="icon-button" onClick={() => void loadThreads()} aria-label="刷新线程">
-            <RefreshCcw size={18} className={loading ? "spin" : ""} />
-          </button>
-          <button className="icon-button" onClick={() => setSettingsOpen(true)} aria-label="设置">
-            <Settings size={18} />
-          </button>
+          {workspaceReady
+            ? <button className="icon-button" onClick={onCapture} aria-label="事项" title="事项"><ListTodo size={18} /></button>
+            : <button className="icon-button" onClick={() => setSettingsOpen(true)} aria-label="设置" title="设置"><Settings size={18} /></button>}
         </div>
       </header>
 
@@ -1754,9 +1757,17 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
                 <span>{status}</span>
               </div>
             </div>
-            <button className="icon-button sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="关闭线程列表">
-              <X size={18} />
-            </button>
+            <div className="sidebar-actions">
+              <button className="icon-button" onClick={() => void loadThreads()} aria-label="刷新线程" title="刷新线程" disabled={loading}>
+                <RefreshCcw size={18} className={loading ? "spin" : ""} />
+              </button>
+              <button className="icon-button" onClick={() => { setSidebarOpen(false); setSettingsOpen(true); }} aria-label="设置" title="设置">
+                <Settings size={18} />
+              </button>
+              <button className="icon-button sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="关闭线程列表">
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           <label className="search-field">
@@ -1800,7 +1811,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
             </button>
           </div>
 
-          <div className="thread-list" aria-label="Codex 线程列表">
+          <PullToRefresh className="thread-list" label="Codex 线程列表" onRefresh={() => loadThreads()}>
             <SessionRangeControl range={threadRange} disabled={loading} onChange={range => { setThreadRange(range); void loadThreads({ range }); }} />
             <ProjectGroups scope={scope} agentId="codex" groups={groupedFiltered} search={query}>
               {thread => <ThreadRow key={thread.id} thread={thread} selected={selected?.id === thread.id}
@@ -1814,7 +1825,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
                 <p>没有匹配的线程</p>
               </div>
             )}
-          </div>
+          </PullToRefresh>
         </aside>
 
         <div

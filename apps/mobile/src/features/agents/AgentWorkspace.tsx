@@ -10,7 +10,9 @@ import { useEffect, useRef, useState } from "react";
 import { registerVoiceAgentDrafts } from "../voice/draftRecovery";
 import type { VoiceRecoveryPort } from "../voice/useVoiceRecovery";
 import { VoiceInput } from "../voice/VoiceInput";
-import { ListTodo, ChevronLeft, Loader2, RefreshCcw } from "lucide-react";
+import { ListTodo, ChevronLeft, Loader2 } from "lucide-react";
+import { AgentIcon } from "./AgentIcon";
+import { PullToRefresh } from "../../shared/PullToRefresh";
 import type { CodexMessage, PendingAttachment } from "../../app/types";
 import { maxMessagesPerThread } from "../../app/config";
 import { MessageBubble, MessageTimeline, AttachmentTray } from "../chat/components";
@@ -27,7 +29,7 @@ import { AgentQuestions } from "./AgentQuestions";
 import { AgentQueue } from "./AgentQueue";
 import { agentDelivery, agentHistoryWindow, loadAgentDrafts, loadAgentView, saveAgentView, loadPendingAgentDraft, savePendingAgentDraft, offlineAgent, reconcileAgentDraft, saveAgentDrafts, verifyAgentSnapshot, type PendingAgentDraft } from "./runtime";
 import type { AgentDelivery, AgentPermission, AgentSession, AgentSessionSnapshot } from "./types";
-import { groupByProject, sessionInRange, sessionListRefreshMs } from "../threads/model";
+import { groupByProject, projectGroupLabel, sessionInRange, sessionListRefreshMs } from "../threads/model";
 import { ProjectGroups } from "../threads/ProjectGroups";
 import { SessionRangeControl } from "../threads/SessionRangeControl";
 
@@ -123,12 +125,23 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
     else if (agent) { ++requestId.current; controller.current?.abort(); setAgent(null); setSessions([]); setCursor(null); setError(""); setLoading(false); }
     else onBack();
   }
+  /** U4: tapping the title goes straight back to the Agent list, from any depth. */
+  function switchAgent() {
+    if (!agent || !window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) return;
+    if (isKelivoHost) saveAgentView(scope, null, null);
+    setSelected(null); ++requestId.current; controller.current?.abort(); setAgent(null); setSessions([]); setCursor(null); setError(""); setLoading(false);
+  }
+  const title = selected?.title || agent?.label || "选择 Agent";
+  const subtitle = selected ? `${agent?.label} · 原服务会话` : "同一连接，分别管理会话";
+  const titleText = <span className="workspace-switch-text"><span className="workspace-name"><strong>{title}</strong></span>
+    {selected?.directory ? <span className="project-chip">{projectGroupLabel(selected.directory)}</span> : <small>{subtitle}</small>}</span>;
   return <main className="agent-workspace">
     <header className="topbar glass-surface">
       <button className="icon-button" aria-label={selected ? "返回 Agent 会话列表" : agent ? "返回 Agent 列表" : "返回 Codex"} onClick={back}><ChevronLeft size={21} /></button>
-      <div className="workspace-title"><div><h1>{selected?.title || agent?.label || "选择 Agent"}</h1><p>{selected ? `${agent?.label} · 原服务会话` : "同一连接，分别管理会话"}</p></div></div>
+      <div className="workspace-title">{agent
+        ? <button type="button" className="workspace-switch" onClick={switchAgent} title="切换 Agent" aria-label={`${title}，点按切换 Agent`}><span className="agent-glyph"><AgentIcon id={agent.id} size={18} /></span>{titleText}</button>
+        : <div className="workspace-switch static"><span className="agent-glyph"><AgentIcon id="" size={18} /></span>{titleText}</div>}</div>
       <button className="icon-button" aria-label="事项" title="事项" onClick={onCapture}><ListTodo size={18} /></button>
-      {!selected && <button className="icon-button" aria-label="刷新 Agent 列表" disabled={loading} onClick={() => void (agent ? loadSessions(agent) : loadAgents())}><RefreshCcw size={18} className={loading ? "spin" : ""} /></button>}
     </header>
     {(deviceRevoked || error) && <SystemNotice error>{deviceRevoked ? deviceRevokedMessage : error}</SystemNotice>}
     {selected && agent ? <AgentChat voiceRecovery={voiceRecovery} key={`${agent.id}:${selected.id}`} endpoint={endpoint} token={token} agent={agent} session={selected}
@@ -137,11 +150,11 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
         delete next[key];
         return { ...next, [key]: value };
       })} />
-      : <section className="agent-session-list">
+      : <PullToRefresh className="agent-session-list" onRefresh={() => agent ? loadSessions(agent) : loadAgents()}>
         {!agent && <>
           <button className="agent-session-row" onClick={onBack}><strong>Codex</strong><small>电脑桌面会话与手机工作台</small></button>
           {agents.map(item => <button className="agent-session-row" key={item.id} onClick={() => void loadSessions(item)}><strong>{item.label}</strong><small>{item.id === "deepseek" ? "查看电脑会话与历史，继续原线程和处理提问" : item.id === "claude" ? "打开已加载插件的会话，查看输出、排队输入与中断" : "打开现有会话，查看输出与处理提问"}</small></button>)}
-          {!loading && !agents.length && !error && <p className="setting-description">电脑端尚未接入其他 Agent。配置 DeepSeek Harness、Claude Code 插件或 OpenCode 服务后，可刷新此页。</p>}
+          {!loading && !agents.length && !error && <p className="setting-description">电脑端尚未接入其他 Agent。配置 DeepSeek Harness、Claude Code 插件或 OpenCode 服务后，下拉刷新此页。</p>}
         </>}
         {agent && <>
           {agent.id === "deepseek" && <SessionRangeControl range={range} disabled={loading} onChange={next => { setRange(next); void loadSessions(agent, false, next); }} />}
@@ -153,7 +166,7 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
           {cursor && <button className="action-button" disabled={loading} onClick={() => void loadSessions(agent, true)}>加载更多会话</button>}
         </>}
         {loading && <p className="inline-loading" role="status"><Loader2 className="spin" size={18} />正在读取…</p>}
-      </section>}
+      </PullToRefresh>}
   </main>;
 }
 
