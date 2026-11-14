@@ -16,6 +16,7 @@ import { checkingSummary, offlineSummary, summarizeSessions, type AgentSummary }
 import { loadWorkspaceCache } from "../threads/cache";
 import { AgentIcon } from "./AgentIcon";
 import { PullToRefresh } from "../../shared/PullToRefresh";
+import { haptic } from "../../shared/haptics";
 import type { CodexMessage, PendingAttachment } from "../../app/types";
 import { maxMessagesPerThread } from "../../app/config";
 import { MessageBubble, MessageTimeline, AttachmentTray } from "../chat/components";
@@ -392,7 +393,7 @@ function PermissionCard({ permission, disabled, onRespond, agentLabel }: { permi
     {permission.save.length > 0 && <><p>选择保存规则后，将匹配以下范围</p><pre>{permission.save.join("\n")}</pre></>}
     {permission.unavailableReason && <p role="status">{permission.unavailableReason}</p>}
     <div className="agent-permission-actions">{permission.decisions.map(decision => <button key={decision} className="action-button" disabled={locked} onClick={() => {
-      if (locked || submitted.current) return; submitted.current = true; setSent(true);
+      if (locked || submitted.current) return; submitted.current = true; setSent(true); haptic(decision === "reject" ? "warn" : "confirm");
       void onRespond(decision).then(accepted => { if (!accepted) { submitted.current = false; setSent(false); } });
     }}>{decision === "once" ? "允许一次" : decision === "always" ? "允许并保存规则" : "拒绝"}</button>)}</div>
     {locked && <p role="status">{permission.status === "uncertain" ? "结果待确认，请勿重复操作" : sent || permission.status !== "pending" ? "已提交，等待会话确认" : "连接恢复后重新核验请求"}</p>}

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { ArrowUp, CircleStop, Loader2, Plus } from "lucide-react";
+import { haptic } from "../../shared/haptics";
 
 /** Grow the textarea with its content, and shrink it back when the draft is cleared after sending. */
 function fitHeight(element: HTMLTextAreaElement | null) {
@@ -45,10 +46,10 @@ export function ComputerComposer({ draft, onDraft, onSend, onStop, onUpload, voi
       <div className="composer-toolbar">
         {voice}
         {running && hasContent && deliveries ? <div className="composer-delivery" role="group" aria-label="提交运行中消息">
-          <button type="button" onClick={() => onSend("steer")} disabled={!deliveries.steer || busy} aria-label="引导发送" title={deliveries.steer ? "发送引导，加入当前任务" : "此会话当前不支持引导"}>引导</button>
-          <button type="button" className="composer-queue-send" onClick={() => onSend("queue")} disabled={!deliveries.queue || busy} aria-label="排队发送" title="排队发送，当前任务结束后执行">排队<ArrowUp size={16} aria-hidden="true" /></button>
+          <button type="button" onClick={() => { haptic(); onSend("steer"); }} disabled={!deliveries.steer || busy} aria-label="引导发送" title={deliveries.steer ? "发送引导，加入当前任务" : "此会话当前不支持引导"}>引导</button>
+          <button type="button" className="composer-queue-send" onClick={() => { haptic(); onSend("queue"); }} disabled={!deliveries.queue || busy} aria-label="排队发送" title="排队发送，当前任务结束后执行">排队<ArrowUp size={16} aria-hidden="true" /></button>
         </div> : running && !hasContent ? null
-          : showSend && <button type="button" className="send-button" onClick={() => onSend()} disabled={!canSend || busy} aria-label={running ? "发送引导" : "发送"}>
+          : showSend && <button type="button" className="send-button" onClick={() => { haptic(); onSend(); }} disabled={!canSend || busy} aria-label={running ? "发送引导" : "发送"}>
             {busy ? <Loader2 size={18} className="spin" /> : <ArrowUp size={21} />}
           </button>}
       </div>

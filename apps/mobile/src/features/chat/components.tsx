@@ -6,6 +6,7 @@ import { smoothTextFrameMs } from "../../app/config";
 import { type PendingAttachment, type CodexMessage, type LiveApproval, type LiveApprovalDecision } from "../../app/types";
 import { formatFileSize, isImageAttachment, parseMessageAttachments } from "./attachments";
 import { X, ImageIcon, Paperclip, Copy, AlertCircle, Terminal, CheckCircle2, CircleStop, ChevronRight, UserRound, Bot, Info, Loader2 } from "lucide-react";
+import { haptic } from "../../shared/haptics";
 import { useMessageInteraction } from "./useMessageInteraction";
 import { commandRisks, diffLines, fileKindLabels } from "./approvalModel";
 import { MessageContent } from "./MessageContent";
@@ -217,6 +218,7 @@ export function ToolMessageBubble({ message, onCopy, copyFeedback = "", expanded
 }
 
 export function ApprovalCard({ approval, onRespond }: { approval: LiveApproval; onRespond: (decision: LiveApprovalDecision) => void }) {
+  const respond = (decision: LiveApprovalDecision) => { haptic(decision === "decline" || decision === "cancel" ? "warn" : "confirm"); onRespond(decision); };
   const allowSession = approval.availableDecisions.includes("acceptForSession");
   const locked = approval.status !== "pending";
   const statusText = approval.status === "submitting" ? "正在提交决定…" : approval.status === "submitted" ? "已提交，等待桌面同步；请勿重复操作" : approval.status === "uncertain" ? "提交结果待确认，请查看电脑或等待会话同步" : "";
@@ -252,25 +254,25 @@ export function ApprovalCard({ approval, onRespond }: { approval: LiveApproval; 
       {statusText && <p role="status" aria-live="polite">{statusText}</p>}
       <div className="approval-actions">
         {approval.availableDecisions.includes("accept") && (
-          <button disabled={locked} className="accept primary" onClick={() => onRespond("accept")}>
+          <button disabled={locked} className="accept primary" onClick={() => respond("accept")}>
             <CheckCircle2 size={14} />
             <span>允许一次</span>
           </button>
         )}
         {allowSession && (
-          <button disabled={locked} className="accept" onClick={() => onRespond("acceptForSession")}>
+          <button disabled={locked} className="accept" onClick={() => respond("acceptForSession")}>
             <CheckCircle2 size={14} />
             <span>本会话允许</span>
           </button>
         )}
         {approval.availableDecisions.includes("decline") && (
-          <button disabled={locked} className="decline" onClick={() => onRespond("decline")}>
+          <button disabled={locked} className="decline" onClick={() => respond("decline")}>
             <X size={14} />
             <span>拒绝</span>
           </button>
         )}
         {approval.availableDecisions.includes("cancel") && (
-          <button disabled={locked} className="quiet" onClick={() => onRespond("cancel")}>
+          <button disabled={locked} className="quiet" onClick={() => respond("cancel")}>
             <CircleStop size={14} />
             <span>取消</span>
           </button>

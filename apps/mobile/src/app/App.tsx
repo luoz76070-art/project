@@ -2,6 +2,7 @@ import { SystemNotice } from "../shared/SystemNotice";
 import { ConnectionCard } from "../features/connection/ConnectionCard";
 import { AgentIcon } from "../features/agents/AgentIcon";
 import { PullToRefresh } from "../shared/PullToRefresh";
+import { hapticsEnabled, setHapticsEnabled } from "../shared/haptics";
 import { WorkItemsPage } from "../features/workItems/WorkItemsPage";
 import { ThreadRow } from "../features/threads/ThreadRow";
 import { SidebarScrim } from "../features/threads/SidebarScrim";
@@ -151,6 +152,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
   const [liveStatus, setLiveStatus] = useState("live 未检测");
   const [desktopControlStatus, setDesktopControlStatus] = useState("desktop control 未检测");
   const [connectionState, setConnectionState] = useState<"idle" | "testing" | "ok" | "error">("idle");
+  const [haptics, setHaptics] = useState(hapticsEnabled);
   const [diagnostics, setDiagnostics] = useState<DiagnosticStep[]>([]);
   const [diagnosticText, setDiagnosticText] = useState("");
   const [showToken, setShowToken] = useState(false);
@@ -2139,7 +2141,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
         </details></section>}
 
         <section className="settings-section">
-          <h3>主题</h3>
+          <h3>外观与触感</h3>
           {isKelivoHost ? <button className="action-button" onClick={() => void navigateProduct("settings").catch(() => setStatus("请等待草稿保存后再切换设置。"))}><Settings size={16} />统一外观设置</button> : <div className="segmented">
             <button className={theme === "system" ? "active" : ""} onClick={() => setTheme("system")}>
               <Monitor size={15} />
@@ -2154,6 +2156,10 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
               <span>深色</span>
             </button>
           </div>}
+          <label className="haptics-setting">发送和审批时轻微震动
+            <button type="button" className="action-button" role="switch" aria-label="发送和审批时轻微震动" aria-checked={haptics}
+              onClick={() => { setHapticsEnabled(!haptics); setHaptics(!haptics); }}>{haptics ? "已开启" : "已关闭"}</button>
+          </label>
         </section>
 
         <section className="settings-section">

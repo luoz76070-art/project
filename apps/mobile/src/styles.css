@@ -2472,3 +2472,13 @@ button.workspace-switch:active, button.workspace-switch:focus-visible { backgrou
 .agent-pick-status.offline::before { background: var(--danger); }
 .agent-pick-row .agent-pick-meta { color: var(--text); }
 .agent-pick-meta span { display: inline-block; max-width: 100%; }
+
+/* U7: motion — new messages and cards rise in, sheets slide in and out; the reduced-motion rule above shortens all of it. */
+@keyframes sheetUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@keyframes scrimIn { from { opacity: 0; } to { opacity: 1; } }
+.message-bubble, .tool-message, .approval-card, .agent-permission { animation: messageIn 180ms cubic-bezier(.2, .8, .2, 1) both; }
+.voice-scrim { animation: scrimIn 160ms ease-out both; }
+.voice-sheet { animation: sheetUp 220ms cubic-bezier(.2, .8, .2, 1) both; }
+.settings-sheet { transition: transform 220ms cubic-bezier(.2, .8, .2, 1), visibility 0s linear 220ms; }
+.settings-sheet.open { transition: transform 220ms cubic-bezier(.2, .8, .2, 1), visibility 0s linear 0s; }
+.haptics-setting { display: flex; align-items: center; justify-content: space-between; gap: var(--space-12); color: var(--text); font-size: var(--font-size-15); }
