@@ -1,0 +1,8 @@
+.capture-card { overflow-wrap: anywhere; }
+.capture-card input:not([hidden]) { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
+.capture-card img { display: block; max-width: 100%; height: auto; }
+.capture-card figure { margin: 12px 0; }
+.capture-card li { margin-block: 8px; }
+.capture-card button { overflow-wrap: anywhere; max-width: 100%; }
+
+.capture-voice-scrim { z-index: 220; }

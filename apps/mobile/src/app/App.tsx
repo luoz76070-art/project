@@ -1,3 +1,4 @@
+import { CapturePanel } from '../features/capture/CapturePanel';
 import { migrateHandoff } from '../features/product/handoffMigration';
 import { HandoffMigrationNotice } from '../features/product/HandoffMigrationNotice';
 import { useDeviceRevoked } from "../features/connection/useDeviceRevoked";
@@ -65,6 +66,7 @@ export function App() {
     return profiles.find((profile) => profile.id === defaultProfileId) ?? profiles[0];
   });
   const scope = `${connection.id}:${connection.cacheNamespace ?? connection.updatedAt}:${normalizeEndpoint(connection.endpoint)}`;
+  const [captureOpen, setCaptureOpen] = useState(false);
   const recoveredVoice = useVoiceRecovery(scope, normalizeEndpoint(connection.endpoint), connection.token);
   const [agentMode, setAgentMode] = useState(() => { try { return isKelivoHost && localStorage.getItem("productRemoteMode") === "agent"; } catch { return false; } });
   const [handoff, setHandoff] = useState<ProductHandoff | null>(null);
@@ -80,9 +82,9 @@ export function App() {
     setAgentMode(false);
     try { localStorage.setItem("productRemoteMode", "codex"); } catch { /* The current settings page is still usable. */ }
   }, []);
-  return <ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff}>{agentMode
-    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace voiceRecovery={recoveredVoice.recovery} key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => selectAgentMode(false)} /></React.Suspense>
-    : <Workspace voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}
+  return <ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff}><CapturePanel open={captureOpen} onClose={() => setCaptureOpen(false)} key={`capture:${scope}:${connection.token}`} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} />{agentMode
+    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace onCapture={() => setCaptureOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => selectAgentMode(false)} /></React.Suspense>
+    : <Workspace onCapture={() => setCaptureOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}
     {recoveredVoice.notice && createPortal(<div className="voice-scrim"><section className="voice-sheet" role="dialog" aria-modal="true" aria-label="语音结果已取回">
         <header><strong>语音结果已取回</strong></header>
         <p>{recoveredVoice.notice.message}</p>
@@ -91,7 +93,7 @@ export function App() {
       </section></div>, document.body)}</ProductRemoteShell>;
 }
 
-function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, handoff, onHandoff }: { voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
+function Workspace({ onCapture, voiceRecovery, connection, scope, onApply, onOpenAgents, handoff, onHandoff }: { onCapture: () => void; voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
   const scopeAbortRef = useRef(new AbortController());
   const diagnosticJournalRef = useRef(createConnectionJournal());
   const diagnosticEpochRef = useRef(0);
@@ -1721,6 +1723,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
           </div>
         </div>
         <div className="top-actions">
+          <button className="icon-button" onClick={onCapture} aria-label="新建事项" title="新建事项"><Plus size={18} /></button>
           <button className="icon-button" onClick={onOpenAgents} aria-label="切换 Agent"><Server size={18} /></button>
           <button className="icon-button" onClick={() => void loadThreads()} aria-label="刷新线程">
             <RefreshCcw size={18} className={loading ? "spin" : ""} />

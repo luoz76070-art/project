@@ -34,7 +34,7 @@ export type DiagnosticStep = {
 };
 
 export type RequestJsonOptions = {
-  method?: "GET" | "POST" | "DELETE";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   headers?: Record<string, string>;
   body?: unknown;
   connectTimeout?: number;
