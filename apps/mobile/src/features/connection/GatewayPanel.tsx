@@ -1,3 +1,4 @@
+import { DisclosureSummary } from "../../shared/DisclosureSummary";
 import { useEffect, useRef, useState } from "react";
 import { apiGet, buildUrl, toFriendlyFetchError } from "./http";
 
@@ -45,7 +46,7 @@ export function GatewayPanel({ endpoint, token }: { endpoint: string; token: str
   }
 
   return <details className="settings-disclosure gateway-capabilities">
-    <summary>连接能力</summary>
+    <DisclosureSummary>连接能力</DisclosureSummary>
     <p className="setting-description">查看电脑端模式与服务接入状态。仅查看现有状态，不发起探测或运行任务。</p>
     <button className="action-button" disabled={busy || !endpoint || !token} onClick={() => void inspect()}>{busy ? "正在读取…" : "查看连接能力"}</button>
     {error && <p className="setting-description" role="status">{error}</p>}

@@ -1,6 +1,7 @@
 import { type ThreadSummary, type ThreadRuntime } from "../../app/types";
 
 export type SessionRange = "recent" | "all";
+export type SourceFilter = "all" | "desktop" | "relay";
 export const sessionListRefreshMs = 30_000;
 
 export function sessionInRange(updatedAt: string, range: SessionRange, now = Date.now()) {
@@ -24,6 +25,7 @@ export function mergeThreads(...groups: ThreadSummary[][]) {
 }
 
 export function shortPath(value: string) {
+  value = value.replace(/\\/gu, "/");
   if (value.length <= 44) return value;
   return `...${value.slice(-41)}`;
 }
@@ -31,11 +33,6 @@ export function shortPath(value: string) {
 export function cleanTitle(value: string) {
   const title = value.replace(/\s+/g, " ").trim();
   return title || "Untitled";
-}
-
-export function threadListDetail(thread: ThreadSummary) {
-  const detail = pathTail(thread.cwd) || cleanThreadOriginator(thread.originator);
-  return isUsefulThreadDetail(detail) ? detail : "";
 }
 
 export function groupThreadsByProject(threads: ThreadSummary[]) {
@@ -68,12 +65,6 @@ export function projectGroupLabel(cwd: string | null | undefined) {
   return parts.at(-1) || normalized;
 }
 
-export function cleanThreadOriginator(value: string | null | undefined) {
-  const text = String(value || "").replace(/\s+/g, " ").trim();
-  if (/^codex\s+desktop$/i.test(text)) return "";
-  return isUsefulThreadDetail(text) ? text : "";
-}
-
 export function firstLine(value: string) {
   return value.split(/\r?\n/).find(Boolean)?.trim().slice(0, 80) ?? "";
 }
@@ -82,7 +73,7 @@ export function pathTail(value: string | null | undefined) {
   const normalized = normalizePathText(value);
   if (!isUsefulThreadDetail(normalized) || normalized === "." || normalized === "~") return "";
   const parts = normalized.split(/[\\/]+/).filter(Boolean);
-  const tail = parts.slice(-2).join("\\");
+  const tail = parts.slice(-2).join("/");
   return isUsefulThreadDetail(tail) ? tail : "";
 }
 
@@ -113,4 +104,12 @@ export function sourceClass(source: string | null | undefined) {
 
 export function isDesktopSource(thread: ThreadSummary | null | undefined) {
   return thread?.source === "vscode" || thread?.originator?.toLowerCase().includes("desktop") === true;
+}
+
+// Desktop is the usual source in All; specific filters already identify matching rows.
+// CLI/Exec/unknown remain explicit because the legacy relay filter includes them too.
+export function threadSourceBadge(thread: ThreadSummary, filter: SourceFilter) {
+  if (isDesktopSource(thread)) return filter === "relay" ? "电脑发起" : "";
+  if (thread.source === "appServer") return filter === "relay" ? "" : "手机发起";
+  return sourceLabel(thread.source);
 }

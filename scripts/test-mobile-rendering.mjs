@@ -12,10 +12,10 @@ import { turnResult } from '../plugins/mobile-deepseek/turnResult.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-rendering-'));
 const output = path.join(temp, 'render.cjs');
-await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources'; export { HandoffCard } from './apps/mobile/src/features/product/HandoffCard'; export { HandoffMigrationNotice } from './apps/mobile/src/features/product/HandoffMigrationNotice';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
+await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { ThreadRow } from './apps/mobile/src/features/threads/ThreadRow'; export { SessionRangeControl } from './apps/mobile/src/features/threads/SessionRangeControl'; export { DisclosureSummary } from './apps/mobile/src/shared/DisclosureSummary'; export { SidebarScrim } from './apps/mobile/src/features/threads/SidebarScrim'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources'; export { HandoffCard } from './apps/mobile/src/features/product/HandoffCard'; export { HandoffMigrationNotice } from './apps/mobile/src/features/product/HandoffMigrationNotice';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
 const originalStorage = globalThis.localStorage;
 globalThis.localStorage = { getItem: () => null };
-const { default: { h, render, MessageContent, MessageTimeline, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence, HandoffCard, HandoffMigrationNotice } } = await import(pathToFileURL(output).href);
+const { default: { h, render, ThreadRow, SessionRangeControl, DisclosureSummary, SidebarScrim, MessageContent, MessageTimeline, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence, HandoffCard, HandoffMigrationNotice } } = await import(pathToFileURL(output).href);
 globalThis.localStorage = originalStorage;
 test.after(() => fs.rm(temp, { recursive: true, force: true }));
 const tool = index => ({ id: `t${index}`, role: 'tool', kind: 'commandExecution', text: `Command: rg query-${index}`, turnId: 'turn-a', timestamp: '2026-11-07T00:00:00Z' });
@@ -189,4 +189,119 @@ test('W1 handoff migration entry preserves the existing card and calls completio
   assert.equal(render(h(HandoffMigrationNotice, { migrate() {} })), '');
   globalThis.localStorage = { getItem: () => 'legacy-source' };
   assert.match(render(h(HandoffMigrationNotice, { migrate() {} })), /迁移为事项/);
+});
+
+
+test('U10 local Markdown links render filename labels with full path titles and no navigation', () => {
+  const cases = [
+    ['[scripts/x.py](/Users/test/project/scripts/x.py)', '/Users/test/project/scripts/x.py', 'x.py'],
+    ['[source](/workspace/src/index.ts:42)', '/workspace/src/index.ts:42', 'index.ts'],
+    ['[source](src/index.ts#L8-L12)', 'src/index.ts#L8-L12', 'index.ts'],
+    ['[source](../src/main.ts)', '../src/main.ts', 'main.ts'],
+    ['[config](package.json)', 'package.json', 'package.json'],
+    ['[read](</Users/test/My Project/a (1).md>)', '/Users/test/My Project/a (1).md', 'a (1).md'],
+    ['[read](file:///tmp/a%20b.md)', 'file:///tmp/a%20b.md', 'a b.md'],
+    [String.raw`[win](C:\work\src\main.ts)`, String.raw`C:\work\src\main.ts`, 'main.ts'],
+  ];
+  for (const [text, title, name] of cases) {
+    const html = render(h(MessageContent, { text }));
+    assert.ok(html.includes(`<span class="local-file-tag" title="${title}">${name}</span>`), html);
+    assert.doesNotMatch(html, /<a\b|href=|<button\b|<img\b/);
+  }
+});
+
+test('U10 file labels preserve HTTP links, literal code and unsupported schemes', () => {
+  const html = render(h(MessageContent, { text: '[web](https://example.com/a) [local](/tmp/a.ts)\n\n`[literal](/tmp/code.ts)`\n\n```md\n[block](/tmp/block.ts)\n```\n\n[bad](javascript:alert(1)) [anchor](#heading)' }));
+  assert.match(html, /<a href="https:\/\/example.com\/a" target="_blank" rel="noreferrer">web<\/a>/);
+  assert.equal((html.match(/local-file-tag/g) ?? []).length, 1);
+  assert.match(html, /<code>\[literal\]\(\/tmp\/code.ts\)<\/code>/);
+  assert.match(html, /\[block\]\(\/tmp\/block.ts\)/);
+  assert.doesNotMatch(html, /href="(?:javascript|file):/);
+  assert.match(html, /\[bad\]\(javascript:alert\(1\)\)/);
+});
+
+test('U10 sidebar scrim has an accessible close action and follows the same open state as the sidebar', async () => {
+  let closed = 0;
+  const opened = SidebarScrim({ open: true, onClose: () => closed++ });
+  assert.match(render(opened), /class="mobile-scrim show"/);
+  assert.match(render(opened), /aria-label="关闭线程列表遮罩"/);
+  opened.props.onClick(); assert.equal(closed, 1);
+  const hidden = SidebarScrim({ open: false, onClose() {} });
+  assert.equal(hidden.props.tabIndex, -1); assert.equal(hidden.props['aria-hidden'], true);
+  const app = await fs.readFile(path.join(root, 'apps/mobile/src/app/App.tsx'), 'utf8');
+  assert.match(app, /thread-sidebar glass-surface \$\{sidebarOpen \? "open"/);
+  assert.match(app, /<SidebarScrim open=\{sidebarOpen\} onClose=\{\(\) => setSidebarOpen\(false\)\}/);
+  assert.match(app, /useState\(\(\) => !selected && !isNewThread\)/);
+  assert.match(app, /if \(previousSplitMode.current !== splitMode\) setSidebarOpen\(false\)/);
+  const css = await fs.readFile(path.join(root, 'apps/mobile/src/styles.css'), 'utf8');
+  assert.match(css, /\.mobile-scrim\.show\s*\{[^}]*pointer-events: auto;[^}]*background: var\(--scrim\)/);
+  assert.match(css, /:root \{[^}]*--scrim: #0006;/);
+  assert.match(css, /:root\[data-theme="dark"\] \{[^}]*--scrim: #0009;/);
+});
+
+test('U10 latest-message pill occupies composer flow and settings use rotating Lucide disclosure arrows', async () => {
+  const html = render(h('details', { className: 'settings-disclosure', open: true }, h(DisclosureSummary, {}, '连接能力')));
+  assert.match(html, /<summary><svg[^>]*settings-chevron[^>]*aria-hidden="true"/);
+  assert.match(html, /<span>连接能力<\/span>/);
+  const css = await fs.readFile(path.join(root, 'apps/mobile/src/styles.css'), 'utf8');
+  const pill = css.match(/\.latest-pill \{([^}]+)\}/)[1];
+  assert.match(pill, /position: relative/); assert.match(pill, /justify-self: end/);
+  assert.match(pill, /background: var\(--panel-strong\)/); assert.match(pill, /box-shadow: var\(--shadow\)/);
+  assert.doesNotMatch(pill, /bottom:|position: (?:absolute|fixed)/);
+  assert.doesNotMatch(css, /\.product-remote-shell \.latest-pill \{ box-shadow: none/);
+  assert.match(css, /\.settings-disclosure > summary::-webkit-details-marker \{ display: none/);
+  assert.match(css, /\.settings-disclosure > summary::marker \{ content: ""/);
+  assert.match(css, /\.settings-disclosure\[open\] > summary \.settings-chevron \{ transform: rotate\(90deg\)/);
+});
+
+
+test('U11 thread rows omit repeated paths and only label sources outside the filter expectation', () => {
+  const base = { thread: { id: 'thread', threadName: ' 当前   会话 ', cwd: '/workspace/project', source: 'vscode', originator: 'Codex Desktop', updatedAt: '2026-11-14T00:00:00Z' }, selected: true, activeDesktop: false, sourceFilter: 'all', onOpen() {} };
+  for (const [source, filter, label] of [
+    ['vscode', 'all', ''], ['vscode', 'desktop', ''], ['vscode', 'relay', '电脑发起'],
+    ['appServer', 'all', '手机发起'], ['appServer', 'desktop', '手机发起'], ['appServer', 'relay', ''],
+    ['cli', 'relay', 'CLI'], ['exec', 'all', 'Exec'], [null, 'all', '未知'],
+  ]) {
+    const html = render(h(ThreadRow, { ...base, sourceFilter: filter, thread: { ...base.thread, source, originator: '' } }));
+    assert.match(html, /当前 会话/);
+    assert.doesNotMatch(html, /thread-path|workspace|project/);
+    if (label) { assert.match(html, /class="thread-source /); assert.ok(html.includes(`>${label}</span>`)); }
+    else assert.doesNotMatch(html, /thread-source|>桌面</);
+  }
+  const desktopAlias = render(h(ThreadRow, { ...base, thread: { ...base.thread, source: null } }));
+  assert.doesNotMatch(desktopAlias, /thread-source/);
+  let opened = 0;
+  const row = ThreadRow({ ...base, activeDesktop: true, onOpen: () => opened++ });
+  assert.match(render(row), /class="thread-row active"/); assert.match(render(row), /当前桌面/);
+  row.props.onClick(); assert.equal(opened, 1);
+});
+
+test('U11 earlier sessions keep range toggling and disabled behavior with a text-link appearance', async () => {
+  const selected = [];
+  for (const [range, label, next] of [['recent', '查看更早会话', 'all'], ['all', '只看近 30 天', 'recent']]) {
+    const control = SessionRangeControl({ range, disabled: false, onChange: value => selected.push(value) });
+    const html = render(control);
+    assert.match(html, /<button type="button" class="session-range-link"/);
+    assert.ok(html.includes(label)); assert.doesNotMatch(html, /history-button|href=/);
+    control.props.children[1].props.onClick(); assert.equal(selected.at(-1), next);
+    assert.match(render(h(SessionRangeControl, { range, disabled: true, onChange() {} })), /disabled=""/);
+  }
+  const css = await fs.readFile(path.join(root, 'apps/mobile/src/styles.css'), 'utf8');
+  assert.match(css, /\.session-range-link \{[^}]*min-height: 44px;[^}]*border: 0;[^}]*background: transparent;[^}]*text-decoration: underline/);
+});
+
+test('U11 sidebar keeps two actions and source values, while testing connections lives in connection settings', async () => {
+  const app = await fs.readFile(path.join(root, 'apps/mobile/src/app/App.tsx'), 'utf8');
+  const tools = app.slice(app.indexOf('<div className="sidebar-tools">'), app.indexOf('<div className="host-filter"'));
+  assert.equal((tools.match(/<button /g) ?? []).length, 2);
+  assert.match(tools, /新线程/); assert.match(tools, /桌面/); assert.doesNotMatch(tools, /testConnection|检测/);
+  assert.match(app, /setSourceFilter\("all"\)\}>全部/);
+  assert.match(app, /setSourceFilter\("desktop"\)\}>电脑发起/);
+  assert.match(app, /setSourceFilter\("relay"\)\}>手机发起/);
+  const connection = app.slice(app.indexOf('<h3>手动连接</h3>'), app.indexOf('<VoiceSettings'));
+  assert.match(connection, /onClick=\{\(\) => void testConnection\(\)\}/);
+  assert.match(connection, /disabled=\{connectionState === "testing"\}/);
+  assert.match(connection, /测试连接/);
+  assert.equal((app.match(/onClick=\{\(\) => void testConnection\(\)\}/g) ?? []).length, 1);
+  assert.doesNotMatch(app, /threadListDetail|className="thread-path"/);
 });

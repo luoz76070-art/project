@@ -1,3 +1,6 @@
+import { ThreadRow } from "../features/threads/ThreadRow";
+import { SidebarScrim } from "../features/threads/SidebarScrim";
+import { DisclosureSummary } from "../shared/DisclosureSummary";
 import { migrateHandoff } from '../features/product/handoffMigration';
 import { HandoffMigrationNotice } from '../features/product/HandoffMigrationNotice';
 import { useDeviceRevoked } from "../features/connection/useDeviceRevoked";
@@ -24,7 +27,7 @@ import { createConnectionJournal } from "../features/connection/diagnosticJourna
 import { createPollScope } from "../features/chat/sync";
 import { createRuntimeSync } from "../features/chat/runtimeSync";
 import { messagesForRender, turnInlineIndicator, capMessages, mergeMessages, mergeMessagesById, turnStatusText, desktopActionText, canUseEventSource } from "../features/chat/messages";
-import { groupThreadsByProject, mergeThreads, shortPath, isDesktopSource, firstLine, threadListDetail, cleanTitle, sourceClass, sourceLabel, retainCodexThread, sessionInRange, sessionListRefreshMs, type SessionRange } from "../features/threads/model";
+import { groupThreadsByProject, mergeThreads, shortPath, isDesktopSource, firstLine, sourceClass, sourceLabel, retainCodexThread, sessionInRange, sessionListRefreshMs, type SessionRange, type SourceFilter } from "../features/threads/model";
 import { ProjectGroups } from "../features/threads/ProjectGroups";
 import { SessionRangeControl } from "../features/threads/SessionRangeControl";
 import { loadConnectionProfiles, saveConnectionSettings, profileNameFromEndpoint, upsertConnectionProfile, saveConnectionProfiles } from "../features/connection/profiles";
@@ -40,7 +43,6 @@ import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mim
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
 import { clamp, applyTheme } from "../shared/preferences";
 import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, Plus, ArrowUp, ChevronDown, Download } from "lucide-react";
-import { formatDate } from "../shared/format";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { MessageBubble, MessageTimeline, ApprovalCard, AttachmentTray } from "../features/chat/components";
 import { MessageMediaProvider } from "../features/chat/MessageImage";
@@ -129,7 +131,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
   const [selected, setSelected] = useState<ThreadSummary | null>(() => workspaceCache.threads.find(thread => thread.id === workspaceCache.selectedId) ?? null);
   const [isNewThread, setIsNewThread] = useState(workspaceCache.isNewThread);
   const [query, setQuery] = useState("");
-  const [sourceFilter, setSourceFilter] = useState<"all" | "desktop" | "relay">("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [threadPage, setThreadPage] = useState({ offset: 0, hasMore: false, search: "" });
   const [threadRange, setThreadRange] = useState<SessionRange>("recent");
   const [status, setStatus] = useState("准备连接");
@@ -141,7 +143,8 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
   const [showToken, setShowToken] = useState(false);
   const [copied, setCopied] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => !selected && !isNewThread);
+  const previousSplitMode = useRef(splitMode);
   const [settingsOpen, setSettingsOpen] = useState(() => isKelivoHost && takeProductSettingsLaunch());
   const [copyingMessageDiagnostics, setCopyingMessageDiagnostics] = useState(false);
   const [messageDiagnosticsStatus, setMessageDiagnosticsStatus] = useState("");
@@ -1344,7 +1347,8 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
 
   useEffect(() => {
     localStorage.setItem("splitMode", splitMode);
-    setSidebarOpen(false);
+    if (previousSplitMode.current !== splitMode) setSidebarOpen(false);
+    previousSplitMode.current = splitMode;
     window.setTimeout(() => {
       forceBottomRef.current = true;
       scrollMessagesToBottom(false);
@@ -1732,7 +1736,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
       </header>
 
       <section className="workspace-grid" ref={workspaceGridRef}>
-        <aside ref={sidebarRef} className={`thread-sidebar glass-surface ${sidebarOpen || (!selected && !isNewThread) ? "open" : ""}`}>
+        <aside ref={sidebarRef} className={`thread-sidebar glass-surface ${sidebarOpen ? "open" : ""}`}>
           <div className="sidebar-top">
             <div className="sidebar-title">
               <PanelLeft size={18} />
@@ -1761,16 +1765,12 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
               <Monitor size={16} />
               <span>桌面</span>
             </button>
-            <button className="tool-button" onClick={() => void testConnection()} disabled={connectionState === "testing"}>
-              {connectionState === "testing" ? <Loader2 size={16} className="spin" /> : <Wifi size={16} />}
-              <span>检测</span>
-            </button>
           </div>
 
           <div className="host-filter" aria-label="会话来源">
             <button className={sourceFilter === "all" ? "active" : ""} onClick={() => setSourceFilter("all")}>全部</button>
-            <button className={sourceFilter === "desktop" ? "active" : ""} onClick={() => setSourceFilter("desktop")}>电脑</button>
-            <button className={sourceFilter === "relay" ? "active" : ""} onClick={() => setSourceFilter("relay")}>Relay</button>
+            <button className={sourceFilter === "desktop" ? "active" : ""} onClick={() => setSourceFilter("desktop")}>电脑发起</button>
+            <button className={sourceFilter === "relay" ? "active" : ""} onClick={() => setSourceFilter("relay")}>手机发起</button>
           </div>
           <div className="layout-switcher">
             <button className={splitMode === "auto" ? "active" : ""} onClick={() => setSplitMode("auto")}>
@@ -1794,22 +1794,9 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
           <div className="thread-list" aria-label="Codex 线程列表">
             <SessionRangeControl range={threadRange} disabled={loading} onChange={range => { setThreadRange(range); void loadThreads({ range }); }} />
             <ProjectGroups scope={scope} agentId="codex" groups={groupedFiltered} search={query}>
-              {thread => {
-                  const detail = threadListDetail(thread);
-                  return (
-                    <button
-                      key={thread.id}
-                      className={`thread-row ${selected?.id === thread.id ? "active" : ""}`}
-                      onClick={() => void openThread(thread, { closeSidebar: true })}
-                    >
-                      <span className="thread-name">{cleanTitle(thread.threadName)}</span>
-                      <span className="thread-time">{formatDate(thread.updatedAt)}</span>
-                      <span className={`thread-source ${sourceClass(thread.source)}`}>{sourceLabel(thread.source)}</span>
-                      {activeDesktopThreadId === thread.id && <span className="live-chip">当前桌面</span>}
-                      {detail && <span className="thread-path">{detail}</span>}
-                    </button>
-                  );
-              }}
+              {thread => <ThreadRow key={thread.id} thread={thread} selected={selected?.id === thread.id}
+                activeDesktop={activeDesktopThreadId === thread.id} sourceFilter={sourceFilter}
+                onOpen={() => void openThread(thread, { closeSidebar: true })} />}
             </ProjectGroups>
             {threadPage.hasMore && <button className="history-button" disabled={loading} onClick={() => void loadThreads({ append: true })}>加载更多会话</button>}
             {filtered.length === 0 && (
@@ -1962,7 +1949,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
         </section>
       </section>
 
-      <div className={`mobile-scrim ${sidebarOpen ? "show" : ""}`} onClick={() => setSidebarOpen(false)} />
+      <SidebarScrim open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className={`settings-scrim ${settingsOpen ? "show" : ""}`} onClick={() => setSettingsOpen(false)} />
 
       <aside className={`settings-sheet glass-surface ${settingsOpen ? "open" : ""}`} aria-label="设置">
@@ -2037,7 +2024,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
         </section>
 
         {settingsOpen && <section className="settings-section"><VoiceSettings endpoint={endpoint} token={token} /></section>}
-        <section className="settings-section"><details className="settings-disclosure"><summary>会话显示诊断</summary>
+        <section className="settings-section"><details className="settings-disclosure"><DisclosureSummary>会话显示诊断</DisclosureSummary>
           <p className="update-note">出现显示或连接问题时，可复制不超过 2 KB 的摘要。详细报告单独保存为文件，最多 64 KB。仅含版本、身份指纹、数量及连接状态，不含正文、附件路径或密钥。</p>
           <div className="settings-actions"><button className="action-button" disabled={!selected?.id || copyingMessageDiagnostics} onClick={() => void exportMessageDiagnostics("copy")}>
             {copyingMessageDiagnostics ? <Loader2 size={16} className="spin" /> : <Copy size={16} />}
@@ -2046,7 +2033,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
           <button className="action-button" disabled={!selected?.id || copyingMessageDiagnostics} onClick={() => void exportMessageDiagnostics("file")}><Download size={16} /><span>保存详细报告</span></button></div>
           {messageDiagnosticsStatus && <p className="update-note" role="status">{messageDiagnosticsStatus}</p>}
         </details></section>
-        {isKelivoHost ? <section className="settings-section"><h3>应用版本</h3><p>{appVersionLabel}</p><button className="action-button" onClick={() => window.dispatchEvent(new Event(productOpenUpdates))}><Download size={18} /><span>应用更新</span></button></section> : <section className="settings-section"><details className="settings-disclosure"><summary>版本与更新</summary>
+        {isKelivoHost ? <section className="settings-section"><h3>应用版本</h3><p>{appVersionLabel}</p><button className="action-button" onClick={() => window.dispatchEvent(new Event(productOpenUpdates))}><Download size={18} /><span>应用更新</span></button></section> : <section className="settings-section"><details className="settings-disclosure"><DisclosureSummary>版本与更新</DisclosureSummary>
           <div className="version-card">
             <span>手机版本</span>
             <strong>{appVersionLabel}</strong>
@@ -2184,10 +2171,6 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
             <button className={sandboxMode === "danger-full-access" ? "active" : ""} onClick={() => setSandboxMode("danger-full-access")}>
               <KeyRound size={15} />
               <span>完整权限</span>
-            </button>
-            <button onClick={() => void testConnection()}>
-              <Wifi size={15} />
-              <span>检测</span>
             </button>
           </div>
         </section>

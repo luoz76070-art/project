@@ -42,7 +42,7 @@ const settingsSource = await fs.readFile(new URL('../apps/mobile/src/features/vo
 const settingsAst = ts.createSourceFile('VoiceSettings.tsx', settingsSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const settingsBody = settingsAst.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(settingsAst)).join('\n').replace('export function VoiceSettings', 'function VoiceSettings');
 const settingsJs = ts.transpileModule(settingsBody, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, jsxFactory: 'h', jsxFragmentFactory: 'Fragment' } }).outputText;
-const settingsFactory = new Function('useState', 'useRef', 'useEffect', 'voiceContextEnabled', 'setVoiceContextEnabled', 'h', 'Fragment', settingsJs + ';return VoiceSettings');
+const settingsFactory = new Function('useState', 'useRef', 'useEffect', 'voiceContextEnabled', 'setVoiceContextEnabled', 'h', 'Fragment', 'DisclosureSummary', settingsJs + ';return VoiceSettings');
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function storage() { const data = new Map(); return { data, getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: k => data.delete(k) }; }
@@ -121,7 +121,7 @@ test('voice settings switch toggles the production privacy preference and disclo
   try {
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: store });
     setVoiceContextEnabled(true);
-    const Settings = settingsFactory(useState, () => ({ current: null }), () => {}, voiceContextEnabled, setVoiceContextEnabled, h, 'fragment');
+    const Settings = settingsFactory(useState, () => ({ current: null }), () => {}, voiceContextEnabled, setVoiceContextEnabled, h, 'fragment', 'summary');
     const render = () => { cursor = 0; return Settings({ endpoint: 'https://synthetic.invalid', token: 'synthetic' }); };
     const first = render(), toggle = flatten(first).find(node => node.props?.role === 'switch');
     assert.equal(toggle.props['aria-checked'], true);

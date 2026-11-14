@@ -1,3 +1,4 @@
+import { DisclosureSummary } from "../../shared/DisclosureSummary";
 import { useEffect, useRef, useState } from "react";
 import { voiceApi } from "./api";
 import { voiceError, type VoiceConfig } from "./model";
@@ -37,7 +38,7 @@ export function VoiceSettings({ endpoint, token }: { endpoint: string; token: st
     const expanded = event.currentTarget.open; setOpen(expanded);
     if (expanded) void run(); else { current.current?.abort(); setBusy(false); }
   }}>
-    <summary>语音与提示词</summary>
+    <DisclosureSummary>语音与提示词</DisclosureSummary>
     <p className="setting-description">百炼 Qwen-ASR 转文字，DeepSeek 整理提示词。Key 保存在当前电脑网关，仅此配对设备使用；留空保留已有配置。</p>
     <label>识别时参考当前会话（项目名、标题、文件名）
       <button type="button" className="action-button" role="switch" aria-label="识别时参考当前会话（项目名、标题、文件名）" aria-checked={useContext} onClick={() => { const next = !useContext; setVoiceContextEnabled(next); setUseContext(next); }}>{useContext ? "已开启" : "已关闭"}</button>
