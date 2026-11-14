@@ -2482,3 +2482,20 @@ button.workspace-switch:active, button.workspace-switch:focus-visible { backgrou
 .settings-sheet { transition: transform 220ms cubic-bezier(.2, .8, .2, 1), visibility 0s linear 220ms; }
 .settings-sheet.open { transition: transform 220ms cubic-bezier(.2, .8, .2, 1), visibility 0s linear 0s; }
 .haptics-setting { display: flex; align-items: center; justify-content: space-between; gap: var(--space-12); color: var(--text); font-size: var(--font-size-15); }
+
+/* U6: brand empty states and content-shaped skeletons. */
+.empty-brand { display: grid; justify-items: center; gap: var(--space-8); margin: var(--space-24) auto; max-width: 320px; text-align: center; color: var(--text); }
+.empty-brand.compact { margin: var(--space-16) auto; gap: var(--space-4); }
+.empty-brand p { margin: 0; color: var(--muted); font-size: var(--font-size-13); line-height: 1.6; }
+.empty-brand strong { font-size: var(--font-size-15); font-weight: 500; }
+.empty-illustration { display: grid; place-items: center; width: 88px; height: 88px; margin-bottom: var(--space-4); border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--text); }
+.empty-brand.compact .empty-illustration { width: 52px; height: 52px; }
+@keyframes skeletonShimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.skeleton-list, .skeleton-messages { display: grid; gap: var(--space-12); padding: var(--space-8) 0; }
+.skeleton-row { display: grid; gap: var(--space-8); padding: var(--space-16); border-radius: var(--radius-16); background: var(--panel); }
+.skeleton-row i, .skeleton-messages i { display: block; height: 14px; border-radius: var(--radius-8); background: linear-gradient(90deg, var(--panel-soft) 25%, color-mix(in srgb, var(--panel-soft) 55%, var(--bg-0)) 50%, var(--panel-soft) 75%); background-size: 200% 100%; animation: skeletonShimmer 1.4s ease-in-out infinite; }
+.skeleton-row i:first-child { width: 60%; height: 16px; }
+.skeleton-row i:last-child { width: 35%; }
+.skeleton-messages .skeleton-bubble { justify-self: end; width: 58%; height: 44px; border-radius: var(--radius-16); }
+.skeleton-messages .skeleton-line { width: 88%; }
+.skeleton-messages .skeleton-line.short { width: 52%; }

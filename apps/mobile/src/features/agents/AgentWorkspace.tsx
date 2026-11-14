@@ -16,6 +16,8 @@ import { checkingSummary, offlineSummary, summarizeSessions, type AgentSummary }
 import { loadWorkspaceCache } from "../threads/cache";
 import { AgentIcon } from "./AgentIcon";
 import { PullToRefresh } from "../../shared/PullToRefresh";
+import { EmptyState } from "../../shared/EmptyState";
+import { ListSkeleton, MessageSkeleton } from "../../shared/Skeleton";
 import { haptic } from "../../shared/haptics";
 import type { CodexMessage, PendingAttachment } from "../../app/types";
 import { maxMessagesPerThread } from "../../app/config";
@@ -179,7 +181,7 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
           <AgentPickRow id="codex" label="Codex" description="电脑桌面会话与手机工作台" summary={codexSummary} onOpen={onBack} />
           {agents.map(item => <AgentPickRow key={item.id} id={item.id} label={item.label} summary={summaries[item.id]} recentOnly={item.id === "deepseek"} onOpen={() => void loadSessions(item)}
             description={item.id === "deepseek" ? "查看电脑会话与历史，继续原线程和处理提问" : item.id === "claude" ? "打开已加载插件的会话，查看输出、排队输入与中断" : "打开现有会话，查看输出与处理提问"} />)}
-          {!loading && !agents.length && !error && <p className="setting-description">电脑端尚未接入其他 Agent。配置 DeepSeek Harness、Claude Code 插件或 OpenCode 服务后，下拉刷新此页。</p>}
+          {!loading && !agents.length && !error && <EmptyState compact title="还没有接入其他 Agent">配置 DeepSeek Harness、Claude Code 插件或 OpenCode 服务后，下拉刷新此页。</EmptyState>}
         </>}
         {agent && <>
           {agent.id === "deepseek" && <SessionRangeControl range={range} disabled={loading} onChange={next => { setRange(next); void loadSessions(agent, false, next); }} />}
@@ -187,10 +189,11 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
           {<ProjectGroups key={agent.id} scope={scope} agentId={agent.id} groups={groupByProject(sessions, session => session.directory)} search={query}>
             {session => <button className="agent-session-row" key={session.id} onClick={() => { if (isKelivoHost) saveAgentView(scope, agent.id, session.id); setSelected(session); }}><strong>{session.title || "未命名会话"}</strong><time>{new Date(session.updatedAt).toLocaleString()}</time></button>}
           </ProjectGroups>}
-          {!loading && !sessions.length && !error && <p>{agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</p>}
+          {!loading && !sessions.length && !error && <EmptyState compact title="没有会话">{agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</EmptyState>}
           {cursor && <button className="action-button" disabled={loading} onClick={() => void loadSessions(agent, true)}>加载更多会话</button>}
         </>}
-        {loading && <p className="inline-loading" role="status"><Loader2 className="spin" size={18} />正在读取…</p>}
+        {loading && (agent ? !sessions.length : !agents.length) ? <ListSkeleton label="正在读取…" />
+          : loading && <p className="inline-loading" role="status"><Loader2 className="spin" size={18} />正在刷新…</p>}
       </PullToRefresh>}
   </main>;
 }
@@ -365,7 +368,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
       </MessageMediaProvider>
       {snapshot?.questions.map(question => <AgentQuestions key={question.id} request={question} agentLabel={agent.label} disabled={!online || busy} onRespond={answers => operate("question", `/questions/${question.id}/respond`, { answers }, question.id)} />)}
       {snapshot?.permissions.map(permission => <PermissionCard key={permission.id} permission={permission} agentLabel={agent.label} disabled={!online || busy} onRespond={decision => operate("permission", `/permissions/${permission.id}/respond`, { decision }, permission.id)} />)}
-      {!snapshot && <p className="inline-loading" role="status"><Loader2 size={18} className="spin" />正在读取原会话…</p>}
+      {!snapshot && <MessageSkeleton label="正在读取原会话" />}
     </div>
     <footer className="composer-panel agent-composer">
       {error && <SystemNotice error>{error}</SystemNotice>}

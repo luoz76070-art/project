@@ -2,6 +2,8 @@ import { SystemNotice } from "../shared/SystemNotice";
 import { ConnectionCard } from "../features/connection/ConnectionCard";
 import { AgentIcon } from "../features/agents/AgentIcon";
 import { PullToRefresh } from "../shared/PullToRefresh";
+import { EmptyState } from "../shared/EmptyState";
+import { ListSkeleton, MessageSkeleton } from "../shared/Skeleton";
 import { hapticsEnabled, setHapticsEnabled } from "../shared/haptics";
 import { WorkItemsPage } from "../features/workItems/WorkItemsPage";
 import { ThreadRow } from "../features/threads/ThreadRow";
@@ -49,7 +51,7 @@ import { ApkUpdateProgress } from "../features/updates/ApkUpdateProgress";
 import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mimeTypeFromName, revokeAttachmentPreviews } from "../features/chat/attachments";
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
 import { clamp, applyTheme } from "../shared/preferences";
-import { ListTodo, Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, ArrowUp, ChevronDown, Download } from "lucide-react";
+import { ListTodo, Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, ArrowUp, ChevronDown, Download } from "lucide-react";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { MessageBubble, MessageTimeline, ApprovalCard, AttachmentTray } from "../features/chat/components";
 import { MessageMediaProvider } from "../features/chat/MessageImage";
@@ -1821,12 +1823,8 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
                 onOpen={() => void openThread(thread, { closeSidebar: true })} />}
             </ProjectGroups>
             {threadPage.hasMore && <button className="history-button" disabled={loading} onClick={() => void loadThreads({ append: true })}>加载更多会话</button>}
-            {filtered.length === 0 && (
-              <div className="empty-state">
-                <MessageSquare size={22} />
-                <p>没有匹配的线程</p>
-              </div>
-            )}
+            {filtered.length === 0 && (loading && !threads.length ? <ListSkeleton label="正在读取线程列表" />
+              : <EmptyState compact title={query.trim() ? "没有匹配的线程" : "还没有线程"}>{query.trim() ? "换个关键词，或按回车在电脑上搜索全部会话。" : "点“新线程”开始，或先在电脑上的 Codex 里打开一个会话。"}</EmptyState>)}
           </PullToRefresh>
         </aside>
 
@@ -1867,18 +1865,9 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
           <div className="messages-viewport" ref={messagesRef} onScroll={onMessagesScroll}>
             {isDesktopWatch && Boolean(activeRuntime.historyBefore) && <button className="history-button" onClick={() => void loadEarlierHistory()} disabled={activeRuntime.loadingHistory}>{activeRuntime.loadingHistory ? "读取历史中…" : "加载更早的消息"}</button>}
             {activeRuntime.historyBrowsing && <button className="history-button" onClick={jumpToLatest}>正在浏览历史 · 返回最新</button>}
-            {loadingMessages && (
-              <div className="inline-loading">
-                <Loader2 size={18} className="spin" />
-                <span>读取线程</span>
-              </div>
-            )}
+            {loadingMessages && <MessageSkeleton label="正在读取线程" />}
             {!loadingMessages && visibleMessages.length === 0 && !isLiveTurnActive && (
-              <div className="empty-chat">
-                <Sparkles size={28} />
-                <h3>{isNewThread ? "开始一个新线程" : "选择一个 Codex 线程"}</h3>
-                <p>{isNewThread ? "输入消息后会在当前电脑上启动 Codex turn。" : "从左侧选择线程，或创建新线程继续工作。"}</p>
-              </div>
+              <EmptyState title={isNewThread ? "开始一个新线程" : "选择一个 Codex 线程"}>{isNewThread ? "输入消息后，会在电脑上开始新的 Codex 会话。" : "打开线程列表选一个会话，或新建线程继续工作。"}</EmptyState>
             )}
             <MessageMediaProvider key={activeThreadKey} endpoint={endpoint} token={token} threadId={activeThreadKey}>
             <MessageTimeline messages={visibleMessages} running={isLiveTurnActive} renderMessage={(message, expandToolDetails, assistantContinuation) => (

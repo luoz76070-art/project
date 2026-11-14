@@ -8,6 +8,8 @@ import { deviceRevokedMessage } from '../connection/authorization';
 import { useDeviceRevoked } from '../connection/useDeviceRevoked';
 import { formatDate } from '../../shared/format';
 import { defaultTab, emptyText, groupWorkItems, loadAllWorkItems, stateHints, workItemTabs } from './model';
+import { EmptyState } from '../../shared/EmptyState';
+import { ListSkeleton } from '../../shared/Skeleton';
 import './workItems.css';
 
 type Props = { endpoint: string; token: string; open: boolean; onClose: () => void; onNew: () => void; onOpenItem: (uid: string) => void };
@@ -63,8 +65,8 @@ export function WorkItemsPage({ endpoint, token, open, onClose, onNew, onOpenIte
         </button>)}
       </div>
       <p className="work-items-hint">{stateHints[current]}</p>
-      {items === null ? <p className="inline-loading">{error ? '' : '正在读取事项…'}</p>
-        : groups[current].length === 0 ? <p className="work-items-empty">{emptyText[current]}</p>
+      {items === null ? (error ? null : <ListSkeleton label="正在读取事项" />)
+        : groups[current].length === 0 ? <EmptyState compact className="work-items-empty" title={emptyText[current]} />
         : <ul className="work-items-list" role="tabpanel" aria-label={workItemTabs.find(t => t.state === current)?.label}>
           {groups[current].map(item => <li key={item.uid}><button type="button" className="work-items-row" onClick={() => onOpenItem(item.uid)}>
             <span className="work-items-title">{item.title}</span>
