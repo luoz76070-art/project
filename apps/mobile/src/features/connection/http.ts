@@ -16,7 +16,7 @@ export async function apiPost<T>(url: string, token: string, body: unknown, sign
     method: "POST",
     signal,
     headers: {
-      ...authHeaders(token),
+      ...(token ? authHeaders(token) : {}),
       "Content-Type": "application/json",
     },
     body,

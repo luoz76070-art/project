@@ -84,7 +84,9 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
 
   app.addHook("onRequest", async (request, reply) => {
     const pathname = request.url.split("?")[0];
-    if (request.method === "OPTIONS" || ((pathname === "/health" || pathname === "/api/pairing/consume") && !request.headers.authorization)) return;
+    // Public routes stay anonymous unless a real credential is presented; an empty "Bearer " header (sent by
+    // the pairing screen before it has a token) must not be treated as a revoked device.
+    if (request.method === "OPTIONS" || ((pathname === "/health" || pathname === "/api/pairing/consume") && !presentedCredential(request.headers.authorization))) return;
     if (pathname?.startsWith("/api/claude-bridge/")) {
       if (!authorizeClaudeBridge(request, config.claude?.bridgeToken)) return reply.code(401).send({ error: "unauthorized" });
       return;
@@ -641,4 +643,8 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
       if (value.expiresAt <= now) desktopStreamTokens.delete(token);
     }
   }
+}
+
+function presentedCredential(header: string | undefined): string {
+  return (header ?? "").replace(/^Bearer(?:\s+|$)/i, "").trim();
 }

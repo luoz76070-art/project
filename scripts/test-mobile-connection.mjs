@@ -27,7 +27,7 @@ await build({ stdin: { contents: `
     plugin.onResolve({ filter: /^@capacitor\/core$/ }, () => ({ path: 'capacitor', namespace: 'fixture' }));
     plugin.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export const Capacitor = { isNativePlatform: () => false }; export const CapacitorHttp = { request: async () => { throw new Error("unexpected native request"); } };', loader: 'js' }));
   } }], define: { 'import.meta.env': '{}' } });
-const { subscribeEvents, apiGet, relayAuthorization, Capacitor, CapacitorHttp, deviceRevokedMessage } = await import(pathToFileURL(authorizationBundle).href);
+const { subscribeEvents, apiGet, apiPost, relayAuthorization, Capacitor, CapacitorHttp, deviceRevokedMessage } = await import(pathToFileURL(authorizationBundle).href);
 const { mergeLastTurn } = await moduleFrom('features/chat/lastTurn.ts');
 const { saveThreadRuntimeCache, loadThreadRuntimeCache, readThreadMessageCacheForDiagnostics, defaultRuntime, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, desktopApprovalsPatch, approvalResponsePatch } = await moduleFrom('features/chat/runtime.ts');
 const { makeMessageDiagnostics } = await moduleFrom('features/chat/messageDiagnostics.ts');
@@ -921,4 +921,16 @@ test('U10 displayed thread paths use forward slashes for Windows and POSIX input
   const long = shortPath(String.raw`C:\Users\test\a-very-long-parent-directory\workspace\codex-to-phone`);
   assert.ok(long.startsWith('...')); assert.ok(long.endsWith('workspace/codex-to-phone'));
   assert.ok(!long.includes('\\')); assert.ok(long.length <= 44);
+});
+
+test('pairing POST without a token sends no Authorization header and a 401 does not mark a device revoked', async () => {
+  const originalFetch = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, init = {}) => { seen.push(new Headers(init.headers ?? {})); return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { 'content-type': 'application/json' } }); };
+  try {
+    await assert.rejects(apiPost('https://pairing.example/api/pairing/consume', '', { code: 'x', name: '手机' }));  // 401 wording is U12's job; here only the header and revoked state matter
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].has('authorization'), false);
+    assert.equal(relayAuthorization('https://pairing.example', '').isRevoked(), false);
+  } finally { globalThis.fetch = originalFetch; }
 });

@@ -158,3 +158,17 @@ test('request authenticated before revoke cannot enter its handler after parsing
   gate.resolve();
   assert.equal((await pending).statusCode, 401); assert.equal(calls, 0);
 });
+
+test('pairing consume treats a missing or empty bearer header as anonymous, but a revoked token stays 401', async t => {
+  const f = await fixture(t);
+  const consume = async headers => {
+    const code = (await f.app.inject({ method: 'POST', url: '/api/pairing', headers: f.auth('admin-fixture') })).json().code;
+    return f.app.inject({ method: 'POST', url: '/api/pairing/consume', headers, payload: { code, name: 'empty bearer' } });
+  };
+  for (const headers of [{}, { authorization: 'Bearer ' }, { authorization: 'Bearer' }, { authorization: 'Bearer   ' }]) {
+    const result = await consume(headers);
+    assert.equal(result.statusCode, 200, `${JSON.stringify(headers)} ${result.body}`);
+    assert.equal(typeof result.json().token, 'string');
+  }
+  assert.equal((await consume({ authorization: 'Bearer not-a-device' })).statusCode, 401);
+});

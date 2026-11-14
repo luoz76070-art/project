@@ -23,5 +23,5 @@ export function relayAuthorization(endpoint: string, token: string) {
 export function requestAuthorization(url: string, headers?: Record<string, string>) {
   const header = Object.entries(headers ?? {}).find(([key]) => key.toLowerCase() === "authorization")?.[1];
   const api = url.lastIndexOf("/api/");
-  return api >= 0 && header?.startsWith("Bearer ") ? relayAuthorization(url.slice(0, api), header.slice(7)) : undefined;
+  return api >= 0 && header?.startsWith("Bearer ") && header.slice(7).trim() ? relayAuthorization(url.slice(0, api), header.slice(7)) : undefined;
 }
