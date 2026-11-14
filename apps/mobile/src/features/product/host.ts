@@ -16,6 +16,7 @@ const colors: Record<string, string[]> = {
   background: ["--bg-0"], panel: ["--bg-1", "--panel", "--panel-solid", "--panel-strong"],
   fill: ["--bg-2", "--panel-soft"], text: ["--text"], muted: ["--muted", "--subtle"],
   primary: ["--accent", "--accent-strong"], onPrimary: ["--on-accent"],
+  signal: ["--signal"], error: ["--danger"],
   primaryContainer: ["--accent-soft"], outline: ["--border", "--hairline"],
   userBubble: ["--user-bubble"], avatar: ["--avatar-surface"],
   composer: ["--composer-surface", "--process-surface"], composerOutline: ["--composer-outline"],

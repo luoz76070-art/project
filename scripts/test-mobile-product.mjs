@@ -183,3 +183,24 @@ test('computer rendering honors Kelivo font and tool preferences and resets old 
   assert.equal(document.documentElement.dataset.showToolCards, 'true');
   assert.equal(document.documentElement.dataset.showToolSummary, 'false');
 });
+
+
+test('signal and error follow host palettes and stale or malformed roles fall back', t => {
+  fixture(t); const values = new Map();
+  globalThis.document = { documentElement: { dataset: {}, style: { setProperty: (k, v) => values.set(k, v), removeProperty: k => values.delete(k) } } };
+  for (const dark of [false, true]) {
+    m.applyProductAppearance({ mode: 'system', dark, colors: { signal: '#aabbcc', error: '#cc3322', primary: '#123456' } });
+    assert.equal(values.get('--signal'), '#aabbcc');
+    assert.equal(values.get('--danger'), '#cc3322');
+    assert.equal(values.get('--accent'), '#123456');
+  }
+  m.applyProductAppearance({ dark: false, colors: { signal: 'red', error: '#12345678' } });
+  assert.equal(values.has('--signal'), false);
+  assert.equal(values.has('--danger'), false);
+  m.applyProductAppearance({ dark: true, colors: { signal: '#ffaa00', error: '#cc3322' } });
+  m.applyProductAppearance({ dark: false, colors: { primary: '#111111' } });
+  assert.equal(values.has('--signal'), false);
+  assert.equal(values.has('--danger'), false);
+  m.applyProductAppearance({ mode: 'dark', colors: { signal: '#ffaa00', error: '#cc3322' } });
+  assert.equal(values.has('--signal'), false, 'legacy snapshots without brightness cannot override defaults');
+});
