@@ -37,7 +37,8 @@ export function captureApi(endpoint: string, token: string, signalSource: AbortS
 export function captureClient(send: Send) {
   let running = false;
   return {
-    list(cursor?: string) { return send<CaptureList>(`/api/work-items?source=capture&limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`); },
+    request: send,
+    list(cursor?: string) { return send<CaptureList>(`/api/work-items?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`); },
     get(uid: string) { return send<WorkItemResponse>(`/api/work-items/${encodeURIComponent(uid)}`); },
     image(id: string) { return send<{ asset: CaptureAsset; dataBase64: string }>(`/api/capture-assets/${encodeURIComponent(id)}?encoding=base64`); },
     edit(uid: string, body: { mutationId: string; expectedRevision: number; title: string; detail: string }) { return send<WorkItemResponse>(`/api/work-items/${encodeURIComponent(uid)}`, 'PATCH', body); },

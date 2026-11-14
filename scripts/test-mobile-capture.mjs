@@ -116,8 +116,8 @@ function panelDriver(client){
   const useEffect=(fn,deps)=>{const i=cursor++,old=slots[i];if(!old||deps.some((v,j)=>v!==old.deps[j]))effects.push(()=>{old?.cleanup?.();slots[i]={deps,cleanup:fn()};});};
   const h=(type,props,...children)=>({type,props:{...props,children}});
   const document={body:{},activeElement:null},window={addEventListener(){},removeEventListener(){},confirm:()=>true};
-  const factory=new Function('useEffect','useMemo','useRef','useState','createPortal','VoiceInput','useDeviceRevoked','deviceRevokedMessage','captureApi','canvasPreview','captureTransaction','useCaptureVoice','voiceDraftHash','document','window','navigator','h','Fragment',panelJs+';return CapturePanel');
-  const component=factory(useEffect,useMemo,useRef,useState,v=>v,'voice',()=>revoked,'此设备已被撤销，请重新配对',()=>client,async()=>file(),captureTransaction,()=>({}),voiceDraftHash,document,window,{onLine:true},h,'fragment');
+  const factory=new Function('useEffect','useMemo','useRef','useState','createPortal','VoiceInput','useDeviceRevoked','deviceRevokedMessage','captureApi','canvasPreview','captureTransaction','useCaptureVoice','voiceDraftHash','document','window','navigator','h','Fragment','ItemHandoff',panelJs+';return CapturePanel');
+  const component=factory(useEffect,useMemo,useRef,useState,v=>v,'voice',()=>revoked,'此设备已被撤销，请重新配对',()=>client,async()=>file(),captureTransaction,()=>({}),voiceDraftHash,document,window,{onLine:true},h,'fragment','handoff');
   function render(){do{dirty=false;cursor=0;tree=component(props);for(const fn of effects.splice(0))fn();}while(dirty);return tree;}
   const nodes=n=>Array.isArray(n)?n.flatMap(nodes):n&&typeof n==='object'?[n,...nodes(n.props?.children)]:[];
   const text=n=>Array.isArray(n)?n.map(text).join(''):n&&typeof n==='object'?text(n.props.children):n??'';

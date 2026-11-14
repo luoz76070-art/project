@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { HandoffService } from '../workItems/handoffService.js';
+import { handoffRequest, handoffResolve, handoffSubmit } from '../workItems/handoffSchema.js';
+import type { OpenHandoffTarget } from './handoffChannels.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { PassThrough } from 'node:stream';
 import { z } from 'zod';
@@ -8,12 +11,13 @@ import { CaptureAssetStore } from '../capture/store.js';
 import { WorkItemStore } from '../workItems/store.js';
 import { bytes, captureSchema, fieldsSchema, limits, mutationSchema, stateSchema, uuid, workItemError } from '../workItems/schema.js';
 
-export function createWorkItemRoutes(context: { root: string; captures?: CaptureAssetStore; owners: WeakMap<FastifyRequest, string>; devices: DeviceRegistry;
+export function createWorkItemRoutes(context: { openHandoff?: OpenHandoffTarget; root: string; captures?: CaptureAssetStore; owners: WeakMap<FastifyRequest, string>; devices: DeviceRegistry;
   streams: Set<PassThrough>; deviceStreams: Map<string, Set<PassThrough>> }) {
   const { owners, devices, streams, deviceStreams } = context;
   let pending: Promise<WorkItemStore> | undefined;
   const captures = context.captures ?? new CaptureAssetStore(context.root);
   const store = () => pending ??= WorkItemStore.open(context.root, captures);
+  const handoffs = new HandoffService(context.root, captures, store, context.openHandoff ?? (async () => { throw workItemError('work_item_handoff_unavailable', 503); }));
   const tokens = new Map<string, { owner: string; expires: number }>();
   const guard = (request: FastifyRequest) => () => { if (!devices.has(owners.get(request) ?? '')) throw workItemError('unauthorized', 401); };
   const prune = () => { for (const [id, value] of tokens) if (value.expires <= Date.now() || !devices.has(value.owner)) tokens.delete(id); };
@@ -24,16 +28,38 @@ export function createWorkItemRoutes(context: { root: string; captures?: Capture
   }
   return {
     owner(raw: string) { return valid(raw)?.owner ?? null; },
-    revoke(owner: string) { for (const [id, value] of tokens) if (value.owner === owner) tokens.delete(id); },
-    async stop() { if (pending) await (await pending).drain(); },
+    revoke(owner: string) { handoffs.revoke(owner); for (const [id, value] of tokens) if (value.owner === owner) tokens.delete(id); },
+    cancelHandoffs() { handoffs.stop(); },
+    async stop() { handoffs.stop(); if (pending) await (await pending).drain(); },
     register(app: FastifyInstance) {
       app.register(async routes => {
         routes.setErrorHandler((error, _request, reply) => {
           if (error instanceof z.ZodError || error instanceof SyntaxError) return reply.code(400).send({ error: 'invalid_request' });
           const value = error as { statusCode?: number; message?: string };
+          if (value.message === 'work_item_handoff_text_too_long') {
+            const { limit, length, excess } = error as unknown as { limit: number; length: number; excess: number };
+            return reply.code(413).send({ error: value.message, limit, length, excess });
+          }
           if (value.statusCode === 413) return reply.code(413).send({ error: 'work_item_payload_too_large' });
           const known = value.message && /^(work_item|capture)_[a-z_]+$/.test(value.message);
           return reply.code(known || value.statusCode === 401 ? value.statusCode ?? 500 : 503).send({ error: known ? value.message : value.statusCode === 401 ? 'unauthorized' : 'work_item_store_unavailable' });
+        });
+        routes.post('/api/work-items/:uid/handoffs/preview', { bodyLimit: 8192 }, async request => {
+          const { uid } = z.object({ uid: uuid }).parse(request.params);
+          return handoffs.preview(uid, handoffRequest.parse(request.body), owners.get(request)!, guard(request));
+        });
+        routes.post('/api/work-items/:uid/handoffs', { bodyLimit: 8192 }, async (request, reply) => {
+          const { uid } = z.object({ uid: uuid }).parse(request.params);
+          const receipt = await handoffs.submit(uid, handoffSubmit.parse(request.body), owners.get(request)!, guard(request));
+          return reply.code(202).send(receipt);
+        });
+        routes.post('/api/work-items/:uid/handoffs/:id/resolve', { bodyLimit: 1024 }, async request => {
+          const { uid, id } = z.object({ uid: uuid, id: uuid }).parse(request.params);
+          return handoffs.resolve(uid, id, handoffResolve.parse(request.body).outcome, guard(request));
+        });
+        routes.get('/api/work-items/:uid/handoffs/:id', async request => {
+          const { uid, id } = z.object({ uid: uuid, id: uuid }).parse(request.params);
+          return handoffs.read(uid, id, owners.get(request)!, guard(request));
         });
         routes.get('/api/work-items', async request => {
           const query = z.object({ source: z.literal('capture').optional(), state: stateSchema.optional(), cursor: z.string().max(1024).optional(), limit: z.coerce.number().int().min(1).max(50).default(50) }).strict().parse(request.query);

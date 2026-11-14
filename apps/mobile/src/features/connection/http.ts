@@ -96,6 +96,18 @@ const desktopErrors: Record<string, string> = {
   desktop_queue_id_conflict: "这次提交的内容发生变化，请重新打开会话核对待发消息。",
   "clientMessageId reused with different content": "消息提交标识与之前请求冲突，请先核对会话记录，勿重复发送。",
 };
+const handoffErrors: Record<string, string> = {
+  work_item_handoff_target_locked: '目标会话的上次交接结果不明，请先核对并查询结果，或选择其他目标。',
+  work_item_handoff_control_unavailable: '目标会话暂不可发送或仍有未确认操作，请打开目标会话核对。',
+  work_item_handoff_preview_changed: '目标或交接内容已变化，请重新预览并确认。',
+  work_item_handoff_todo_required: '只有待处理事项可以交接，请先按现有状态规则重新打开。',
+  work_item_handoff_retry_required: '已有交接尝试，请刷新事项，以再次发送流程重新确认。',
+  work_item_handoff_capacity: '交接记录容量已满，无法新增发送；已有记录不会被删除。',
+  work_item_handoff_id_conflict: '交接标识与之前的请求冲突，请查询已有结果。',
+  work_item_handoff_not_unknown: '这次交接已经有确定结果，请刷新后查看。',
+  work_item_revision_conflict: '事项已变化，请保存并重新预览。',
+  work_item_asset_unavailable: '附件已损坏或不可用，尚未发送，请检查电脑上的原文件。',
+};
 const voiceErrors: Record<string, string> = {
   voice_qwen_key_required: "请在设置 → 语音与提示词配置百炼 API Key。",
   voice_deepseek_key_required: "请配置 DeepSeek API Key；也可以先采用识别原文。",
@@ -134,6 +146,13 @@ export function ensureHttpOk(status: number, data?: unknown) {
   let body: unknown = data;
   try { if (typeof data === "string" && data.length <= 16_384) body = JSON.parse(data); } catch { body = undefined; }
   const reason = body && typeof body === "object" && "error" in body ? body.error : undefined;
+  if (status === 413 && reason === 'work_item_handoff_text_too_long' && body && typeof body === 'object' && 'excess' in body && 'limit' in body
+    && Number.isSafeInteger(body.excess) && Number(body.excess) > 0 && body.limit === 20000) {
+    throw Object.assign(new Error(`交接文本超出 ${body.excess} 字（按通道字符单位计，上限 20000）；请删减标题或说明后重新预览。原文不会被截断。`), { status, code: reason });
+  }
+  if (typeof reason === 'string' && Object.hasOwn(handoffErrors, reason)) {
+    throw Object.assign(new Error(handoffErrors[reason]), { status, code: reason });
+  }
   const voiceCode = typeof reason === "string" && Object.hasOwn(voiceErrors, reason) ? reason : undefined;
   const code = voiceCode ?? (status === 409 && typeof reason === "string" && Object.hasOwn(desktopErrors, reason) ? reason : undefined);
   const detail = voiceCode ? voiceErrors[voiceCode] : code ? desktopErrors[code] : status === 409 ? "会话或提交状态发生冲突，请刷新会话并核对消息记录。" : undefined;

@@ -1,3 +1,4 @@
+import type { HandoffTarget } from "../../../../../shared/handoff";
 import { SystemNotice } from "../../shared/SystemNotice";
 import { useDeviceRevoked } from "../connection/useDeviceRevoked";
 import { deviceRevokedMessage } from "../connection/authorization";
@@ -37,7 +38,7 @@ const friendlyError = (error: unknown) => {
     : status === 409 ? "会话状态已变化，请等待重新同步后再操作。" : "无法连接 Agent，请确认电脑上的网关与 Agent 服务正在运行。";
 };
 
-export default function AgentWorkspace({ onCapture, endpoint, token, scope, onBack, voiceRecovery }: { onCapture: () => void; endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
+export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCapture, endpoint, token, scope, onBack, voiceRecovery }: { handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
   const deviceRevoked = useDeviceRevoked(endpoint, token);
   const restoreView = useRef(isKelivoHost ? loadAgentView(scope) : null);
   const [agents, setAgents] = useState<Agent[]>([]), [agent, setAgent] = useState<Agent | null>(null);
@@ -107,6 +108,14 @@ export default function AgentWorkspace({ onCapture, endpoint, token, scope, onBa
     document.addEventListener("visibilitychange", refresh);
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
   }, [agent?.id, selected?.id, loading, range, query, cursor, sessions.length, endpoint, token, deviceRevoked]);
+  useEffect(() => {
+    if (!handoffTarget || handoffTarget.agentId === 'codex') return;
+    const target = agents.find(a => a.id === handoffTarget.agentId);
+    if (!target) return;
+    restoreView.current = null;
+    setAgent(target); setSelected({ id: handoffTarget.sessionId, title: handoffTarget.title, directory: handoffTarget.cwd, updatedAt: new Date().toISOString() });
+    onTargetOpened();
+  }, [handoffTarget, agents, onTargetOpened]);
   function back() {
     if (!window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) return;
     if (isKelivoHost) saveAgentView(scope, selected ? agent?.id ?? null : null, null);

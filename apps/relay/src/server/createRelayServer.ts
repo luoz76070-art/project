@@ -1,5 +1,6 @@
 import { CaptureAssetStore } from '../capture/store.js';
 import path from "node:path";
+import { openHandoffTarget } from "./handoffChannels.js";
 import { createWorkItemRoutes } from "./workItemRoutes.js";
 import { DeviceRegistry } from "./devices.js";
 import type { FastifyRequest } from "fastify";
@@ -72,10 +73,10 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const readImage = createProjectImageReader();
   const agentSessionRoutes = createAgentSessionRoutes({ gateway: agentGateway, owners, devices, streams, deviceStreams, submissions, readImage });
   const captures = new CaptureAssetStore(config.defaultCwd);
-  const workItemRoutes = createWorkItemRoutes({ root: config.defaultCwd, captures, owners, devices, streams, deviceStreams });
+  const workItemRoutes = createWorkItemRoutes({ root: config.defaultCwd, captures, owners, devices, streams, deviceStreams, openHandoff: openHandoffTarget({ gateway: agentGateway, desktop: desktopControl, codex: store }) });
   // A route may still await its upstream's first frame before reply.send(stream).
   // Cancel adapters before HTTP drain, otherwise onClose cannot release that wait.
-  app.addHook("preClose", async () => { voice.stop(); for (const stream of streams) stream.destroy(); await Promise.all([agentGateway.stop(), desktopControl.messageQueue?.stop()]); });
+  app.addHook("preClose", async () => { voice.stop(); workItemRoutes.cancelHandoffs(); for (const stream of streams) stream.destroy(); await Promise.all([agentGateway.stop(), desktopControl.messageQueue?.stop()]); });
   app.addHook("onClose", async () => { store.close(); await Promise.all([desktopControl.stop(), liveTurns.stop(), live.stop?.(), workItemRoutes.stop(), captures.drain()]); });
 
   await app.register(cors, {

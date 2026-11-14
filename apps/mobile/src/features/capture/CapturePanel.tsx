@@ -1,3 +1,5 @@
+import { ItemHandoff } from '../handoff/ItemHandoff';
+import type { HandoffTarget } from '../../../../../shared/handoff';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { WorkItem } from '../../../../../shared/workItem';
@@ -9,8 +11,8 @@ import { captureApi, canvasPreview, captureTransaction, type CaptureList, type C
 import { useCaptureVoice } from './useCaptureVoice';
 import './capture.css';
 
-type Props = { endpoint: string; token: string; scope: string; open: boolean; onClose: () => void };
-export function CapturePanel({ endpoint, token, scope, open, onClose }: Props) {
+type Props = { onOpenTarget: (target: HandoffTarget) => void; endpoint: string; token: string; scope: string; open: boolean; onClose: () => void };
+export function CapturePanel({ endpoint, token, scope, open, onClose, onOpenTarget }: Props) {
   const [online, setOnline] = useState(() => navigator.onLine);
   const [draftId, setDraftId] = useState(() => crypto.randomUUID());
   const currentDraft = useRef({ draftId, detail: '', writable: false });
@@ -124,15 +126,18 @@ export function CapturePanel({ endpoint, token, scope, open, onClose }: Props) {
       {images.map(image => <figure key={image.id}><img src={image.src} alt={image.label} /><figcaption>{image.label}</figcaption></figure>)}
       {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
       {tx.current && !tx.current.confirmed && <p>当前保存内容已固定，请重试同一事项；关闭应用后未确认内容无法恢复。</p>}
+      {item && <ItemHandoff key={item.uid} item={item} send={api.request} disabled={controlsDisabled || locked || title !== item.title || detail !== item.detail} onItem={setItem} onOpenTarget={onOpenTarget} />}
+      {item && (title !== item.title || detail !== item.detail) && <p>交接前请先保存修改。</p>}
       <div className="handoff-actions">
         <button disabled={busy} onClick={() => onClose()}>关闭</button>
         <button disabled={controlsDisabled || pending.current?.kind === 'delete'} className="primary-button" onClick={() => void run(save)}>{busy ? '处理中…' : tx.current ? '重试保存并核对' : item ? '保存修改' : '保存事项'}</button>
-        {item?.state === 'todo' && item.currentAttempt.delivery === 'none' && <button disabled={controlsDisabled || pending.current?.kind === 'edit'} onClick={() => { if (pending.current?.kind === 'delete' || window.confirm('删除这张尚未派发的捕获卡？')) void run(remove); }}>删除事项</button>}
+        {item?.everDispatched && <button disabled>已交给 Agent，删除会让对方读不到图片</button>}
+        {item?.capture && !item.everDispatched && item.state === 'todo' && item.currentAttempt.delivery === 'none' && <button disabled={controlsDisabled || pending.current?.kind === 'edit'} onClick={() => { if (pending.current?.kind === 'delete' || window.confirm('删除这张尚未派发的捕获卡？')) void run(remove); }}>删除事项</button>}
         {!tx.current && <button disabled={busy || Boolean(pending.current)} onClick={reset}>新建另一张</button>}
         {tx.current && !tx.current.posted && <button disabled={busy} onClick={() => { tx.current = null; setError(''); }}>返回编辑</button>}
         {pending.current && item && <button disabled={controlsDisabled} onClick={() => void run(async () => { const value = await api.get(item.uid); pending.current = null; setItem(value.item); setNotice('已刷新版本；你的标题和说明仍保留，请核对后再保存'); })}>刷新版本并核对</button>}
       </div>
-      <details onToggle={event => { if (event.currentTarget.open && !list && !working.current && connected) void run(() => refresh()); }}><summary>已保存的捕获卡</summary><button disabled={controlsDisabled || locked} onClick={() => void run(() => refresh())}>刷新</button>
+      <details onToggle={event => { if (event.currentTarget.open && !list && !working.current && connected) void run(() => refresh()); }}><summary>已有事项</summary><button disabled={controlsDisabled || locked} onClick={() => void run(() => refresh())}>刷新</button>
         <ul>{list?.items.map(saved => <li key={saved.uid}><button disabled={controlsDisabled || locked} onClick={() => void run(async () => show((await api.get(saved.uid)).item))}>{saved.title}</button></li>)}</ul>
         {list?.nextCursor && <button disabled={controlsDisabled || locked} onClick={() => void run(() => refresh(true))}>加载更多</button>}</details>
     </section></div>, document.body)}

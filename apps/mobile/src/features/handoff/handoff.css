@@ -1,0 +1,5 @@
+.item-handoff { border-top: 1px solid var(--border); margin-block: 12px; padding-block: 12px; color: var(--text); }
+.item-handoff select { width: 100%; min-height: 44px; min-width: 0; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-8); font: inherit; }
+.item-handoff button { min-height: 44px; margin: 4px; }
+.item-handoff .handoff-preview { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 45vh; overflow-y: auto; }
+.handoff-signal { color: var(--signal); }

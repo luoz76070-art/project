@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import type { HandoffRecord, HandoffStatus, HandoffTarget } from '../../../../shared/handoff.js';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -17,7 +18,10 @@ const entrySchema = z.object({ deleted: deletionSchema.optional(), everDispatche
 const snapshotSchema = z.object({ schemaVersion: z.literal(1), storeId: uuid, storeRevision: z.number().int().safe().nonnegative(),
   entries: z.array(entrySchema).max(limits.items), imports: z.array(z.object({ legacyId: uuid, uid: uuid, fingerprint: hashSchema }).strict()).max(limits.items),
 }).strict().superRefine((data, ctx) => {
-  if (new Set(data.entries.map(e => e.item.uid)).size !== data.entries.length || new Set(data.imports.map(e => e.legacyId)).size !== data.imports.length
+  const handoffs = data.entries.flatMap(e => e.item.handoffs ?? []);
+  if (new Set(handoffs.map(h => h.handoffId)).size !== handoffs.length
+    || data.entries.some(e => e.item.handoffs?.some((h, i) => h.sendNumber !== i + 1 || h.retryOf !== (e.item.handoffs?.[i - 1]?.handoffId ?? null)) || (e.item.handoffs?.length && !e.everDispatched))
+    || new Set(data.entries.map(e => e.item.uid)).size !== data.entries.length || new Set(data.imports.map(e => e.legacyId)).size !== data.imports.length
     || new Set(data.imports.map(e => e.uid)).size !== data.imports.length
     || data.imports.some(e => !data.entries.some(x => x.item.uid === e.uid && x.item.source.legacyId === e.legacyId && x.item.source.importFingerprint === e.fingerprint))
     || data.entries.some(e => (e.item.source.kind === 'legacy-handoff' && !data.imports.some(i => i.uid === e.item.uid))
@@ -48,6 +52,10 @@ export class WorkItemStore {
       const raw = await fs.readFile(store.file, 'utf8');
       if (Buffer.byteLength(raw) > limits.storeBytes) throw new Error('oversized');
       store.data = snapshotSchema.parse(JSON.parse(raw));
+      // A process restart must never replay an interrupted dispatch.
+      for (const entry of store.data.entries) for (const record of entry.item.handoffs ?? []) {
+        if (record.status === 'sending' || record.status === 'submitted') { record.status = 'unknown'; record.reason = 'relay_restarted'; }
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         try {
@@ -68,7 +76,7 @@ export class WorkItemStore {
     if (entry?.deleted) throw workItemError('work_item_deleted', 410);
     const item = entry?.item;
     if (!item) throw workItemError('work_item_not_found', 404);
-    return { item: clone(item), ...this.info() };
+    return { item: { ...clone(item), everDispatched: Boolean(entry?.everDispatched) }, ...this.info() };
   }
   list(state?: WorkItemState, cursor?: string, limit = 50, captureOnly = false) {
     const data = this.snapshot();
@@ -132,6 +140,51 @@ export class WorkItemStore {
       entry.deleted = { at: new Date().toISOString(), mutationId: mutation.mutationId, fingerprint: signature, revision: item.revision + 1 };
       await this.commit(next, [uid], guard);
       return { uid, deleted: true as const, revision: entry.deleted.revision, ...this.info() };
+    });
+  }
+  findHandoff(id: string) {
+    for (const entry of this.snapshot().entries) {
+      const record = entry.item.handoffs?.find(h => h.handoffId === id);
+      if (record) return { uid: entry.item.uid, record: clone(record) };
+    }
+    return null;
+  }
+  handoffBlocked(target: Pick<HandoffTarget, 'agentId' | 'sessionId'>) {
+    return this.snapshot().entries.some(e => e.item.handoffs?.some(h => h.target.agentId === target.agentId && h.target.sessionId === target.sessionId
+      && ['sending', 'submitted', 'unknown'].includes(h.status)));
+  }
+  reserveHandoff(uid: string, revision: number, record: HandoffRecord, guard: Guard) {
+    return this.serialize(async () => {
+      guard(); const previous = this.findHandoff(record.handoffId);
+      if (previous) {
+        if (previous.uid !== uid || previous.record.requestHash !== record.requestHash) throw workItemError('work_item_handoff_id_conflict');
+        return false;
+      }
+      const next = clone(this.snapshot()), entry = next.entries.find(e => e.item.uid === uid);
+      if (!entry) throw workItemError('work_item_not_found', 404);
+      if (entry.deleted) throw workItemError('work_item_deleted', 410);
+      const item = entry.item, records = item.handoffs ?? [];
+      if (item.revision !== revision) throw workItemError('work_item_revision_conflict');
+      if (item.state !== 'todo' || item.currentAttempt.attemptId !== record.attemptId) throw workItemError('work_item_handoff_todo_required');
+      if (this.handoffBlocked(record.target)) throw workItemError('work_item_handoff_target_locked');
+      if (records.length >= 32) throw workItemError('work_item_handoff_capacity', 507);
+      if ((records.at(-1)?.handoffId ?? null) !== record.retryOf || record.sendNumber !== records.length + 1) throw workItemError('work_item_handoff_retry_required');
+      entry.everDispatched = true;
+      entry.item = { ...item, handoffs: [...records, record], revision: item.revision + 1, updatedAt: record.createdAt };
+      if (Buffer.byteLength(JSON.stringify(entry.item)) > limits.itemBytes) throw workItemError('work_item_handoff_capacity', 507);
+      await this.commit(next, [uid], guard); return true;
+    });
+  }
+  settleHandoff(uid: string, id: string, status: HandoffStatus, reason: string | null, guard: Guard, expected?: HandoffStatus) {
+    return this.serialize(async () => {
+      guard(); const next = clone(this.snapshot()), entry = next.entries.find(e => e.item.uid === uid);
+      const record = entry?.item.handoffs?.find(h => h.handoffId === id);
+      if (!entry || !record || entry.deleted) throw workItemError('work_item_handoff_not_found', 404);
+      if (expected && record.status !== expected) throw workItemError('work_item_handoff_not_unknown');
+      if (record.status === 'delivered' || record.status === 'rejected' || record.status === status || (record.status === 'queued' && status === 'submitted')) return;
+      record.status = status; record.reason = reason; record.updatedAt = new Date().toISOString();
+      entry.item.revision++; entry.item.updatedAt = record.updatedAt;
+      await this.commit(next, [uid], guard);
     });
   }
   action(uid: string, action: UserAction, reason: string | null, mutation: Mutation, owner: string, guard: Guard) {

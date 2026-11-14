@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { handoffRecord } from './handoffSchema.js';
 import { captureAssetSchema } from '../capture/store.js';
 
 export const limits = { title: 200, detail: 64 * 1024, message: 96 * 1024, assets: 16, assetBytes: 25 * 1024 * 1024,
@@ -27,7 +28,7 @@ export const fieldsSchema = z.object({ kind: kindSchema, title: titleSchema, det
 export const itemSchema = fieldsSchema.extend({ schemaVersion: z.literal(1), uid: uuid, revision: z.number().int().safe().positive(), state: stateSchema,
   createdAt: timestamp, updatedAt: timestamp, createdByDeviceId: bytes(128).min(1),
   source: z.object({ kind: z.enum(['manual', 'legacy-handoff', 'capture']), legacyId: uuid.optional(), importFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional(), captureSessionId: uuid.optional() }).strict(),
-  capture: captureSchema.optional(), currentAttempt: attemptSchema, lastTransition: z.object({ from: stateSchema, to: stateSchema, actor: z.enum(['user', 'system', 'agent']), at: timestamp, reason: bytes(1024).nullable() }).strict().nullable(),
+  handoffs: z.array(handoffRecord).max(32).optional(), capture: captureSchema.optional(), currentAttempt: attemptSchema, lastTransition: z.object({ from: stateSchema, to: stateSchema, actor: z.enum(['user', 'system', 'agent']), at: timestamp, reason: bytes(1024).nullable() }).strict().nullable(),
 }).strict().refine(value => Buffer.byteLength(JSON.stringify(value)) <= limits.itemBytes, 'item_too_large').superRefine((value, ctx) => {
   const legacy = value.source.kind === 'legacy-handoff';
   if ((value.source.kind === 'capture') !== Boolean(value.capture) || (value.capture && value.capture.id !== value.source.captureSessionId)) ctx.addIssue({ code: 'custom', message: 'capture_identity_invalid' });

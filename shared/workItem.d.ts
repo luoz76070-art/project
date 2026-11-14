@@ -1,5 +1,6 @@
 import type { CaptureAsset, CaptureSession } from './capture.js';
 import type { LastTurn } from './lastTurn.js';
+import type { HandoffRecord } from './handoff.js';
 
 export type WorkItemState = 'todo' | 'in_progress' | 'to_verify' | 'done' | 'returned';
 export type WorkItemKind = 'issue' | 'idea' | 'note' | 'task';
@@ -19,6 +20,9 @@ export type WorkItem = {
   state: WorkItemState; createdAt: string; updatedAt: string; createdByDeviceId: string;
   source: { kind: 'manual' | 'legacy-handoff' | 'capture'; legacyId?: string; importFingerprint?: string; captureSessionId?: string };
   capture?: CaptureSession;
+  handoffs?: HandoffRecord[];
+  /** Read-only projection of the store's durable deletion barrier. */
+  everDispatched?: boolean;
   assets: WorkItemAsset[]; codeRefs: string[]; currentAttempt: WorkItemAttempt;
   lastTransition: { from: WorkItemState; to: WorkItemState; actor: 'user' | 'system' | 'agent'; at: string; reason: string | null } | null;
 };

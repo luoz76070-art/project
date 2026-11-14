@@ -22,7 +22,7 @@
     "typecheck": "pnpm --filter @mobile-codex/relay typecheck && pnpm --filter @mobile-codex/mobile typecheck",
     "test:transport": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/transport.test.mjs",
     "test:correctness": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/correctness.test.mjs",
-    "test:mobile": "node --test scripts/test-mobile-connection.mjs scripts/test-mobile-profiles.mjs scripts/test-mobile-voice.mjs scripts/test-mobile-input-transitions.mjs scripts/test-mobile-reliability.mjs scripts/test-mobile-diagnostics.mjs scripts/test-mobile-product.mjs scripts/test-mobile-handoff.mjs scripts/test-mobile-handoff-migration.mjs scripts/test-mobile-rendering.mjs scripts/test-mobile-design-tokens.mjs scripts/test-mobile-capture.mjs",
+    "test:mobile": "node --test scripts/test-mobile-connection.mjs scripts/test-mobile-profiles.mjs scripts/test-mobile-voice.mjs scripts/test-mobile-input-transitions.mjs scripts/test-mobile-reliability.mjs scripts/test-mobile-diagnostics.mjs scripts/test-mobile-product.mjs scripts/test-mobile-handoff.mjs scripts/test-mobile-handoff-migration.mjs scripts/test-mobile-rendering.mjs scripts/test-mobile-design-tokens.mjs scripts/test-mobile-capture.mjs scripts/test-mobile-work-item-handoff.mjs",
     "test:voice": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/voice.test.mjs scripts/test-mobile-voice.mjs",
     "test:hot-update": "node scripts/test-hot-update-paths.mjs && node --test scripts/test-hot-bundle.mjs",
     "test:apk-update": "node --test scripts/test-apk-update.mjs",

@@ -2,6 +2,7 @@ import { SystemNotice } from "../shared/SystemNotice";
 import { ThreadRow } from "../features/threads/ThreadRow";
 import { SidebarScrim } from "../features/threads/SidebarScrim";
 import { DisclosureSummary } from "../shared/DisclosureSummary";
+import type { HandoffTarget } from '../../../../shared/handoff';
 import { CapturePanel } from '../features/capture/CapturePanel';
 import { migrateHandoff } from '../features/product/handoffMigration';
 import { HandoffMigrationNotice } from '../features/product/HandoffMigrationNotice';
@@ -68,6 +69,8 @@ export function App() {
     return profiles.find((profile) => profile.id === defaultProfileId) ?? profiles[0];
   });
   const scope = `${connection.id}:${connection.cacheNamespace ?? connection.updatedAt}:${normalizeEndpoint(connection.endpoint)}`;
+  const [handoffTarget, setHandoffTarget] = useState<HandoffTarget | null>(null);
+  const targetOpened = useCallback(() => setHandoffTarget(null), []);
   const [captureOpen, setCaptureOpen] = useState(false);
   const recoveredVoice = useVoiceRecovery(scope, normalizeEndpoint(connection.endpoint), connection.token);
   const [agentMode, setAgentMode] = useState(() => { try { return isKelivoHost && localStorage.getItem("productRemoteMode") === "agent"; } catch { return false; } });
@@ -84,9 +87,12 @@ export function App() {
     setAgentMode(false);
     try { localStorage.setItem("productRemoteMode", "codex"); } catch { /* The current settings page is still usable. */ }
   }, []);
-  return <ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff}><CapturePanel open={captureOpen} onClose={() => setCaptureOpen(false)} key={`capture:${scope}:${connection.token}`} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} />{agentMode
-    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace onCapture={() => setCaptureOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => selectAgentMode(false)} /></React.Suspense>
-    : <Workspace onCapture={() => setCaptureOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}
+  function openHandoffTarget(target: HandoffTarget) {
+    setCaptureOpen(false); setHandoffTarget(target); selectAgentMode(target.agentId !== 'codex');
+  }
+  return <ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff}><CapturePanel onOpenTarget={openHandoffTarget} open={captureOpen} onClose={() => setCaptureOpen(false)} key={`capture:${scope}:${connection.token}`} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} />{agentMode
+    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setCaptureOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => selectAgentMode(false)} /></React.Suspense>
+    : <Workspace handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setCaptureOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}
     {recoveredVoice.notice && createPortal(<div className="voice-scrim"><section className="voice-sheet" role="dialog" aria-modal="true" aria-label="语音结果已取回">
         <header><strong>语音结果已取回</strong></header>
         <p>{recoveredVoice.notice.message}</p>
@@ -95,7 +101,7 @@ export function App() {
       </section></div>, document.body)}</ProductRemoteShell>;
 }
 
-function Workspace({ onCapture, voiceRecovery, connection, scope, onApply, onOpenAgents, handoff, onHandoff }: { onCapture: () => void; voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
+function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, connection, scope, onApply, onOpenAgents, handoff, onHandoff }: { handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
   const scopeAbortRef = useRef(new AbortController());
   const diagnosticJournalRef = useRef(createConnectionJournal());
   const diagnosticEpochRef = useRef(0);
@@ -431,6 +437,12 @@ function Workspace({ onCapture, voiceRecovery, connection, scope, onApply, onOpe
       setDiagnosticText(makeDiagnosticText(startedAt, endpoint, steps));
     }
   }
+
+  useEffect(() => {
+    if (handoffTarget?.agentId !== 'codex') return;
+    const target = handoffTarget; onTargetOpened();
+    void openThread({ id: target.sessionId, threadName: target.title, cwd: target.cwd, updatedAt: new Date().toISOString(), source: 'vscode', originator: 'desktop' });
+  }, [handoffTarget, onTargetOpened]);
 
   async function openThread(thread: ThreadSummary, options: { closeSidebar?: boolean } = {}) {
     setSelected(thread);
