@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { HandoffRequest, HandoffStatus, HandoffTarget } from '../../../../shared/handoff.js';
+import type { LastTurn } from '../../../../shared/lastTurn.js';
 import type { AgentGateway } from '../agents/agentGateway.js';
 import type { AgentSessionSnapshot } from '../agents/sessions.js';
 import type { DesktopControl, DesktopStreamSnapshot } from '../desktop/desktopControl.js';
@@ -10,9 +11,12 @@ export type HandoffConnection = {
   writable(): boolean;
   evidence(id: string): HandoffStatus | null;
   send(text: string, id: string, owner: string): Promise<HandoffStatus>;
+  /** Native turn that consumed this clientMessageId, or null when the channel cannot say so exactly (W4b). */
+  turnFor(id: string): string | null;
+  lastTurn(): LastTurn | null;
   close(): void;
 };
-export type OpenHandoffTarget = (target: HandoffRequest['target'], signal: AbortSignal) => Promise<HandoffConnection>;
+export type OpenHandoffTarget = (target: HandoffRequest['target'], signal: AbortSignal, onChange?: () => void) => Promise<HandoffConnection>;
 export function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   signal.throwIfAborted();
   return new Promise((resolve, reject) => {
@@ -27,7 +31,7 @@ function directory(cwd: string | null | undefined) {
 }
 /** Scoped subscriptions borrow the existing authoritative controls; no new session or input fallback. */
 export function openHandoffTarget(deps: { gateway: AgentGateway; desktop: DesktopControl; codex: CodexStore }): OpenHandoffTarget {
-  return async (key, signal) => {
+  return async (key, signal, onChange) => {
     let closed = false, release: (() => void) | undefined, unfollow: (() => void) | undefined;
     const close = () => { closed = true; release?.(); unfollow?.(); signal.removeEventListener('abort', close); };
     signal.throwIfAborted(); signal.addEventListener('abort', close, { once: true });
@@ -38,7 +42,7 @@ export function openHandoffTarget(deps: { gateway: AgentGateway; desktop: Deskto
         const thread = await abortable(deps.codex.getThreadSummary(key.sessionId), signal);
         if (!thread || !(thread.source === 'vscode' || thread.originator?.toLowerCase().includes('desktop'))) throw workItemError('work_item_handoff_target_invalid', 404);
         let snapshot: DesktopStreamSnapshot | null = null;
-        release = deps.desktop.onStreamSnapshot(value => { if (value.threadId === key.sessionId && !closed) { snapshot = value; if (value.control?.token) ready(); } });
+        release = deps.desktop.onStreamSnapshot(value => { if (value.threadId === key.sessionId && !closed) { snapshot = value; if (value.control?.token) ready(); onChange?.(); } });
         unfollow = deps.desktop.followThread(key.sessionId, { allowLoad: true });
         snapshot = deps.desktop.getStreamSnapshot(key.sessionId);
         if (!snapshot?.control?.token) await abortable(first, signal);
@@ -53,7 +57,9 @@ export function openHandoffTarget(deps: { gateway: AgentGateway; desktop: Deskto
           if (snapshot?.messages.some(m => m.role === 'user' && m.clientMessageId === id)) return 'delivered';
           return receipt?.clientMessageId === id && receipt.delivery === 'uncertain' ? 'unknown' : null;
         };
-        return { target: () => ({ ...key, title: thread.threadName ?? key.sessionId, cwd: directory(thread.cwd) }), writable, evidence, close,
+        const turnFor = (id: string) => snapshot?.messages.find(m => m.role === 'user' && m.clientMessageId === id)?.turnId
+          ?? snapshot?.inputReplacements?.find(r => r.clientMessageId === id)?.turnId ?? null;
+        return { target: () => ({ ...key, title: thread.threadName ?? key.sessionId, cwd: directory(thread.cwd) }), writable, evidence, close, turnFor, lastTurn: () => snapshot?.lastTurn ?? null,
           async send(text, id, owner) {
             if (!writable()) throw workItemError('work_item_handoff_control_unavailable');
             const c = control()!, mode = c.activeTurnId ? 'queue' : 'start';
@@ -70,6 +76,7 @@ export function openHandoffTarget(deps: { gateway: AgentGateway; desktop: Deskto
           snapshot = value;
           // Claude first publishes an unsubscribed view, then the host's requested snapshot.
           if (value.connected && value.control && (value.control.canSend || value.submission || value.operationError)) ready();
+          onChange?.();
         }
       }, close).then(stop => { release = stop; if (closed) stop(); });
       await abortable(watching, signal); await abortable(first, signal);
@@ -83,7 +90,9 @@ export function openHandoffTarget(deps: { gateway: AgentGateway; desktop: Deskto
         if (view.submission?.clientMessageId !== id || view.submission.action !== 'message') return null;
         return view.submission.delivery === 'confirmed' ? 'delivered' : view.submission.delivery === 'uncertain' ? 'unknown' : null;
       };
+      // Agent snapshots carry no clientMessageId on messages and their turn IDs differ per host, so no exact binding yet (W4b).
       return { target: () => ({ ...key, title: current()!.session.title, cwd: directory(current()?.session.directory) }), writable, evidence, close,
+        turnFor: () => null, lastTurn: () => current()?.lastTurn ?? null,
         async send(text, id) {
           if (!writable()) throw workItemError('work_item_handoff_control_unavailable');
           const result = await abortable(adapter.sendMessage(key.sessionId, { text, clientMessageId: id, controlToken: current()!.control!.token, delivery: 'queue' }), signal);

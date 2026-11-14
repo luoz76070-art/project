@@ -27,7 +27,14 @@ export function verifyItem(item: WorkItem, decision: 'accept' | 'return', at: st
   if (item.state !== 'to_verify' || !['accept', 'return'].includes(decision)) throw workItemError('work_item_transition_invalid');
   return move(item, decision === 'accept' ? 'done' : 'returned', 'user', at, reason);
 }
-/** Reserved for W3: no dispatcher calls this in W1. */
+/** W4: attach the native turn that consumed the delivered message. Binds once; never rebinds or moves state. */
+export function bindTurn(item: WorkItem, attemptId: string, clientMessageId: string, turnId: string): WorkItem {
+  const current = item.currentAttempt;
+  if (item.state !== 'in_progress' || current.attemptId !== attemptId || current.clientMessageId !== clientMessageId || current.turnId
+    || !turnId || turnId.length > 512) return item;
+  return { ...item, currentAttempt: { ...current, turnId } };
+}
+/** Called by W4 progress tracking when a W3 handoff is delivered. */
 export function recordDelivery(item: WorkItem, binding: WorkItemAttempt, at: string, actor: 'system' | 'agent'): WorkItem {
   if (!['system', 'agent'].includes(actor)) throw workItemError('work_item_actor_invalid');
   const attempt = attemptSchema.parse(binding);
@@ -35,7 +42,7 @@ export function recordDelivery(item: WorkItem, binding: WorkItemAttempt, at: str
     || (attempt.channel === 'agent' && !attempt.agentId) || attempt.delivery !== 'delivered' || attempt.lastTurn !== null) throw workItemError('work_item_binding_invalid');
   return { ...move(item, 'in_progress', actor, at, null), currentAttempt: attempt };
 }
-/** Reserved for W4. Unknown, stale and repeated evidence cannot undo a user's decision. */
+/** W4 progress tracking. Unknown, stale and repeated evidence cannot undo a user's decision. */
 export function applyTurnResult(item: WorkItem, binding: InternalBinding, result: LastTurn | null | undefined, at: string, actor: 'system' | 'agent'): WorkItem {
   if (!['system', 'agent'].includes(actor)) throw workItemError('work_item_actor_invalid');
   const parsed = lastTurnSchema.safeParse(result), current = item.currentAttempt;

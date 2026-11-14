@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { HandoffService } from '../workItems/handoffService.js';
+import { WorkItemProgress } from '../workItems/progress.js';
 import { handoffRequest, handoffResolve, handoffSubmit } from '../workItems/handoffSchema.js';
 import type { OpenHandoffTarget } from './handoffChannels.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -16,8 +19,12 @@ export function createWorkItemRoutes(context: { openHandoff?: OpenHandoffTarget;
   const { owners, devices, streams, deviceStreams } = context;
   let pending: Promise<WorkItemStore> | undefined;
   const captures = context.captures ?? new CaptureAssetStore(context.root);
-  const store = () => pending ??= WorkItemStore.open(context.root, captures);
-  const handoffs = new HandoffService(context.root, captures, store, context.openHandoff ?? (async () => { throw workItemError('work_item_handoff_unavailable', 503); }));
+  const openHandoff = context.openHandoff ?? (async () => { throw workItemError('work_item_handoff_unavailable', 503); });
+  const progress = new WorkItemProgress(openHandoff);
+  const store = () => pending ??= WorkItemStore.open(context.root, captures).then(opened => { progress.attach(opened); return opened; });
+  // Resume progress tracking after a relay restart, without creating a store for workspaces that never used work items.
+  if (context.openHandoff) void fs.access(path.join(context.root, '.mobile-codex', 'work-items.json')).then(() => store()).catch(() => {});
+  const handoffs = new HandoffService(context.root, captures, store, openHandoff);
   const tokens = new Map<string, { owner: string; expires: number }>();
   const guard = (request: FastifyRequest) => () => { if (!devices.has(owners.get(request) ?? '')) throw workItemError('unauthorized', 401); };
   const prune = () => { for (const [id, value] of tokens) if (value.expires <= Date.now() || !devices.has(value.owner)) tokens.delete(id); };
@@ -29,8 +36,8 @@ export function createWorkItemRoutes(context: { openHandoff?: OpenHandoffTarget;
   return {
     owner(raw: string) { return valid(raw)?.owner ?? null; },
     revoke(owner: string) { handoffs.revoke(owner); for (const [id, value] of tokens) if (value.owner === owner) tokens.delete(id); },
-    cancelHandoffs() { handoffs.stop(); },
-    async stop() { handoffs.stop(); if (pending) await (await pending).drain(); },
+    cancelHandoffs() { handoffs.stop(); progress.stop(); },
+    async stop() { handoffs.stop(); progress.stop(); if (pending) await (await pending).drain().catch(() => {}); },
     register(app: FastifyInstance) {
       app.register(async routes => {
         routes.setErrorHandler((error, _request, reply) => {

@@ -142,6 +142,19 @@ export class WorkItemStore {
       return { uid, deleted: true as const, revision: entry.deleted.revision, ...this.info() };
     });
   }
+  uids() { return this.snapshot().entries.filter(e => !e.deleted).map(e => e.item.uid); }
+  /** System progress write-back (W4). run must go through the W1 state machine; returning the same item is a no-op. */
+  progress(uid: string, run: (item: WorkItem) => WorkItem) {
+    return this.serialize(async () => {
+      const next = clone(this.snapshot()), entry = next.entries.find(e => e.item.uid === uid);
+      if (!entry || entry.deleted) return null;
+      const updated = run(entry.item);
+      if (updated === entry.item) return null;
+      entry.everDispatched = true;
+      entry.item = { ...updated, revision: entry.item.revision + 1, updatedAt: new Date().toISOString() };
+      await this.commit(next, [uid], () => {}); return clone(entry.item);
+    });
+  }
   findHandoff(id: string) {
     for (const entry of this.snapshot().entries) {
       const record = entry.item.handoffs?.find(h => h.handoffId === id);

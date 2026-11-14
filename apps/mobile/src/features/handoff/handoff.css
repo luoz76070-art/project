@@ -3,3 +3,4 @@
 .item-handoff button { min-height: 44px; margin: 4px; }
 .item-handoff .handoff-preview { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 45vh; overflow-y: auto; }
 .handoff-signal { color: var(--signal); }
+.item-state-note { color: var(--muted, var(--text)); font-size: var(--font-size-12, 12px); margin: 4px 0; }

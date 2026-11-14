@@ -1,4 +1,5 @@
 import { ItemHandoff } from '../handoff/ItemHandoff';
+import { ItemStateActions } from '../handoff/ItemStateActions';
 import type { HandoffTarget } from '../../../../../shared/handoff';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -119,6 +120,7 @@ export function CapturePanel({ endpoint, token, scope, open, onClose, onOpenTarg
         <ul>{files.map((file,index) => <li key={index}>{file.name} <button disabled={locked} onClick={() => setFiles(current => current.filter((_,i) => i !== index))}>移除</button></li>)}</ul>
       </>}
       {item && <><p>状态：{{ todo: '待处理', in_progress: '进行中', to_verify: '待验证', done: '完成', returned: '退回' }[item.state]}</p>
+        <ItemStateActions item={item} send={api.request} disabled={controlsDisabled || locked} onItem={setItem} />
         <button disabled={controlsDisabled} onClick={() => void run(evidence)}>查看图片预览</button>
         <ul>{item.assets.map(a => <li key={a.id}><button disabled={controlsDisabled} onClick={() => void run(async () => {
           const value = await api.image(a.id); setImages([{ id: a.id, src: `data:${value.asset.mimeType};base64,${value.dataBase64}`, label: `${a.fileName}（原图，方向 ${value.asset.orientation}）` }]);

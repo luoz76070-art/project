@@ -8,7 +8,7 @@ import ts from 'typescript';
 const dir=await fs.mkdtemp(path.join(os.tmpdir(),'work-item-handoff-'));
 test.after(()=>fs.rm(dir,{recursive:true,force:true}));
 await build({stdin:{contents:`export * from './apps/mobile/src/features/handoff/model'; export * from './apps/mobile/src/features/capture/model'; export * from './apps/mobile/src/features/connection/http';`,resolveDir:process.cwd()},outfile:path.join(dir,'model.mjs'),bundle:true,platform:'node',format:'esm',define:{'import.meta.env':'{}'}});
-const {handoffClient,handoffLabels,agentLabels,captureApi,ensureHttpOk}=await import(path.join(dir,'model.mjs'));
+const {handoffClient,handoffLabels,agentLabels,captureApi,ensureHttpOk,stateActions,stateActionRequest}=await import(path.join(dir,'model.mjs'));
 const request=()=>({storeId:crypto.randomUUID(),expectedRevision:1,handoffId:crypto.randomUUID(),target:{agentId:'claude',sessionId:crypto.randomUUID()}});
 const target={agentId:'claude',sessionId:crypto.randomUUID(),title:'已有会话',cwd:'/fixture/project with spaces'};
 const preview={text:'确切文本\n原文保持',attachments:[],target,sendNumber:1,previewHash:'a'.repeat(64)};
@@ -90,3 +90,14 @@ test('resolve posts only the user outcome to the unknown record and maps the not
   assert.deepEqual(calls[0],['/api/work-items/item/handoffs/id-1/resolve','POST',{outcome:'not_received'}]);
   assert.throws(()=>ensureHttpOk(409,{error:'work_item_handoff_not_unknown'}),/已经有确定结果/);
 });
+test('state actions follow W1: only the user verifies, returns need a reason, todo has none',()=>{
+  assert.deepEqual(stateActions('todo'),[]);
+  assert.deepEqual(stateActions('to_verify').map(a=>[a.route,a.body]),[['verify',{decision:'accept'}],['verify',{decision:'return'}]]);
+  assert.ok(stateActions('to_verify')[0].confirm);assert.ok(stateActions('to_verify')[1].reasonPrompt);
+  assert.deepEqual(stateActions('in_progress').map(a=>a.body),[{action:'review'},{action:'return'}]);assert.ok(stateActions('in_progress')[1].reasonPrompt);
+  for(const state of ['returned','done'])assert.deepEqual(stateActions(state).map(a=>a.body),[{action:'reopen'}]);
+  const request=stateActionRequest({uid:'u1',revision:7},stateActions('to_verify')[1],'截图里的按钮没改','m1');
+  assert.deepEqual(request,{route:'/api/work-items/u1/verify',body:{mutationId:'m1',expectedRevision:7,decision:'return',reason:'截图里的按钮没改'}});
+  assert.deepEqual(stateActionRequest({uid:'u1',revision:7},stateActions('in_progress')[0],null,'m2').body,{mutationId:'m2',expectedRevision:7,action:'review'});
+});
+

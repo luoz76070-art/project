@@ -1,5 +1,6 @@
 import type { HandoffAgent, HandoffPreview, HandoffRecord, HandoffRequest, HandoffReceipt, HandoffResolution, HandoffTarget } from '../../../../../shared/handoff';
 import type { ThreadSummary } from '../../app/types';
+import type { WorkItem } from '../../../../../shared/workItem';
 import { isDesktopSource } from '../threads/model';
 export type HandoffSend = <T>(route: string, method?: 'GET' | 'POST' | 'PATCH' | 'DELETE', body?: unknown) => Promise<T>;
 export const handoffLabels = { sending: '正在发送', submitted: '已提交，等待接收确认', queued: '排队中', delivered: '已送达', unknown: '结果不明', rejected: '未发送 / 已拒绝' };
@@ -33,3 +34,19 @@ export function handoffClient(send: HandoffSend) {
     resolve(uid: string, id: string, outcome: HandoffResolution['outcome']) { return send<{ handoff: HandoffRecord }>(`/api/work-items/${uid}/handoffs/${id}/resolve`, 'POST', { outcome }); },
   };
 }
+/** W1 user transitions reachable from a card once W4 writes progress back. Reasons are required for returns. */
+export type StateAction = { label: string; route: 'actions' | 'verify'; body: { action: 'review' | 'return' | 'reopen' } | { decision: 'accept' | 'return' }; confirm?: string; reasonPrompt?: string };
+export function stateActions(state: WorkItem['state']): StateAction[] {
+  if (state === 'to_verify') return [
+    { label: '验收通过', route: 'verify', body: { decision: 'accept' }, confirm: '确认 Agent 已经把这件事做完了？' },
+    { label: '没做好，退回', route: 'verify', body: { decision: 'return' }, reasonPrompt: '退回原因（会记在事项上）' }];
+  if (state === 'in_progress') return [
+    { label: '标记为待验证', route: 'actions', body: { action: 'review' } },
+    { label: '退回', route: 'actions', body: { action: 'return' }, reasonPrompt: '退回原因（会记在事项上）' }];
+  if (state === 'returned' || state === 'done') return [{ label: '重新打开', route: 'actions', body: { action: 'reopen' } }];
+  return [];
+}
+export function stateActionRequest(item: Pick<WorkItem, 'uid' | 'revision'>, action: StateAction, reason: string | null, mutationId: string) {
+  return { route: `/api/work-items/${item.uid}/${action.route}`, body: { mutationId, expectedRevision: item.revision, ...action.body, ...(reason ? { reason } : {}) } };
+}
+
