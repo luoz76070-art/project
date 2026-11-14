@@ -23,4 +23,15 @@ MobiCodex 改为独立 App，只保留电脑这部分，不再和 Kelivo 的 AI 
 
 ## 发布结果
 
-待发布后补充。
+2026-11-14 发布。
+
+- **GitHub Release** `mobicodex-v0.2.0`（Actions run 43594130630，成功）：APK、界面包、两份清单和 `SHA256SUMS`。
+- **安装包** `mobile-codex-0.2.0-660f45ae1b4c.apk`，3,406,790 字节，SHA-256 `660f45ae1b4c6bdb5a7d3da82d6d214d41e77eb7abad99deebe2ddb903d0a24d`。签名证书 SHA-256 `3ffb81f3524a590f469b80476951a22fbc6e441a470b9270079a8c1d452c4a38`，与 Mobile Codex 1.x 预览版相同，所以可以覆盖升级。GitHub Release 和下载页上的是同一个文件。
+- **下载页** https://zyzlz.xin/mobile-codex/releases/android/preview/index.html 。更新清单 `preview/latest.json` 指向 0.2.0（code 40），上一份清单移到 `previous.json`。
+- **Kelivo 整合版**：下载页顶部加了停更提示和新下载页链接（原页面已在服务器上备份）；它的更新清单没有改。
+- **界面更新通道**（`hot/latest.json`）没有改。0.2.0 的界面包只存档在 Release 里，以后有只改界面的更新时再发到通道。
+- **发布后核对**
+  - 从公网下载的 APK 与 CI 产物逐字节相同；分段下载返回 206，跨域头正常。
+  - 用 App 自己的清单解析代码读线上清单，得到 0.2.0 / 40，大小和校验值一致。
+  - 服务器上只有四个文件变了：preview 的 `index.html`（新建）、`latest.json`、`previous.json`，以及 Kelivo 下载页。
+- **模拟器验证**（Android 模拟器）：从 1.3.17 覆盖升级；电脑页浅色、深色、动态取色和墨色主题与 Kelivo 版逐像素一致；界面更新的下载、生效、退回，以及语音，都走通了。CI 产出的 APK 也装到模拟器上核对过。
