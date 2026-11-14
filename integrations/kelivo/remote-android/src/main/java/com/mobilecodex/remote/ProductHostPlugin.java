@@ -44,7 +44,9 @@ public final class ProductHostPlugin extends Plugin {
             state.put("openSettings", ProductNavigation.takeOpenSettings(getContext()));
             state.put("openUpdates", ProductNavigation.takeOpenUpdates(getContext()));
             state.put("appearance", ProductNavigation.appearance(getContext()));
-            state.put("handoff", ProductHandoffStore.read(getContext()));
+            org.json.JSONObject migration = ProductHandoffStore.migrationState(getContext());
+            state.put("handoff", migration.get("handoff"));
+            state.put("handoffMigration", migration.get("handoffMigration"));
             call.resolve(state);
         } catch (Exception error) { call.reject("Unable to read product appearance", error); }
     }
@@ -56,9 +58,11 @@ public final class ProductHostPlugin extends Plugin {
             if ("submit".equals(action)) state = ProductHandoffStore.begin(getContext(), id, call.getData());
             else if ("confirm".equals(action)) state = ProductHandoffStore.confirm(getContext(), id, call.getString("clientMessageId"), call.getString("acceptance"));
             else if ("close".equals(action)) { ProductHandoffStore.close(getContext(), id); state = null; }
+            else if ("ackMigration".equals(action)) state = ProductHandoffStore.ackMigration(getContext(), id,
+                call.getString("expectedDigest"), call.getString("storeId"), call.getString("workItemUid"));
             else throw new IllegalArgumentException("Unknown handoff action");
             JSObject result = new JSObject();
-            result.put("handoff", state);
+            result.put("handoff", state == null ? org.json.JSONObject.NULL : state);
             call.resolve(result);
         } catch (Exception error) { call.reject(error.getMessage(), error); }
     }

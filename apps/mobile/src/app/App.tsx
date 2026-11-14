@@ -1,3 +1,5 @@
+import { migrateHandoff } from '../features/product/handoffMigration';
+import { HandoffMigrationNotice } from '../features/product/HandoffMigrationNotice';
 import { useDeviceRevoked } from "../features/connection/useDeviceRevoked";
 import { deviceRevokedMessage } from "../features/connection/authorization";
 import { SessionStatus } from "../features/chat/SessionStatus";
@@ -1005,6 +1007,12 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
     }
   }
 
+  async function migrateLegacyHandoff() {
+    const result = await migrateHandoff({ endpoint, token, scope, host: isKelivoHost ? ProductHost : undefined, signal: scopeAbortRef.current.signal });
+    onHandoff(result.handoff);
+    setStatus(`已迁移 ${result.count} 条交接为事项。${result.draftChanged ? '迁移期间的新编辑已保留在本地。' : ''}`);
+  }
+
   async function sendHandoffMessage(message: string, id: string, expectedThreadId: string): Promise<'confirmed' | 'queued' | 'uncertain' | 'rejected'> {
     const target = selectedRef.current;
     const runtime = activeRuntimeRef.current;
@@ -1700,7 +1708,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
       {handoff && <HandoffCard key={handoff.id} handoff={handoff} scope={scope} threads={threads} selectedId={selected?.id}
         ready={Boolean(nativeDesktop && desktopSend.ready && !submittingMessage && !uploading && !activeRuntime.pendingMessageId && (!isLiveTurnActive || canQueue))}
         queue={isLiveTurnActive} changed={onHandoff} select={thread => void openThread(thread)}
-        refresh={() => { setThreadRange('all'); void loadThreads({ range: 'all', append: threadRange === 'all' && threadPage.hasMore }); }} upload={uploadHandoffFile} send={sendHandoffMessage} />}
+        migrate={migrateLegacyHandoff} refresh={() => { setThreadRange('all'); void loadThreads({ range: 'all', append: threadRange === 'all' && threadPage.hasMore }); }} upload={uploadHandoffFile} send={sendHandoffMessage} />}
       <header className="topbar glass-surface">
         <button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="打开线程列表">
           <Menu size={22} />
@@ -1907,6 +1915,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
             </button>
           )}
 
+            {!handoff && <HandoffMigrationNotice migrate={migrateLegacyHandoff} />}
             {activeRuntime.desktopSubmission && <div className="connection-notice" role="status">提交结果待确认，草稿已保留；请勿重复发送。</div>}
             {activeRuntime.desktopInterrupt && <div className="connection-notice" role="status">打断结果待确认，正在同步会话。</div>}
             {(deviceRevoked || streamState === "recovering" || streamState === "unauthorized" || connectionState === "error") && <div className="connection-notice" role="status"><span className="status-dot error" />{deviceRevoked || streamState === "unauthorized" ? deviceRevokedMessage : streamState === "recovering" ? "正在恢复连接，消息与草稿已保留" : "连接暂时不可用，正在检查"}</div>}

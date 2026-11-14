@@ -4,7 +4,8 @@ import { isDesktopSource, shortPath } from '../threads/model';
 import { ProductHost, productBeforeNavigate } from './host';
 import { loadHandoffDraft, saveHandoffDraft, removeHandoffDraft, submitProductHandoff, type HandoffDraft, type ProductHandoff } from './handoff';
 
-export function HandoffCard({ handoff, scope, threads, selectedId, ready, queue, changed, select, refresh, upload, send }: {
+export function HandoffCard({ handoff, scope, threads, selectedId, ready, queue, changed, select, refresh, upload, send, migrate }: {
+  migrate: () => Promise<void>;
   handoff: ProductHandoff; scope: string; threads: ThreadSummary[]; selectedId?: string; ready: boolean; queue: boolean;
   changed: (value: ProductHandoff | null) => void; select: (thread: ThreadSummary) => void;
   refresh: () => void; upload: (file: File) => Promise<PendingAttachment>;
@@ -126,7 +127,13 @@ export function HandoffCard({ handoff, scope, threads, selectedId, ready, queue,
       {!locked && !ready && target && <p>正在等待目标会话的原生控制状态，当前不会发送。</p>}
       <div className="handoff-actions">
         <button disabled={busy || blocked.current} onClick={() => setVisible(false)}>稍后处理</button>
-        {handoff.status !== 'uncertain' && <button disabled={busy} onClick={() => void close()}>{locked ? '完成' : '取消交接'}</button>}
+        {handoff.status !== 'uncertain' && <button disabled={busy} onClick={() => void close()}>{locked ? '关闭' : '取消交接'}</button>}
+        <button disabled={busy || blocked.current || !sameScope} onClick={async () => {
+          if (busyRef.current) return;
+          busyRef.current = true; setBusy(true); setError('');
+          try { await migrate(); } catch (error) { setError(error instanceof Error ? error.message : '迁移失败，旧交接已保留。'); }
+          finally { busyRef.current = false; setBusy(false); }
+        }}>迁移为事项</button>
         {!locked && <button className="primary-button" disabled={busy || !sameScope || !target || selectedId !== target.id || !ready || blocked.current || !draft || (!draft.text.trim() && !draft.attachments.length)} onClick={() => void confirm()}>{busy ? '正在处理…' : queue ? '确认并排队交接' : '确认交接'}</button>}
       </div>
     </section>

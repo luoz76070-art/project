@@ -99,4 +99,90 @@ class ProductHandoffTest {
         catch (error: IllegalArgumentException) { /* expected */ }
         assertNull(ProductHandoffStore.read(context))
     }
+
+    private val storeId = "32345678-1234-4234-8234-123456789abc"
+    private val itemId = "42345678-1234-4234-8234-123456789abc"
+    private fun digest() = ProductHandoffStore.migrationState(context).getJSONObject("handoffMigration").getString("digest")
+
+    @Test fun migrationArchivesDraftUncertainAndConfirmedWithoutChangingDelivery() {
+        for (status in listOf("draft", "uncertain", "queue", "desktop")) {
+            reset()
+            val id = ProductHandoffStore.prepare(context, "迁移任务").getString("id")
+            if (status != "draft") ProductHandoffStore.begin(context, id, payload())
+            if (status == "queue" || status == "desktop") ProductHandoffStore.confirm(context, id, id, status)
+            val before = ProductHandoffStore.read(context).toString()
+            val expected = digest()
+            assertEquals(64, expected.length)
+            assertNull(ProductHandoffStore.ackMigration(context, id, expected, storeId, itemId))
+            assertNull(ProductHandoffStore.read(context))
+            val backup = context.getSharedPreferences("product-handoff-v1", 0).getString("migration-backup", null)!!
+            assertEquals(before, JSONObject(backup).getString("raw"))
+            assertFalse(backup.contains("must-not-persist"))
+            assertTrue(backup.toByteArray(Charsets.UTF_8).size <= 256 * 1024)
+            assertTrue(ProductHandoffStore.migrationState(context).isNull("handoffMigration"))
+        }
+    }
+
+    @Test fun migrationRejectsChangedSourceAndMismatchedReceipts() {
+        val id = ProductHandoffStore.prepare(context, "任务").getString("id")
+        val oldDigest = digest()
+        ProductHandoffStore.begin(context, id, payload())
+        fails { ProductHandoffStore.ackMigration(context, id, oldDigest, storeId, itemId) }
+        fails { ProductHandoffStore.ackMigration(context, itemId, digest(), storeId, itemId) }
+        fails { ProductHandoffStore.ackMigration(context, id, "0".repeat(64), storeId, itemId) }
+        assertEquals("uncertain", ProductHandoffStore.read(context)!!.getString("status"))
+        val current = digest()
+        ProductHandoffStore.ackMigration(context, id, current, storeId, itemId)
+        fails { ProductHandoffStore.ackMigration(context, id, current, itemId, itemId) }
+        fails { ProductHandoffStore.ackMigration(context, id, current, storeId, storeId) }
+    }
+
+    @Test fun repeatedMigrationAckDoesNotRemoveNewerHandoffAndBackupIsBoundedToOne() {
+        val id = ProductHandoffStore.prepare(context, "旧任务").getString("id")
+        val expected = digest()
+        ProductHandoffStore.ackMigration(context, id, expected, storeId, itemId)
+        assertNull(ProductHandoffStore.ackMigration(context, id, expected, storeId, itemId))
+        val newer = ProductHandoffStore.prepare(context, "新任务").getString("id")
+        assertEquals(newer, ProductHandoffStore.ackMigration(context, id, expected, storeId, itemId)!!.getString("id"))
+        ProductHandoffStore.ackMigration(context, newer, digest(), storeId, newer)
+        val prefs = context.getSharedPreferences("product-handoff-v1", 0)
+        assertEquals(setOf("migration-backup"), prefs.all.keys)
+        assertEquals(newer, JSONObject(prefs.getString("migration-backup", null)!!).getString("id"))
+    }
+
+    @Test fun failedMigrationCommitRestoresActiveRecordEvenAfterMemoryWasUpdated() {
+        val id = ProductHandoffStore.prepare(context, "任务").getString("id")
+        ProductHandoffStore.begin(context, id, payload())
+        val expected = digest()
+        val failing = object : ContextWrapper(context) {
+            override fun getSharedPreferences(name: String, mode: Int): SharedPreferences {
+                val original = super.getSharedPreferences(name, mode)
+                return object : SharedPreferences by original {
+                    override fun edit(): SharedPreferences.Editor {
+                        val editor = original.edit()
+                        return object : SharedPreferences.Editor by editor {
+                            override fun putString(key: String?, value: String?): SharedPreferences.Editor { editor.putString(key, value); return this }
+                            override fun remove(key: String?): SharedPreferences.Editor { editor.remove(key); return this }
+                            override fun commit(): Boolean { editor.commit(); return false }
+                        }
+                    }
+                }
+            }
+        }
+        fails { ProductHandoffStore.ackMigration(failing, id, expected, storeId, itemId) }
+        assertEquals("uncertain", ProductHandoffStore.read(context)!!.getString("status"))
+        assertEquals(expected, digest())
+        assertNull(context.getSharedPreferences("product-handoff-v1", 0).getString("migration-backup", null))
+        assertNull(ProductHandoffStore.ackMigration(context, id, expected, storeId, itemId))
+    }
+
+    @Test fun invalidMigrationIdentitiesKeepOriginal() {
+        val id = ProductHandoffStore.prepare(context, "任务").getString("id")
+        for (inputs in listOf(listOf("bad", digest(), storeId, itemId), listOf(id, "bad", storeId, itemId),
+            listOf(id, digest(), "bad", itemId), listOf(id, digest(), storeId, "bad"))) {
+            try { ProductHandoffStore.ackMigration(context, inputs[0], inputs[1], inputs[2], inputs[3]); fail() }
+            catch (error: IllegalArgumentException) { /* expected */ }
+        }
+        assertEquals(id, ProductHandoffStore.read(context)!!.getString("id"))
+    }
 }

@@ -12,10 +12,10 @@ import { turnResult } from '../plugins/mobile-deepseek/turnResult.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-rendering-'));
 const output = path.join(temp, 'render.cjs');
-await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
+await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources'; export { HandoffCard } from './apps/mobile/src/features/product/HandoffCard'; export { HandoffMigrationNotice } from './apps/mobile/src/features/product/HandoffMigrationNotice';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
 const originalStorage = globalThis.localStorage;
 globalThis.localStorage = { getItem: () => null };
-const { default: { h, render, MessageContent, MessageTimeline, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } } = await import(pathToFileURL(output).href);
+const { default: { h, render, MessageContent, MessageTimeline, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence, HandoffCard, HandoffMigrationNotice } } = await import(pathToFileURL(output).href);
 globalThis.localStorage = originalStorage;
 test.after(() => fs.rm(temp, { recursive: true, force: true }));
 const tool = index => ({ id: `t${index}`, role: 'tool', kind: 'commandExecution', text: `Command: rg query-${index}`, turnId: 'turn-a', timestamp: '2026-11-07T00:00:00Z' });
@@ -170,4 +170,23 @@ test('S2 real channel normalizers require evidence, retain result reasons and le
   const status = agentSessionStatus({ status: 'idle', connected: true, permissions: [], questions: [], lastTurn: failed }, true);
   const html = render(h(SessionStatus, { status, variant: 'notice' }));
   assert.match(html, /失败/); assert.match(html, /模型暂不可用/); assert.doesNotMatch(html, /PRIVATE/);
+});
+
+
+test('W1 handoff migration entry preserves the existing card and calls completion only close', t => {
+  const previous = globalThis.localStorage;
+  t.after(() => { globalThis.localStorage = previous; });
+  globalThis.localStorage = { getItem: () => null };
+  const base = { revision: 1, id: '12345678-1234-4234-8234-123456789abc', text: '旧交接', createdAt: 1,
+    target: { scope: 'fixture', threadId: '22345678-1234-4234-8234-123456789abc', title: '已有会话' }, message: '冻结正文' };
+  for (const status of ['confirmed', 'uncertain']) {
+    const html = render(h(HandoffCard, { handoff: { ...base, status, acceptance: 'desktop' }, scope: 'fixture', threads: [], ready: false,
+      queue: false, migrate() {}, changed() {}, select() {}, refresh() {}, upload() {}, send() {} }));
+    assert.match(html, /role="dialog"/); assert.match(html, /迁移为事项/); assert.doesNotMatch(html, />完成<|事项列表/);
+    if (status === 'confirmed') assert.match(html, />关闭<\/button>/);
+    else assert.doesNotMatch(html, />关闭<\/button>/);
+  }
+  assert.equal(render(h(HandoffMigrationNotice, { migrate() {} })), '');
+  globalThis.localStorage = { getItem: () => 'legacy-source' };
+  assert.match(render(h(HandoffMigrationNotice, { migrate() {} })), /迁移为事项/);
 });
