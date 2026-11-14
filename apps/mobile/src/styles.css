@@ -210,7 +210,6 @@ button {
 .settings-heading p,
 .sidebar-title span,
 .thread-time,
-.composer-status,
 .empty-chat p,
 .empty-state p {
   color: var(--muted);
@@ -1298,36 +1297,6 @@ textarea {
   color: var(--danger);
 }
 
-.composer-status {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-12);
-  font-size: var(--font-size-12);
-  color: var(--muted);
-}
-
-.composer-status span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.composer-status em {
-  flex: 0 0 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-style: normal;
-  color: var(--subtle);
-  padding: var(--space-4) var(--space-8);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-pill);
-  background: var(--panel-soft);
-}
-
 .attachment-tray {
   display: flex;
   gap: var(--space-8);
@@ -2124,7 +2093,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .tool-message { box-shadow: none; animation: none; border-color: var(--hairline); border-radius: var(--radius-12); background: var(--process-surface); }
 .tool-message summary { min-height: 44px; }
 .composer-panel { padding-top: 0; border: 0; gap: var(--space-8); }
-.composer-status { display: none; }
 .composer { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 116px; gap: var(--space-4); padding: var(--space-12) var(--space-12) var(--space-8); border: 1px solid var(--border); border-radius: var(--radius-24); background: var(--panel-soft); }
 .composer:focus-within { border-color: var(--accent); }
 .composer textarea { grid-row: 1; grid-column: 1 / -1; width: 100%; height: 56px; min-height: 50px; max-height: 152px; padding: var(--space-4) var(--space-8); font-size: var(--font-size-17); line-height: 1.6; }
@@ -2132,9 +2100,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .composer-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); min-width: 0; }
 .composer-toolbar > button, .composer-toolbar > .voice-entry { flex-shrink: 0; }
 .composer-tool-button { border: 0; background: transparent; color: var(--accent); }
-.composer-mode { display: flex; align-items: center; gap: var(--space-4); flex: 1; min-width: 0; color: var(--muted); font-size: var(--font-size-12); overflow: hidden; white-space: nowrap; }
-.composer-mode > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.composer-activity-dot { flex-shrink: 0; width: 5px; height: 5px; border-radius: var(--radius-pill); background: var(--signal); }
 .send-button { border: 0; background: var(--accent-strong); color: var(--on-accent); }
 .composer-tool-button, .send-button { width: 44px; height: 44px; }
 .send-button:disabled { opacity: .25; cursor: default; }
@@ -2420,3 +2385,20 @@ input, textarea { caret-color: var(--signal); }
 .system-notice.cache-save-notice > div { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-8); }
 .system-notice.cache-save-notice button { min-height: 44px; }
 .composer-panel .control-banner.error-control { padding: var(--space-4) var(--space-8); margin: 0; border: 0; border-radius: 0; background: transparent; color: var(--danger); }
+
+/* U2: one current-status/control row, above the shared composer. */
+.composer-status-bar { display: flex; align-items: center; gap: var(--space-8); min-width: 0; padding: 0 var(--space-8); color: var(--muted); font-size: var(--font-size-12); }
+.composer-status-copy { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-12); min-width: 0; overflow-wrap: anywhere; }
+.session-status-text { display: inline-flex; align-items: baseline; gap: var(--space-4); min-width: 0; max-width: 100%; }
+.session-status-text > svg { flex-shrink: 0; align-self: flex-start; margin-top: var(--space-4); }
+.session-status-text > span:last-child { min-width: 0; }
+.session-status-text strong { font-weight: 500; }
+.session-status-text time { font-size: var(--font-size-12); }
+[data-session-status="failed"] { color: var(--danger); }
+.session-status-dot { flex-shrink: 0; width: var(--space-8); height: var(--space-8); border-radius: var(--radius-pill); background: var(--signal); }
+[data-session-status="thinking"] .session-status-dot, [data-session-status="executing"] .session-status-dot { animation: sessionBreath 2.4s ease-in-out infinite; }
+.composer-stop { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: var(--space-4); min-width: 44px; min-height: 44px; padding: 0 var(--space-8); border: 0; border-radius: var(--radius-8); background: transparent; color: var(--text); font-size: var(--font-size-13); cursor: pointer; }
+.composer-stop:disabled { opacity: .4; cursor: default; }
+.composer-toolbar-spacer { flex: 1; }
+@keyframes sessionBreath { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .session-status-dot { animation: none; } }

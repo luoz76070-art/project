@@ -13,10 +13,10 @@ import { turnResult } from '../plugins/mobile-deepseek/turnResult.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-rendering-'));
 const output = path.join(temp, 'render.cjs');
-await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { ThreadRow } from './apps/mobile/src/features/threads/ThreadRow'; export { SessionRangeControl } from './apps/mobile/src/features/threads/SessionRangeControl'; export { DisclosureSummary } from './apps/mobile/src/shared/DisclosureSummary'; export { SidebarScrim } from './apps/mobile/src/features/threads/SidebarScrim'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, MessageBubble, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources'; export { HandoffCard } from './apps/mobile/src/features/product/HandoffCard'; export { HandoffMigrationNotice } from './apps/mobile/src/features/product/HandoffMigrationNotice';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
+await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { ThreadRow } from './apps/mobile/src/features/threads/ThreadRow'; export { SessionRangeControl } from './apps/mobile/src/features/threads/SessionRangeControl'; export { DisclosureSummary } from './apps/mobile/src/shared/DisclosureSummary'; export { SidebarScrim } from './apps/mobile/src/features/threads/SidebarScrim'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, MessageBubble, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus, ComposerSessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources'; export { HandoffCard } from './apps/mobile/src/features/product/HandoffCard'; export { HandoffMigrationNotice } from './apps/mobile/src/features/product/HandoffMigrationNotice';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
 const originalStorage = globalThis.localStorage;
 globalThis.localStorage = { getItem: () => null };
-const { default: { h, render, ThreadRow, SessionRangeControl, DisclosureSummary, SidebarScrim, MessageContent, MessageTimeline, MessageBubble, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence, HandoffCard, HandoffMigrationNotice } } = await import(pathToFileURL(output).href);
+const { default: { h, render, ThreadRow, SessionRangeControl, DisclosureSummary, SidebarScrim, MessageContent, MessageTimeline, MessageBubble, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, ComposerSessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence, HandoffCard, HandoffMigrationNotice } } = await import(pathToFileURL(output).href);
 globalThis.localStorage = originalStorage;
 test.after(() => fs.rm(temp, { recursive: true, force: true }));
 const tool = index => ({ id: `t${index}`, role: 'tool', kind: 'commandExecution', text: `Command: rg query-${index}`, turnId: 'turn-a', timestamp: '2026-11-07T00:00:00Z' });
@@ -370,4 +370,61 @@ test('U1 late clipboard completion after unmount does not publish feedback', asy
   driver.event('onPointerDown'); driver.hold(); driver.unmount(); finish();
   await Promise.resolve(); await Promise.resolve();
   assert.equal(driver.render().feedback, '');
+});
+
+test('U2 one status bar above the input owns the only stop button for empty and nonempty drafts', () => {
+  const status = deriveSessionStatus(statusInput(statusInputs.executing));
+  for (const hasContent of [false, true]) for (const canStop of [false, true]) for (const busy of [false, true]) {
+    const html = render(h(ComputerComposer, { draft: hasContent ? 'draft' : '', onDraft() {}, onSend() {}, onStop() {}, onUpload() {},
+      voice: null, status: h(ComposerSessionStatus, { status, fallback: '当前会话' }), placeholder: 'message', running: true, hasContent, canStop, busy, canSend: true, deliveries: { steer: false, queue: true } }));
+    const [bar, input] = html.split('<div class="composer">');
+    assert.match(bar, /class="composer-status-bar"/);
+    assert.equal((bar.match(/aria-label="停止生成"/g) ?? []).length, 1);
+    assert.equal((bar.match(/data-session-status="executing"/g) ?? []).length, 1);
+    assert.match(bar, /session-status-dot/);
+    assert.doesNotMatch(input, /停止生成|composer-mode|session-status/);
+    assert.equal(/disabled="" aria-label="停止生成"/.test(bar), !canStop || busy);
+    assert.doesNotMatch(html, /generation-status/);
+  }
+});
+test('U2 terminal results appear once; a new running turn keeps previous reason and timestamp', () => {
+  for (const lastTurn of turnResults) {
+    const terminal = deriveSessionStatus(statusInput({ phase: 'idle', lastTurn, turnId: lastTurn.turnId }));
+    const idle = render(h(ComposerSessionStatus, { status: terminal, lastTurn, fallback: '当前会话' }));
+    assert.equal((idle.match(/data-turn-result=/g) ?? []).length, 1);
+    assert.ok(idle.includes(lastTurn.reason.message)); assert.ok(idle.includes(lastTurn.endedAt));
+    assert.doesNotMatch(idle, /session-status-dot|上轮/);
+    const active = deriveSessionStatus(statusInput(statusInputs.thinking));
+    const running = render(h(ComposerSessionStatus, { status: active, lastTurn, running: true, fallback: '当前会话' }));
+    assert.equal((running.match(/data-turn-result=/g) ?? []).length, 1);
+    assert.match(running, /上轮/); assert.match(running, /data-session-status="thinking"/);
+    assert.ok(running.includes(lastTurn.reason.message)); assert.ok(running.includes(lastTurn.endedAt));
+    const staleRunning = render(h(ComposerSessionStatus, { status: terminal, lastTurn, running: true, fallback: '当前会话' }));
+    assert.equal((staleRunning.match(/data-turn-result=/g) ?? []).length, 1);
+    assert.doesNotMatch(staleRunning, /session-status-dot/);
+  }
+});
+test('U2 unknown activity keeps neutral fallback and does not invent an active indicator', () => {
+  const html = render(h(ComposerSessionStatus, { status: null, lastTurn: turnResults[0], running: true, fallback: '当前会话', feedback: '已排队' }));
+  assert.match(html, /当前会话/); assert.match(html, /上轮/); assert.match(html, /已排队/);
+  assert.doesNotMatch(html, /session-status-dot|thinking|executing/);
+  const missing = render(h(ComposerSessionStatus, { status: null, lastTurn: null, fallback: '当前会话' }));
+  assert.doesNotMatch(missing, /data-session-status/);
+});
+test('U2 Codex and Agent entry points mount status only through the composer and retain tool summaries', async () => {
+  for (const file of ['apps/mobile/src/app/App.tsx', 'apps/mobile/src/features/agents/AgentWorkspace.tsx']) {
+    const source = await fs.readFile(path.join(root, file), 'utf8');
+    assert.equal((source.match(/<ComposerSessionStatus /g) ?? []).length, 1, file);
+    assert.doesNotMatch(source, /<SessionStatus |<TurnResultNotice |showInlineTurnIndicator|className="composer-status"/, file);
+    assert.match(source, /<ComputerComposer[\s\S]*?status={<ComposerSessionStatus/, file);
+  }
+  const html = render(h(MessageTimeline, { messages: [note(1), tool(1)], running: true, renderMessage: bubble }));
+  assert.doesNotMatch(html, /generation-status|data-session-status/);
+  assert.match(html, /process-toggle/); assert.match(html, /正在执行/); assert.match(html, /1 项/);
+});
+test('U2 uses signal for activity, danger for failure, and disables breathing with reduced motion', async () => {
+  const css = await fs.readFile(path.join(root, 'apps/mobile/src/styles.css'), 'utf8');
+  assert.match(css, /\.session-status-dot\s*{[^}]*background: var\(--signal\)/);
+  assert.match(css, /\[data-session-status="failed"\]\s*{[^}]*color: var\(--danger\)/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*{\s*\.session-status-dot\s*{\s*animation: none/);
 });

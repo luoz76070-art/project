@@ -1,10 +1,9 @@
 import { SystemNotice } from "../../shared/SystemNotice";
 import { useDeviceRevoked } from "../connection/useDeviceRevoked";
 import { deviceRevokedMessage } from "../connection/authorization";
-import { SessionStatus } from "../chat/SessionStatus";
-import { agentSessionStatus, isActiveSessionStatus } from "../chat/sessionStatusModel";
+import { ComposerSessionStatus } from "../chat/SessionStatus";
+import { agentSessionStatus } from "../chat/sessionStatusModel";
 import { loadReadingPositions, saveReadingPositions } from "../chat/readingPositions";
-import { TurnResultNotice } from "../chat/TurnResultNotice";
 import { productBeforeNavigate, isKelivoHost } from "../product/host";
 import { useEffect, useRef, useState } from "react";
 import { registerVoiceAgentDrafts } from "../voice/draftRecovery";
@@ -301,7 +300,6 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
     void operate("message", "/messages", { text: composeMessageWithAttachments(input.text, attachments), delivery });
   }
   const sessionStatus = agentSessionStatus(snapshot, online);
-  const progress = isActiveSessionStatus(sessionStatus) ? sessionStatus : null;
   return <section className="agent-chat">
     <SystemNotice className="agent-connection" error={stream === "unauthorized"}>{online ? `${agent.label} 已连接` : stream === "unauthorized" ? deviceRevokedMessage : stream === "paused" ? "连接已暂停，返回前台后恢复" : "正在恢复连接…"}</SystemNotice>
     <div className="messages-viewport" ref={viewport} onScroll={() => { const element = viewport.current; if (element) { nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100; reading.current[draftSession] = element.scrollTop; } }}>
@@ -311,7 +309,6 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
         {agent.id === "deepseek" && <p>查看历史不会启动任务；发送后继续原会话，运行中可引导或排队。权限请求须核对完整参数后允许一次或拒绝。</p>}
       </details>}
       {snapshot?.operationError && <SystemNotice error>{snapshot.operationError.code === "rejected" ? "电脑会话拒绝了本次操作，输入内容已保留。" : "操作尚未送达电脑便已过期，输入内容已保留。"}</SystemNotice>}
-      <TurnResultNotice result={snapshot?.lastTurn} running={snapshot?.status === "running"} />
       {historyCursor && (agent.id === "deepseek" || history.length < 190) && <button className="history-button" disabled={historyBusy} onClick={() => void older()}>{historyBusy ? "读取历史中…" : "加载更早的消息"}</button>}
       {agent.id === "deepseek" && history.length > 0 && <button className="history-button" disabled={historyBusy} onClick={() => { setHistory([]); setHistoryCursor(snapshot?.historyCursor ?? null); nearBottom.current = true; requestAnimationFrame(() => viewport.current?.scrollTo({ top: viewport.current.scrollHeight })); }}>正在浏览历史 · 返回最新</button>}
       {agent.id !== "deepseek" && history.length >= 190 && <p className="setting-description">已达到手机历史显示上限，更早记录可在电脑查看。</p>}
@@ -320,7 +317,6 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
       </MessageMediaProvider>
       {snapshot?.questions.map(question => <AgentQuestions key={question.id} request={question} agentLabel={agent.label} disabled={!online || busy} onRespond={answers => operate("question", `/questions/${question.id}/respond`, { answers }, question.id)} />)}
       {snapshot?.permissions.map(permission => <PermissionCard key={permission.id} permission={permission} agentLabel={agent.label} disabled={!online || busy} onRespond={decision => operate("permission", `/permissions/${permission.id}/respond`, { decision }, permission.id)} />)}
-      <SessionStatus status={progress} />
       {!snapshot && <p className="inline-loading" role="status"><Loader2 size={18} className="spin" />正在读取原会话…</p>}
     </div>
     <footer className="composer-panel agent-composer">
@@ -331,7 +327,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
       <input ref={uploadInput} type="file" multiple className="hidden-file-input" onChange={event => void uploadFiles(event.target.files)} />
       <ComputerComposer draft={input.text} onDraft={editText} onSend={send} onStop={() => void operate("interrupt", "/interrupt", {})} onUpload={() => uploadInput.current?.click()}
         voice={<VoiceInput context={{ cwd: session.directory, title: session.title, messages }} scope={scopeKey} thread={draftSession} recovery={voiceRecovery} endpoint={endpoint} token={token} draft={input.text} onDraft={editText} />} label="发送给当前 Agent 会话"
-        placeholder={online ? `向 ${agent.label} 发送消息` : "草稿已保留，等待恢复连接…"} status={sessionStatus ? <SessionStatus status={sessionStatus} variant="composer" /> : `${agent.label} · 当前会话`}
+        placeholder={online ? `向 ${agent.label} 发送消息` : "草稿已保留，等待恢复连接…"} status={<ComposerSessionStatus status={sessionStatus} lastTurn={snapshot?.lastTurn} running={snapshot?.status === "running"} fallback={`${agent.label} · 当前会话`} />}
         uploading={uploading} uploadDisabled={!token} busy={busy} running={snapshot?.status === "running"} hasContent={Boolean(input.text.trim() || attachments.length)}
         canSend={sendEnabled} canStop={Boolean(control?.canInterrupt)} deliveries={{ steer: sendEnabled && Boolean(control?.canSteer), queue: sendEnabled }}
         maxLength={Math.max(0, 20_000 - (draft.length - input.text.length))} />
