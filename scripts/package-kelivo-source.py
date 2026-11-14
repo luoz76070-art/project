@@ -41,7 +41,12 @@ for name in ['.npmrc']:
         paths.append(name)
 paths = sorted(set(paths))
 upstream = json.loads((ROOT / 'integrations/kelivo/source-files.json').read_text())
-assert all('apps/kelivo/' + name in paths for name in upstream['files'])
+# Upstream files MobiCodex deliberately deleted are recorded with a reason; every other imported file must be present.
+removed = upstream.get('removedUpstreamFiles', {})
+assert set(removed) <= set(upstream['files']), 'removedUpstreamFiles must name imported upstream files'
+assert not [name for name in removed if 'apps/kelivo/' + name in paths], 'a file recorded as removed is still present'
+missing_upstream = [name for name in upstream['files'] if name not in removed and 'apps/kelivo/' + name not in paths]
+assert not missing_upstream, f'imported upstream files missing without a recorded removal: {missing_upstream[:10]}'
 blocked_names = {'.env', 'local.properties', 'key.properties', 'google-services.json'}
 blocked_parts = {'node_modules', '.git', '.gradle', '.dart_tool', '.tools', '.pub-cache', 'output'}
 blocked_suffixes = {'.pem', '.key', '.jks', '.keystore', '.p12', '.apk', '.log', '.sqlite', '.db'}
@@ -156,8 +161,9 @@ manifest = {
     'applicationId': 'com.mobilecodex.kelivo.preview', 'apkSha256': APK_SHA,
     'upstream': json.loads((ROOT / 'integrations/kelivo/upstream.json').read_text()),
     'modifiedUpstreamPaths': changes['changed'], 'addedUpstreamPaths': changes['addedNonIgnored'],
+    'removedUpstreamPaths': removed,
     'files': inventory,
-    'omissions': 'Only ignored build/cache/local configuration; every one of the 5052 imported upstream files is included.',
+    'omissions': f'Only ignored build/cache/local configuration and the {len(removed)} deliberately removed upstream files in removedUpstreamPaths; every other one of the {len(upstream["files"])} imported upstream files is included.',
 }
 entries['SOURCE-MANIFEST.json'] = ((json.dumps(manifest, ensure_ascii=False, indent=2) + '\n').encode(), 0o644)
 archive = RELEASE / (prefix + '.tar.gz')
@@ -176,7 +182,7 @@ with tarfile.open(archive, 'r:gz') as tar:
         assert tar.extractfile(members[prefix + '/' + name]).read() == content, name
 report = {'archive': archive.name, 'bytes': archive.stat().st_size,
           'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(), 'sourceFiles': len(paths),
-          'archiveEntries': len(entries), 'upstreamFilesIncluded': len(upstream['files']),
+          'archiveEntries': len(entries), 'upstreamFilesIncluded': len(upstream['files']) - len(removed), 'upstreamFilesRemoved': len(removed),
           'allArchiveBytesVerified': True, 'unreviewedSecretPatternFindings': len(findings),
           'reviewedUpstreamSyntheticFixtures': len(reviewed_fixtures), 'apkSha256': APK_SHA}
 (OUT / 'source-package.json').write_text(json.dumps(report, indent=2) + '\n')
