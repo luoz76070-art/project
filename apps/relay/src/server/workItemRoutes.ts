@@ -4,14 +4,16 @@ import type { PassThrough } from 'node:stream';
 import { z } from 'zod';
 import type { DeviceRegistry } from './devices.js';
 import { createEventStream } from './eventStream.js';
+import { CaptureAssetStore } from '../capture/store.js';
 import { WorkItemStore } from '../workItems/store.js';
-import { bytes, fieldsSchema, limits, mutationSchema, stateSchema, uuid, workItemError } from '../workItems/schema.js';
+import { bytes, captureSchema, fieldsSchema, limits, mutationSchema, stateSchema, uuid, workItemError } from '../workItems/schema.js';
 
-export function createWorkItemRoutes(context: { root: string; owners: WeakMap<FastifyRequest, string>; devices: DeviceRegistry;
+export function createWorkItemRoutes(context: { root: string; captures?: CaptureAssetStore; owners: WeakMap<FastifyRequest, string>; devices: DeviceRegistry;
   streams: Set<PassThrough>; deviceStreams: Map<string, Set<PassThrough>> }) {
   const { owners, devices, streams, deviceStreams } = context;
   let pending: Promise<WorkItemStore> | undefined;
-  const store = () => pending ??= WorkItemStore.open(context.root);
+  const captures = context.captures ?? new CaptureAssetStore(context.root);
+  const store = () => pending ??= WorkItemStore.open(context.root, captures);
   const tokens = new Map<string, { owner: string; expires: number }>();
   const guard = (request: FastifyRequest) => () => { if (!devices.has(owners.get(request) ?? '')) throw workItemError('unauthorized', 401); };
   const prune = () => { for (const [id, value] of tokens) if (value.expires <= Date.now() || !devices.has(value.owner)) tokens.delete(id); };
@@ -30,22 +32,31 @@ export function createWorkItemRoutes(context: { root: string; owners: WeakMap<Fa
           if (error instanceof z.ZodError || error instanceof SyntaxError) return reply.code(400).send({ error: 'invalid_request' });
           const value = error as { statusCode?: number; message?: string };
           if (value.statusCode === 413) return reply.code(413).send({ error: 'work_item_payload_too_large' });
-          const known = value.message && /^work_item_[a-z_]+$/.test(value.message);
+          const known = value.message && /^(work_item|capture)_[a-z_]+$/.test(value.message);
           return reply.code(known || value.statusCode === 401 ? value.statusCode ?? 500 : 503).send({ error: known ? value.message : value.statusCode === 401 ? 'unauthorized' : 'work_item_store_unavailable' });
         });
         routes.get('/api/work-items', async request => {
-          const query = z.object({ state: stateSchema.optional(), cursor: z.string().max(1024).optional(), limit: z.coerce.number().int().min(1).max(50).default(50) }).strict().parse(request.query);
-          return (await store()).list(query.state, query.cursor, query.limit);
+          const query = z.object({ source: z.literal('capture').optional(), state: stateSchema.optional(), cursor: z.string().max(1024).optional(), limit: z.coerce.number().int().min(1).max(50).default(50) }).strict().parse(request.query);
+          return (await store()).list(query.state, query.cursor, query.limit, query.source === 'capture');
         });
         routes.get('/api/work-items/:uid', async request => (await store()).get(z.object({ uid: uuid }).parse(request.params).uid));
         routes.post('/api/work-items', { bodyLimit: limits.itemBytes }, async request => {
-          const { uid: id, mutationId, expectedRevision, ...fields } = fieldsSchema.extend({ uid: uuid, ...mutationSchema.shape }).strict().parse(request.body);
-          return (await store()).create(id, fields, owners.get(request)!, { mutationId, expectedRevision }, guard(request));
+          const { uid: id, mutationId, expectedRevision, capture, storeId, ...fields } = fieldsSchema.extend({ capture: captureSchema.optional(), storeId: uuid.optional(), uid: uuid, ...mutationSchema.shape }).strict().parse(request.body);
+          if (capture && storeId !== (await store()).info().storeId) throw workItemError('work_item_store_changed');
+          if (capture) {
+            if (fields.assets.length) throw workItemError('work_item_capture_assets_invalid', 400);
+            fields.assets = (await captures.validate(capture.assetIds, capture.id, owners.get(request)!)).filter(a => a.role === 'original');
+          }
+          return (await store()).create(id, fields, owners.get(request)!, { mutationId, expectedRevision }, guard(request), capture);
         });
         routes.patch('/api/work-items/:uid', { bodyLimit: limits.itemBytes }, async request => {
           const { uid: id } = z.object({ uid: uuid }).parse(request.params);
           const { mutationId, expectedRevision, ...fields } = fieldsSchema.partial().extend(mutationSchema.shape).strict().parse(request.body);
           return (await store()).patch(id, fields, { mutationId, expectedRevision }, owners.get(request)!, guard(request));
+        });
+        routes.delete('/api/work-items/:uid', { bodyLimit: 4096 }, async request => {
+          const { uid: id } = z.object({ uid: uuid }).parse(request.params);
+          return (await store()).deleteCapture(id, mutationSchema.parse(request.body), owners.get(request)!, guard(request));
         });
         routes.post('/api/work-items/:uid/actions', { bodyLimit: 4096 }, async request => {
           const { uid: id } = z.object({ uid: uuid }).parse(request.params);
@@ -76,7 +87,7 @@ export function createWorkItemRoutes(context: { root: string; owners: WeakMap<Fa
           const events = createEventStream(reply, streams), owned = deviceStreams.get(token.owner) ?? new Set<PassThrough>();
           deviceStreams.set(token.owner, owned); owned.add(events.stream);
           events.onClose(() => { owned.delete(events.stream); if (!owned.size) deviceStreams.delete(token.owner); });
-          events.onClose(current.subscribe(event => events.send('work-item.changed', event)));
+          events.onClose(current.subscribe(event => events.send(event.deleted ? 'work-item.deleted' : 'work-item.changed', event)));
           events.send('work-items.reset', current.info());
           return events.ready();
         });
