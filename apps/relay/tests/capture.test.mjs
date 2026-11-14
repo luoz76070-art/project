@@ -37,9 +37,44 @@ test('PNG strips metadata with exact unchanged IDAT bytes, valid CRC and full re
   const source = png([chunk('eXIf', exif(8)), ...['tEXt','iTXt','zTXt'].map(t => chunk(t, Buffer.from('private')))]);
   const result = sanitizeCaptureImage(source, 'image/png'); assert.deepEqual(result.data, png()); assert.equal(result.orientation, 8);
 });
+test('JPEG truncates MPF secondary images and motion video after the first valid EOI', () => {
+  const primary = jpeg([segment(0xe2, Buffer.from('MPF\0'))]);
+  const secondary = jpeg([segment(0xe1, Buffer.from('http://ns.adobe.com/xap/1.0/\0secondary-private'))]);
+  for (const trailing of [secondary, Buffer.from('ftypmp42-motion-video'), Buffer.concat([secondary, Buffer.from('motion-video')])]) {
+    const result = sanitizeCaptureImage(Buffer.concat([primary, trailing]), 'image/jpeg');
+    assert.deepEqual(result.data, primary);
+    assert.equal(result.trailingBytesRemoved, trailing.length);
+    assert.ok(!result.data.includes(Buffer.from('secondary-private')));
+    assert.ok(!result.data.includes(Buffer.from('motion-video')));
+  }
+});
+test('JPEG removes COM before and after scan data without treating its contents as EOI', () => {
+  const comment = segment(0xfe, Buffer.concat([Buffer.from('private comment'), Buffer.from([0xff, 0xd9])]));
+  const plain = jpeg();
+  for (const source of [jpeg([comment]), Buffer.concat([plain.subarray(0, -2), comment, plain.subarray(-2)])]) {
+    const result = sanitizeCaptureImage(source, 'image/jpeg');
+    assert.deepEqual(result.data, plain);
+    assert.equal(result.trailingBytesRemoved, 0);
+  }
+});
+test('PNG removes tIME before and after IDAT while preserving encoded pixels', () => {
+  const timestamp = chunk('tIME', Buffer.from([0x07, 0xea, 11, 14, 12, 30, 0]));
+  const plain = png();
+  for (const source of [png([timestamp]), Buffer.concat([plain.subarray(0, -12), timestamp, plain.subarray(-12)])]) {
+    const result = sanitizeCaptureImage(source, 'image/png');
+    assert.deepEqual(result.data, plain);
+    assert.equal(result.trailingBytesRemoved, 0);
+  }
+});
+test('JPEG still rejects premature EOI and incomplete primary images with valid trailing images', () => {
+  for (const prefix of [Buffer.from([0xff, 0xd8, 0xff, 0xd9]), jpeg().subarray(0, -2)]) {
+    assert.throws(() => sanitizeCaptureImage(Buffer.concat([prefix, jpeg()]), 'image/jpeg'));
+  }
+});
 test('WebP strips EXIF/XMP, repairs RIFF size and VP8X flags without changing VP8L payload', () => {
   const result = sanitizeCaptureImage(webp([riffChunk('EXIF', exif(3)), riffChunk('XMP ', Buffer.from('secret'))], 12), 'image/webp');
   assert.equal(result.orientation, 3); assert.equal(result.data[20], 0); assert.equal(result.data.readUInt32LE(4), result.data.length - 8);
+  assert.equal(result.trailingBytesRemoved, 0);
   const raw = riffChunk('VP8L', Buffer.from([0x2f,0,0,0,0,0x10])); assert.ok(result.data.includes(raw)); assert.ok(!result.data.includes(Buffer.from('EXIF')));
 });
 test('reject forged MIME, SVG, animation, declared dimension bombs, corrupt structures and truncated data', () => {

@@ -32,7 +32,7 @@ function jpeg(b: Buffer) {
     const start = p; requireImage(b[p++] === 0xff);
     while (b[p] === 0xff) p++;
     requireImage(p < b.length); const marker = b[p++];
-    if (marker === 0xd9) { requireImage(scan && p === b.length); out.push(b.subarray(start, p)); ended = true; break; }
+    if (marker === 0xd9) { requireImage(scan); out.push(b.subarray(start, p)); ended = true; break; }
     requireImage(marker !== 0 && marker !== 0xd8 && !(marker >= 0xd0 && marker <= 0xd7) && marker !== 1);
     requireImage(p + 2 <= b.length); const length = b.readUInt16BE(p), end = p + length;
     requireImage(length >= 2 && end <= b.length); const data = b.subarray(p + 2, end);
@@ -44,7 +44,7 @@ function jpeg(b: Buffer) {
     const isExif = marker === 0xe1 && data.subarray(0, 6).equals(Buffer.from('Exif\0\0'));
     const isXmp = marker === 0xe1 && (data.subarray(0, 29).toString('ascii') === 'http://ns.adobe.com/xap/1.0/\0' || data.subarray(0, 35).toString('ascii') === 'http://ns.adobe.com/xmp/extension/\0');
     if (isExif) { requireImage(!exif); orientation = exifOrientation(data); exif = true; }
-    if (!isExif && !isXmp && marker !== 0xed) out.push(b.subarray(start, end));
+    if (!isExif && !isXmp && marker !== 0xed && marker !== 0xfe) out.push(b.subarray(start, end));
     p = end;
     if (marker === 0xda) {
       requireImage(width && data.length >= 6 && data[0] >= 1 && data[0] <= 4 && data.length === 4 + 2 * data[0]);
@@ -60,7 +60,7 @@ function jpeg(b: Buffer) {
     }
   }
   requireImage(ended && width && scan);
-  return { data: Buffer.concat(out), width, height, orientation, mimeType: 'image/jpeg' as const };
+  return { data: Buffer.concat(out), width, height, orientation, mimeType: 'image/jpeg' as const, trailingBytesRemoved: b.length - p };
 }
 const crcTable = Array.from({ length: 256 }, (_, n) => { for (let k = 0; k < 8; k++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1; return n >>> 0; });
 export function pngCrc(b: Buffer): number { let n = 0xffffffff; for (const byte of b) n = crcTable[(n ^ byte) & 255] ^ (n >>> 8); return (n ^ 0xffffffff) >>> 0; }
@@ -82,11 +82,11 @@ function png(b: Buffer) {
     else if (type === 'IEND') { requireImage(size === 0 && idat > 0 && end === b.length); ended = true; }
     else { requireImage(type[0] === type[0].toLowerCase()); if (seenIdat) dataEnded = true; }
     if (type === 'eXIf') { requireImage(!exif); orientation = exifOrientation(data); exif = true; }
-    if (!['eXIf', 'tEXt', 'iTXt', 'zTXt'].includes(type)) out.push(b.subarray(p, end));
+    if (!['eXIf', 'tEXt', 'iTXt', 'zTXt', 'tIME'].includes(type)) out.push(b.subarray(p, end));
     p = end;
   }
   requireImage(ended);
-  return { data: Buffer.concat(out), width, height, orientation, mimeType: 'image/png' as const };
+  return { data: Buffer.concat(out), width, height, orientation, mimeType: 'image/png' as const, trailingBytesRemoved: 0 };
 }
 function webp(b: Buffer) {
   requireImage(b.length >= 20 && b.readUInt32LE(4) + 8 === b.length);
@@ -122,7 +122,7 @@ function webp(b: Buffer) {
   }
   requireImage(width && (!canvas || (canvas.width === width && canvas.height === height)) && Boolean(flags & 8) === exif && Boolean(flags & 4) === xmp);
   const body = Buffer.concat(out), header = Buffer.from(b.subarray(0, 12)); header.writeUInt32LE(body.length + 4, 4);
-  return { data: Buffer.concat([header, body]), width, height, orientation, mimeType: 'image/webp' as const };
+  return { data: Buffer.concat([header, body]), width, height, orientation, mimeType: 'image/webp' as const, trailingBytesRemoved: 0 };
 }
 export function sanitizeCaptureImage(b: Buffer, mimeType: string) {
   if (!b.length || b.length > captureLimits.imageBytes) throw captureError('capture_image_too_large', 413);
