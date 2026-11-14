@@ -7,6 +7,7 @@ import { type PendingAttachment, type CodexMessage, type LiveApproval, type Live
 import { formatFileSize, isImageAttachment, parseMessageAttachments } from "./attachments";
 import { X, ImageIcon, Paperclip, Copy, AlertCircle, Terminal, CheckCircle2, CircleStop, ChevronRight, UserRound, Bot, Info, Loader2 } from "lucide-react";
 import { useMessageInteraction } from "./useMessageInteraction";
+import { commandRisks, diffLines, fileKindLabels } from "./approvalModel";
 import { MessageContent } from "./MessageContent";
 import { formatMessageTime, formatTime } from "../../shared/format";
 
@@ -219,8 +220,10 @@ export function ApprovalCard({ approval, onRespond }: { approval: LiveApproval; 
   const allowSession = approval.availableDecisions.includes("acceptForSession");
   const locked = approval.status !== "pending";
   const statusText = approval.status === "submitting" ? "正在提交决定…" : approval.status === "submitted" ? "已提交，等待桌面同步；请勿重复操作" : approval.status === "uncertain" ? "提交结果待确认，请查看电脑或等待会话同步" : "";
+  const risks = commandRisks(approval.command);
+  const files = approval.kind === "fileChange" ? approval.files ?? [] : [];
   return (
-    <article className={`approval-card ${approval.kind}`}>
+    <article className={`approval-card ${approval.kind}${risks.length ? " risky" : ""}`}>
       <header>
         <span>
           <AlertCircle size={15} />
@@ -230,14 +233,26 @@ export function ApprovalCard({ approval, onRespond }: { approval: LiveApproval; 
       </header>
       <p>{approval.detail}</p>
       {approval.reason && <p>原因：{approval.reason}</p>}
-      {approval.command && <pre>{approval.command}</pre>}
+      {approval.command && <pre className="approval-command">{approval.command}</pre>}
+      {risks.length > 0 && <p className="approval-risk" role="note"><AlertCircle size={14} aria-hidden="true" /><span>高风险：{risks.join("、")}。请确认后再允许。</span></p>}
       {approval.cwd && <small>目录：{approval.cwd}</small>}
-      {approval.preview && <details className="approval-preview" open><summary>操作与权限详情</summary><pre>{approval.preview}</pre></details>}
+      {files.length > 0 ? <ul className="approval-files" aria-label="要修改的文件">
+        {files.map((file, index) => {
+          const diff = diffLines(file);
+          return <li key={`${file.path}:${index}`}><details open={files.length <= 3}>
+            <summary><span className={`approval-file-kind ${file.kind}`}>{fileKindLabels[file.kind]}</span>
+              <span className="approval-file-path">{file.path}{file.movePath ? ` → ${file.movePath}` : ""}</span>
+              <span className="approval-file-count"><span className="diff-add">+{diff.added}</span> <span className="diff-del">−{diff.removed}</span></span></summary>
+            <pre className="approval-diff">{diff.lines.map((line, n) => <span key={n} className={`diff-line diff-${line.type}`}>{line.text || " "}</span>)}</pre>
+            {diff.hidden > 0 && <small>还有 {diff.hidden} 行未显示，请在电脑查看完整差异。</small>}
+          </details></li>;
+        })}
+      </ul> : approval.preview && <details className="approval-preview" open><summary>操作与权限详情</summary><pre>{approval.preview}</pre></details>}
       {approval.unavailableReason && <p>{approval.unavailableReason}</p>}
       {statusText && <p role="status" aria-live="polite">{statusText}</p>}
       <div className="approval-actions">
         {approval.availableDecisions.includes("accept") && (
-          <button disabled={locked} className="accept" onClick={() => onRespond("accept")}>
+          <button disabled={locked} className="accept primary" onClick={() => onRespond("accept")}>
             <CheckCircle2 size={14} />
             <span>允许一次</span>
           </button>
@@ -249,13 +264,13 @@ export function ApprovalCard({ approval, onRespond }: { approval: LiveApproval; 
           </button>
         )}
         {approval.availableDecisions.includes("decline") && (
-          <button disabled={locked} onClick={() => onRespond("decline")}>
+          <button disabled={locked} className="decline" onClick={() => onRespond("decline")}>
             <X size={14} />
             <span>拒绝</span>
           </button>
         )}
         {approval.availableDecisions.includes("cancel") && (
-          <button disabled={locked} onClick={() => onRespond("cancel")}>
+          <button disabled={locked} className="quiet" onClick={() => onRespond("cancel")}>
             <CircleStop size={14} />
             <span>取消</span>
           </button>

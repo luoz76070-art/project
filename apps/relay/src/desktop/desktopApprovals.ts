@@ -12,6 +12,8 @@ export type DesktopApproval = {
   status: "pending" | Delivery;
   title: string; detail: string; command: string | null; cwd: string | null; reason: string | null;
   preview: string; unavailableReason: string | null;
+  /** Structured file changes for fileChange requests, so the phone can show path + coloured diff. */
+  files?: { kind: "add" | "delete" | "update"; path: string; movePath: string | null; diff: string }[];
   availableDecisions: DesktopApprovalDecision[];
   createdAt: string; updatedAt: string;
 };
@@ -105,7 +107,8 @@ export function desktopApprovalCandidates(threadId: string, state: Record<string
       const changes = changesSchema.safeParse(item?.changes);
       understood &&= changes.success;
       if (changes.success) candidate.preview = changes.data.map(c => `${c.kind.type} ${c.path}${c.kind.type === "update" && c.kind.move_path ? ` → ${c.kind.move_path}` : ""}\n${c.diff}`).join("\n\n");
-      if (candidate.preview.length > 262_144) { understood = false; candidate.preview = "文件差异过大，请在电脑查看完整内容。"; }
+      if (changes.success) candidate.files = changes.data.map(c => ({ kind: c.kind.type, path: c.path, movePath: c.kind.type === "update" ? c.kind.move_path : null, diff: c.diff }));
+      if (candidate.preview.length > 262_144) { understood = false; candidate.preview = "文件差异过大，请在电脑查看完整内容。"; delete candidate.files; }
     } else {
       known.add("cwd"); known.add("permissions");
       const permissions = permissionsSchema.safeParse(params.permissions);
@@ -149,7 +152,7 @@ export class DesktopApprovals {
       const binding = old?.candidate.signature === candidate.signature ? old : {
         candidate, view: { id: randomUUID(), source: "desktop" as const, threadId, turnId: candidate.turnId, kind: candidate.kind,
           status: pending?.status ?? "pending" as const, title: candidate.title, detail: candidate.detail, command: candidate.command, cwd: candidate.cwd, reason: candidate.reason,
-          preview: candidate.preview, unavailableReason: candidate.unavailableReason, availableDecisions: candidate.availableDecisions, createdAt: now, updatedAt: now },
+          preview: candidate.preview, ...(candidate.files ? { files: candidate.files } : {}), unavailableReason: candidate.unavailableReason, availableDecisions: candidate.availableDecisions, createdAt: now, updatedAt: now },
       };
       next.set(binding.view.id, binding);
     }

@@ -1236,6 +1236,28 @@ textarea {
   background: var(--status-surface);
   color: var(--ok);
 }
+/* U3: one solid primary (allow once), outlined secondary choices, a quiet cancel. */
+.approval-actions button.accept.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.approval-actions button.accept:not(.primary) { border-color: var(--hairline); background: transparent; color: var(--text); }
+.approval-actions button.decline { border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: transparent; color: var(--danger); }
+.approval-actions button.quiet { border-color: transparent; background: transparent; color: var(--muted); }
+.approval-card.risky { border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.approval-risk { display: flex; gap: var(--space-8); align-items: flex-start; margin: 0; padding: var(--space-8); border-radius: var(--radius-8); background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger); font-weight: 600; }
+.approval-risk svg { flex: none; }
+.approval-files { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-8); }
+.approval-files summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-4) var(--space-8); cursor: pointer; }
+.approval-file-kind { padding: 0 var(--space-8); border: 1px solid var(--hairline); border-radius: var(--radius-pill); font-size: var(--font-size-12); }
+.approval-file-kind.add { color: var(--ok); }
+.approval-file-kind.delete { color: var(--danger); }
+.approval-file-path { flex: 1 1 10em; min-width: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--font-size-13); }
+.approval-file-count { font-size: var(--font-size-12); font-variant-numeric: tabular-nums; }
+.approval-card pre.approval-diff { margin-top: var(--space-8); padding: var(--space-4) 0; max-height: 50vh; overflow: auto; }
+.approval-diff .diff-line { display: block; padding: 0 var(--space-8); }
+.diff-add { color: var(--ok); }
+.diff-del { color: var(--danger); }
+.approval-diff .diff-add { background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.approval-diff .diff-del { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.approval-diff .diff-hunk { color: var(--muted); }
 
 .control-banner {
   min-height: 36px;

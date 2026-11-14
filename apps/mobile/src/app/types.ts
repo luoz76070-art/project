@@ -152,6 +152,7 @@ export type LiveApproval = {
   cwd: string | null;
   reason: string | null;
   preview?: string;
+  files?: { kind: "add" | "delete" | "update"; path: string; movePath: string | null; diff: string }[];
   unavailableReason?: string | null;
   availableDecisions: LiveApprovalDecision[];
   createdAt: string;

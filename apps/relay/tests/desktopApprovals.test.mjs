@@ -112,6 +112,7 @@ test('missing command, missing file diff, unknown fields and unknown permission 
 test('file change preview contains paths, diff and session root; duplicate raw identities are not actionable', () => {
   const state = initial('fileChange'), c = desktopApprovalCandidates(threadId, state)[0];
   assert.match(c.preview, /a\.txt\n-before\n\+after/); assert.match(c.detail, /会话写入范围/);
+  assert.deepEqual(c.files, [{ kind: 'update', path: '/synthetic/project/a.txt', movePath: null, diff: '-before\n+after' }], 'U3: structured files for the phone diff view');
   state.requests.push(structuredClone(state.requests[0])); assert.deepEqual(desktopApprovalCandidates(threadId, state), []);
 });
 
