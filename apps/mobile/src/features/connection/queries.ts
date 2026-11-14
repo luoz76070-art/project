@@ -33,20 +33,26 @@ export function threadFromLiveTurn(turn: LiveTurnSnapshot): ThreadSummary | null
   };
 }
 
+/** A reply without a message list (thread gone, odd proxy) must fail the read, not break rendering later. */
+function threadPayload<T>(value: T): T {
+  if (!value || typeof value !== "object" || !Array.isArray((value as { messages?: unknown }).messages)) throw new Error("电脑没有返回这个线程的消息，它可能已被删除或归档。");
+  return value;
+}
+
 export async function readThread(endpoint: string, token: string, thread: ThreadSummary, signal?: AbortSignal): Promise<{ activeTurnId?: string | null; activityEvidence?: import("../chat/sessionStatusModel").ActivityEvidence | null; messages: CodexMessage[]; cursor?: number; generation?: string; windowStart?: number; turnStatus?: "inProgress" | "completed" | "interrupted" | "failed"; activity?: "thinking" | "working" | "outputting"; lastTurn?: import("../chat/lastTurn").LastTurn | null }> {
   if (isDesktopSource(thread)) {
-    return await apiGet<Awaited<ReturnType<typeof readThread>>>(
+    return threadPayload(await apiGet<Awaited<ReturnType<typeof readThread>>>(
       buildUrl(
         endpoint,
         `/api/desktop/threads/${encodeURIComponent(thread.id)}?latest=true&maxBytes=${desktopLatestMaxBytes}&maxMessages=${desktopLatestMaxMessages}`,
       ),
       token, signal,
-    );
+    ));
   }
   try {
-    return await apiGet<{ messages: CodexMessage[]; cursor?: number; generation?: string; windowStart?: number }>(buildUrl(endpoint, `/api/live/threads/${encodeURIComponent(thread.id)}`), token, signal);
+    return threadPayload(await apiGet<{ messages: CodexMessage[]; cursor?: number; generation?: string; windowStart?: number }>(buildUrl(endpoint, `/api/live/threads/${encodeURIComponent(thread.id)}`), token, signal));
   } catch {
     signal?.throwIfAborted();
-    return await apiGet<{ messages: CodexMessage[] }>(buildUrl(endpoint, `/api/threads/${encodeURIComponent(thread.id)}`), token, signal);
+    return threadPayload(await apiGet<{ messages: CodexMessage[] }>(buildUrl(endpoint, `/api/threads/${encodeURIComponent(thread.id)}`), token, signal));
   }
 }

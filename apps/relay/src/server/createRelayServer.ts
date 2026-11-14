@@ -24,6 +24,8 @@ import { createProjectImageReader, registerThreadImageRoutes } from "./threadIma
 import { createAgentGateway, type AgentGateway } from "../agents/agentGateway.js";
 import type { GatewayRuntimeStatus } from "../gateway/managedGateway.js";
 import { createAgentSessionRoutes } from "./agentSessionRoutes.js";
+import { createAttentionRoutes } from "./attentionRoutes.js";
+import { AttentionHub } from "../attention/attentionHub.js";
 import { authorizeClaudeBridge, registerClaudeBridgeRoutes } from "./claudeBridgeRoutes.js";
 import { claudeConfigSchema } from "../agents/claudeProtocol.js";
 import { VoiceCredentialStore } from "../voice/credentials.js";
@@ -71,12 +73,14 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
 
   const streams = new Set<PassThrough>();
   const readImage = createProjectImageReader();
-  const agentSessionRoutes = createAgentSessionRoutes({ gateway: agentGateway, owners, devices, streams, deviceStreams, submissions, readImage });
+  const attention = new AttentionHub({ desktop: desktopControl, liveTurns, gateway: agentGateway, codex: store });
+  const attentionRoutes = createAttentionRoutes({ hub: attention, owners, devices, streams, deviceStreams });
+  const agentSessionRoutes = createAgentSessionRoutes({ onMessage: (owner, agentId, sessionId) => attention.watch(owner, { source: "agent", agentId, sessionId }), gateway: agentGateway, owners, devices, streams, deviceStreams, submissions, readImage });
   const captures = new CaptureAssetStore(config.defaultCwd);
   const workItemRoutes = createWorkItemRoutes({ retentionDays: config.retentionDays, root: config.defaultCwd, captures, owners, devices, streams, deviceStreams, openHandoff: openHandoffTarget({ gateway: agentGateway, desktop: desktopControl, codex: store }) });
   // A route may still await its upstream's first frame before reply.send(stream).
   // Cancel adapters before HTTP drain, otherwise onClose cannot release that wait.
-  app.addHook("preClose", async () => { voice.stop(); workItemRoutes.cancelHandoffs(); for (const stream of streams) stream.destroy(); await Promise.all([agentGateway.stop(), desktopControl.messageQueue?.stop()]); });
+  app.addHook("preClose", async () => { voice.stop(); attention.stop(); workItemRoutes.cancelHandoffs(); for (const stream of streams) stream.destroy(); await Promise.all([agentGateway.stop(), desktopControl.messageQueue?.stop()]); });
   app.addHook("onClose", async () => { store.close(); await Promise.all([desktopControl.stop(), liveTurns.stop(), live.stop?.(), workItemRoutes.stop(), captures.drain()]); });
 
   await app.register(cors, {
@@ -153,6 +157,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     voice.revoke(id);
     agentSessionRoutes.revoke(id);
     workItemRoutes.revoke(id);
+    attention.revoke(id);
     for (const stream of deviceStreams.get(id) ?? []) stream.destroy();
     for (const [token, value] of streamTokens) if (value.owner === id) streamTokens.delete(token);
     for (const [token, value] of desktopStreamTokens) if (value.owner === id) desktopStreamTokens.delete(token);
@@ -193,6 +198,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     return { agent: await agentGateway.probe(id) };
   });
   agentSessionRoutes.register(app);
+  attentionRoutes.register(app);
   workItemRoutes.register(app);
 
   app.get("/health", async () => ({
@@ -266,7 +272,12 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
         sandbox: z.enum(["read-only", "workspace-write", "danger-full-access"]).optional(),
       })
       .parse(request.body);
-    return submissions.execute(body.clientMessageId, { route: "live-turn", ...body }, () => liveTurns.startTurn(body));
+    const owner = owners.get(request)!;
+    return submissions.execute(body.clientMessageId, { route: "live-turn", ...body }, async () => {
+      const turn = await liveTurns.startTurn(body);
+      attention.watch(owner, { source: "live", threadId: turn.threadId, turnId: turn.turnId });
+      return turn;
+    });
   });
 
   app.get("/api/live/turns/:turnId", async (request) => {
@@ -565,16 +576,20 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
       .parse(request.body);
     const owner = owners.get(request)!;
     const fingerprint = body.mode === "queue" ? { route: "desktop-queue", threadId: params.id, message: body.message, owner } : { route: "desktop-message", threadId: params.id, ...body, owner };
-    return submissions.execute(body.clientMessageId, fingerprint, () => desktopControl.sendMessage({
-      threadId: params.id,
-      message: body.message,
-      cwd: body.cwd,
-      mode: body.mode,
-      clientMessageId: body.clientMessageId,
-      controlToken: body.controlToken,
-      expectedTurnId: body.expectedTurnId,
-      owner,
-    }));
+    return submissions.execute(body.clientMessageId, fingerprint, () => {
+      // F1: watch before sending, so the turn this starts is the first one reported.
+      attention.watch(owner, { source: "desktop", threadId: params.id });
+      return desktopControl.sendMessage({
+        threadId: params.id,
+        message: body.message,
+        cwd: body.cwd,
+        mode: body.mode,
+        clientMessageId: body.clientMessageId,
+        controlToken: body.controlToken,
+        expectedTurnId: body.expectedTurnId,
+        owner,
+      });
+    });
   });
 
   app.post("/api/desktop/control/threads/:id/queue/:messageId/cancel", async (request) => {

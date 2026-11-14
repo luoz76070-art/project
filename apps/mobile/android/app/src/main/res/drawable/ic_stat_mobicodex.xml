@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification glyph: the A1 "M" and amber dot as a white silhouette. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="600" android:viewportHeight="600">
+    <group android:translateX="-212" android:translateY="-206">
+        <path android:pathData="M332 712 V372 Q512 664 692 372 V712" android:strokeColor="#FFFFFFFF" android:strokeWidth="88" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" />
+        <path android:pathData="M472,300 a40,40 0 1,0 80,0 a40,40 0 1,0 -80,0" android:fillColor="#FFFFFFFF" />
+    </group>
+</vector>

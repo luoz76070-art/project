@@ -36,6 +36,8 @@ export function makeSender(context) {
 export function makeDesktopSender(context) {
   const { selected, selectedRef, activeRuntime, activeRuntimeRef, relayStatus, scopeAbortRef, sending, patchRuntime,
     updateRuntime, forceBottomRef, setStatus, apiPost, endpoint, token } = context;
+  // F1: starting the notification service is a native side effect; the sender only has to call it.
+  const attentionAfterSend = context.attentionAfterSend ?? (async () => undefined);
   ${desktopSender}
   return sendDesktopMessage;
 }

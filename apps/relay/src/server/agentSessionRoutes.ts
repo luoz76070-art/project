@@ -22,6 +22,8 @@ export function createAgentSessionRoutes(context: {
   gateway: AgentGateway; owners: WeakMap<FastifyRequest, string>; devices: DeviceRegistry;
   streams: Set<PassThrough>; deviceStreams: Map<string, Set<PassThrough>>; submissions: SubmissionRegistry;
   readImage?: ProjectImageReader;
+  /** Called before a message is sent, so F1 can report the turn it starts. */
+  onMessage?: (owner: string, agentId: string, sessionId: string) => void;
 }) {
   const tokens = new Map<string, StreamToken>();
   const media = new Map<string, Set<MediaBinding>>();
@@ -121,7 +123,12 @@ export function createAgentSessionRoutes(context: {
       app.post("/api/agents/:agentId/sessions/:sessionId/messages", { bodyLimit: 90_000 }, async request => {
         const params = paramsSchema.parse(request.params);
         const body = operationSchema.extend({ text: z.string().trim().min(1).max(20_000), delivery: z.enum(["steer", "queue"]) }).strict().parse(request.body);
-        return execute(request, params, "message", body, () => sessionAdapter(params).sendMessage(params.sessionId, body));
+        const owner = owners.get(request);
+        return execute(request, params, "message", body, () => {
+          const adapter = sessionAdapter(params);
+          if (owner) context.onMessage?.(owner, params.agentId, params.sessionId);
+          return adapter.sendMessage(params.sessionId, body);
+        });
       });
       app.post("/api/agents/:agentId/sessions/:sessionId/interrupt", { bodyLimit: 4096 }, async request => {
         const params = paramsSchema.parse(request.params), body = operationSchema.strict().parse(request.body);

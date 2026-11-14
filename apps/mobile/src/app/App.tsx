@@ -19,6 +19,7 @@ import { ComposerSessionStatus } from "../features/chat/SessionStatus";
 import { codexSessionStatus, readActivityEvidence, resultStatus } from "../features/chat/sessionStatusModel";
 import { createPortal } from "react-dom";
 import { ProductRemoteShell } from "../features/product/ProductRemoteShell";
+import { attentionAfterSend, codexAttentionKey, setAttentionViewing, useAttention, useNotifySettings } from "../features/notify/attention";
 import { isKelivoHost, navigateProduct, productBeforeNavigate, productOpenUpdates, takeProductSettingsLaunch, ProductHost } from "../features/product/host";
 import { productVersionCode, productVersionLabel } from "../features/product/identity";
 import { HandoffCard } from '../features/product/HandoffCard';
@@ -50,7 +51,7 @@ import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport"
 import { clamp } from "../shared/preferences";
 import { cachedSystemPalette, chatFontScales, loadProductDisplay, saveProductDisplay, saveThemeMode, type ProductDisplay } from "../features/product/standalone";
 import { stageHotUpdate } from "../features/updates/hotUpdate";
-import { ListTodo, Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, Copy, Activity, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, ChevronDown, Download } from "lucide-react";
+import { Bell, ListTodo, Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, Copy, Activity, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, ChevronDown, Download } from "lucide-react";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { MessageBubble, MessageTimeline, ApprovalCard, AttachmentTray } from "../features/chat/components";
 import { MessageMediaProvider } from "../features/chat/MessageImage";
@@ -104,6 +105,13 @@ export function App() {
     window.addEventListener("product-back", back, { capture: true });
     return () => window.removeEventListener("product-back", back, { capture: true });
   }, [captureOpen, itemsOpen]);
+  const openFromNotification = useCallback((target: { agentId: string; sessionId: string; title: string }) => {
+    const agentId = (["codex", "claude", "deepseek", "opencode"].includes(target.agentId) ? target.agentId : "codex") as HandoffTarget["agentId"];
+    setCaptureOpen(false); setItemsOpen(false); setHandoffTarget({ agentId, sessionId: target.sessionId, title: target.title, cwd: "" });
+    try { localStorage.setItem("productRemoteMode", agentId === "codex" ? "codex" : "agent"); } catch { /* In-memory selection remains. */ }
+    setAgentMode(agentId !== "codex");
+  }, []);
+  useAttention(normalizeEndpoint(connection.endpoint), connection.token, openFromNotification);
   function openHandoffTarget(target: HandoffTarget) {
     setCaptureOpen(false); setItemsOpen(false); setHandoffTarget(target); selectAgentMode(target.agentId !== 'codex');
   }
@@ -178,6 +186,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
   const [sidebarOpen, setSidebarOpen] = useState(() => !selected && !isNewThread);
   const previousSplitMode = useRef(splitMode);
   const [settingsOpen, setSettingsOpen] = useState(() => isKelivoHost && takeProductSettingsLaunch());
+  const notify = useNotifySettings();
   const [copyingMessageDiagnostics, setCopyingMessageDiagnostics] = useState(false);
   const [messageDiagnosticsStatus, setMessageDiagnosticsStatus] = useState("");
   const messageDiagnosticsLock = useRef(false);
@@ -448,8 +457,12 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
   useEffect(() => {
     if (handoffTarget?.agentId !== 'codex') return;
     const target = handoffTarget; onTargetOpened();
-    void openThread({ id: target.sessionId, threadName: target.title, cwd: target.cwd, updatedAt: new Date().toISOString(), source: 'vscode', originator: 'desktop' });
+    const known = threads.find(thread => thread.id === target.sessionId);
+    void openThread(known ?? { id: target.sessionId, threadName: target.title, cwd: target.cwd || null, updatedAt: new Date().toISOString(), source: 'vscode', originator: 'desktop' });
   }, [handoffTarget, onTargetOpened]);
+  // F1: no notification for the thread that is on screen.
+  useEffect(() => { setAttentionViewing(selected ? codexAttentionKey(selected.id, isDesktopSource(selected)) : null); }, [selected?.id, selected?.source, selected?.originator]);
+  useEffect(() => () => setAttentionViewing(null), []);
 
   async function openThread(thread: ThreadSummary, options: { closeSidebar?: boolean } = {}) {
     setSelected(thread);
@@ -713,6 +726,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
           sandbox: sandboxMode,
         },
       );
+      void attentionAfterSend();
       const createdThread = data.thread ?? {
         id: data.threadId,
         threadName: `手机: ${firstLine(userText) || attachmentSummaryText(pendingAttachments) || "新线程"}`,
@@ -828,6 +842,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
           ...(native ? capturedGuard : control.guard),
         },
       );
+      if (data.ok || data.delivery) void attentionAfterSend();
       if (!data.ok && !data.delivery) throw new Error(data.error ?? "Desktop 控制请求失败");
       if (data.action === "queue-message") {
         updateRuntime(threadKey, runtime => ({ ...runtime, ...desktopControlResponsePatch(runtime, data, clientMessageId) }));
@@ -1962,6 +1977,18 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
               onClick={() => { setHapticsEnabled(!haptics); setHaptics(!haptics); }}>{haptics ? "已开启" : "已关闭"}</button>
           </label>
         </section>
+
+        {notify.available && <section className="settings-section">
+          <h3>通知</h3>
+          <p className="update-note">手机上发出的任务完成、失败或需要审批时提醒你。只在有任务运行时保持连接，结束后自动断开。</p>
+          {notify.permission && notify.permission !== "granted" && <button className="action-button" onClick={() => void notify.allow()}><Bell size={16} /><span>{notify.permission === "denied" ? "通知被系统关掉了，去打开" : "允许通知"}</span></button>}
+          <label className="haptics-setting">任务完成时通知
+            <button type="button" className="action-button" role="switch" aria-label="任务完成时通知" aria-checked={notify.settings.finished} onClick={() => notify.change({ finished: !notify.settings.finished })}>{notify.settings.finished ? "已开启" : "已关闭"}</button>
+          </label>
+          <label className="haptics-setting">需要审批时通知
+            <button type="button" className="action-button" role="switch" aria-label="需要审批时通知" aria-checked={notify.settings.approvals} onClick={() => notify.change({ approvals: !notify.settings.approvals })}>{notify.settings.approvals ? "已开启" : "已关闭"}</button>
+          </label>
+        </section>}
 
         <section className="settings-section">
           <h3>运行策略</h3>
