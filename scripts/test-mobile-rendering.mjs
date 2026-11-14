@@ -430,7 +430,7 @@ test('U2 one status bar above the input owns the only stop button for empty and 
   for (const hasContent of [false, true]) for (const canStop of [false, true]) for (const busy of [false, true]) {
     const html = render(h(ComputerComposer, { draft: hasContent ? 'draft' : '', onDraft() {}, onSend() {}, onStop() {}, onUpload() {},
       voice: null, status: h(ComposerSessionStatus, { status, fallback: '当前会话' }), placeholder: 'message', running: true, hasContent, canStop, busy, canSend: true, deliveries: { steer: false, queue: true } }));
-    const [bar, input] = html.split('<div class="composer">');
+    const [bar, input] = html.split(/<div class="composer"[^>]*>/);
     assert.match(bar, /class="composer-status-bar"/);
     assert.equal((bar.match(/aria-label="停止生成"/g) ?? []).length, 1);
     assert.equal((bar.match(/data-session-status="executing"/g) ?? []).length, 1);
@@ -480,4 +480,21 @@ test('U2 uses signal for activity, danger for failure, and disables breathing wi
   assert.match(css, /\.session-status-dot\s*{[^}]*background: var\(--signal\)/);
   assert.match(css, /\[data-session-status="failed"\]\s*{[^}]*color: var\(--danger\)/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*{\s*\.session-status-dot\s*{\s*animation: none/);
+});
+
+test('U5 capsule: empty draft hides send so voice leads; content brings the send key back', () => {
+  const base = { onDraft() {}, onSend() {}, onStop() {}, onUpload() {}, voice: h('button', { className: 'voice-entry', 'aria-label': '语音输入' }), status: 'ok', placeholder: 'message', canSend: false };
+  const empty = render(h(ComputerComposer, { ...base, draft: '', hasContent: false }));
+  assert.match(empty, /<div class="composer" data-empty="true"><button[^>]*aria-label="上传文件"[^]*<textarea[^>]*rows="1"[^]*<div class="composer-toolbar"><button class="voice-entry"[^>]*>[^<]*<\/button><\/div><\/div>$/);
+  assert.doesNotMatch(empty, /aria-label="发送"/);
+  const typed = render(h(ComputerComposer, { ...base, draft: 'hi', hasContent: true, canSend: true }));
+  assert.match(typed, /<div class="composer"><button/);
+  assert.match(typed, /class="voice-entry"[^]*class="send-button"[^>]*aria-label="发送"/);
+});
+test('U5 CSS: one flex row, brand fill on send, voice filled only when empty', async () => {
+  const css = await fs.readFile(path.join(root, 'apps/mobile/src/styles.css'), 'utf8');
+  assert.match(css, /^\.composer \{ display: flex; flex-wrap: wrap; align-items: flex-end;[^}]*min-height: 0;/m);
+  assert.match(css, /^\.send-button \{ border: 0; background: var\(--accent-strong\); color: var\(--on-accent\); \}/m);
+  assert.match(css, /^\.composer\[data-empty\] \.voice-entry \{[^}]*background: var\(--accent-strong\); color: var\(--on-accent\); \}/m);
+  assert.doesNotMatch(css, /\.composer \{[^}]*min-height: (?:104|116)px/);
 });
