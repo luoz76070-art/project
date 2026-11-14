@@ -793,7 +793,7 @@ textarea {
 
 .message-bubble.from-user {
   align-self: flex-end;
-  background: var(--accent-soft);
+  background: var(--user-bubble);
 }
 
 .message-bubble.from-assistant,
@@ -2089,7 +2089,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .message-author strong { font-weight: 500; color: var(--muted); overflow-wrap: anywhere; }
 .message-author time { color: var(--subtle); font-size: var(--font-size-12); }
 .from-user .message-identity { align-self: stretch; flex-direction: row-reverse; text-align: right; }
-.user-message-text { max-width: 88%; margin: 0; padding: var(--space-12) var(--space-16); border-radius: var(--radius-16); background: var(--accent-soft); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--font-size-17); line-height: 1.65; }
+.user-message-text { max-width: 88%; margin: 0; padding: var(--space-12) var(--space-16); border-radius: var(--radius-16); background: var(--user-bubble); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--font-size-17); line-height: 1.65; }
 .from-user .message-attachments { max-width: 88%; }
 .message-content { min-width: 0; font-size: var(--font-size-17); line-height: 1.75; overflow-wrap: anywhere; }
 .message-content > :first-child { margin-top: 0; }

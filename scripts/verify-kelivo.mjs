@@ -6,6 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { javaMajor, validateJavaVersions, lintCounts } from './verify-android.mjs';
+import { assertCapacitorReflectionKept } from './kelivo-apk-guard.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const host = path.join(root, 'apps/kelivo');
 const upstream = JSON.parse(await readFile(path.join(root, 'integrations/kelivo/upstream.json'), 'utf8'));
@@ -101,6 +102,7 @@ async function main() {
       if (!buildTools) throw new Error('Android build-tools/apksigner is missing.');
       const signature = spawnSync(path.join(sdk, 'build-tools', buildTools, 'apksigner'), ['verify', '--print-certs', apk], { env, encoding: 'utf8' });
       if (signature.status !== 0) throw new Error('Preview APK signature could not be verified.');
+      assertCapacitorReflectionKept(apk);
       const output = path.join(root, 'output/kelivo'); await mkdir(output, { recursive: true });
       const releaseVersion = item.versionName.replace(/-native-preview$/, '-preview');
       const destination = path.join(output, `mobicodex-${releaseVersion}-arm64.apk`);
