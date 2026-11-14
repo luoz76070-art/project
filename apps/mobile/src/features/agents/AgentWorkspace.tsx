@@ -38,6 +38,7 @@ import type { AgentDelivery, AgentPermission, AgentSession, AgentSessionSnapshot
 import { groupByProject, projectGroupLabel, sessionInRange, sessionListRefreshMs } from "../threads/model";
 import { ProjectGroups } from "../threads/ProjectGroups";
 import { SessionRangeControl } from "../threads/SessionRangeControl";
+import { agentAttentionKey, attentionAfterSend, setAttentionViewing } from "../notify/attention";
 
 type Agent = { id: string; label: string; transport: string; sessionApi?: 1; state?: string };
 const friendlyError = (error: unknown) => {
@@ -141,6 +142,9 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
     setAgent(target); setSelected({ id: handoffTarget.sessionId, title: handoffTarget.title, directory: handoffTarget.cwd, updatedAt: new Date().toISOString() });
     onTargetOpened();
   }, [handoffTarget, agents, onTargetOpened]);
+  // F1: no notification for the session that is on screen.
+  useEffect(() => { setAttentionViewing(agent && selected ? agentAttentionKey(agent.id, selected.id) : null); }, [agent?.id, selected?.id]);
+  useEffect(() => () => setAttentionViewing(null), []);
   function back() {
     if (!window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) return;
     saveAgentView(scope, selected ? agent?.id ?? null : null, null);
@@ -310,7 +314,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
       if (currentScope.signal.aborted) return true;
       if (action === "message" || action === "interrupt") {
         setSnapshot(value => agentDelivery(value, clientMessageId, action, result));
-        if (action === "message") acceptMessageReceipt({ clientMessageId, action, delivery: result.delivery });
+        if (action === "message") { acceptMessageReceipt({ clientMessageId, action, delivery: result.delivery }); void attentionAfterSend(); }
       } else if (action !== "queue-cancel") setSnapshot(value => value?.connected && value.control?.token === controlToken ? { ...value,
         ...(action === "question" ? { questions: value.questions.map(q => q.id === requestId ? { ...q, status: result.delivery === "uncertain" ? "uncertain" : "submitted" } : q) }
           : { permissions: value.permissions.map(p => p.id === requestId ? { ...p, status: result.delivery === "uncertain" ? "uncertain" : "submitted" } : p) }),

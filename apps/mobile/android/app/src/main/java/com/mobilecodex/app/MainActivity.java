@@ -1,5 +1,6 @@
 package com.mobilecodex.app;
 
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
@@ -21,6 +22,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ClipboardPlugin.class);
         registerPlugin(DiagnosticExportPlugin.class);
         registerPlugin(ProductWindowPlugin.class);
+        registerPlugin(AttentionPlugin.class);
         super.onCreate(savedInstanceState);
         boolean dark = ProductWindow.systemDark(this);
         ProductWindow.apply(this, dark, ProductWindow.lastBackground(this, dark));
@@ -34,6 +36,14 @@ public class MainActivity extends BridgeActivity {
                     allowed -> { if (!"false".equals(allowed)) moveTaskToBack(true); });
             }
         });
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        PluginHandle handle = getBridge() == null ? null : getBridge().getPlugin("Attention");
+        if (handle != null && handle.getInstance() instanceof AttentionPlugin) ((AttentionPlugin) handle.getInstance()).handleIntent(intent);
     }
 
     @Override
