@@ -26,7 +26,7 @@ APK_SHA = metadata['sha256']
 assert hashlib.sha256(APK.read_bytes()).hexdigest() == APK_SHA
 assert APK.stat().st_size == metadata['bytes']
 version = metadata['versionName'].replace('-native-preview', '-preview')
-prefix = 'mobile-codex-kelivo-' + version + '-source'
+prefix = 'mobicodex-' + version + '-source'
 source_roots = [
     'apps/kelivo', 'apps/mobile', 'apps/relay', 'generated-protocol',
     'integrations/kelivo', 'scripts', 'plugins',

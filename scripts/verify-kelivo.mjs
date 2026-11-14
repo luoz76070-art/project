@@ -103,7 +103,7 @@ async function main() {
       if (signature.status !== 0) throw new Error('Preview APK signature could not be verified.');
       const output = path.join(root, 'output/kelivo'); await mkdir(output, { recursive: true });
       const releaseVersion = item.versionName.replace(/-native-preview$/, '-preview');
-      const destination = path.join(output, `mobile-codex-kelivo-${releaseVersion}-arm64.apk`);
+      const destination = path.join(output, `mobicodex-${releaseVersion}-arm64.apk`);
       await copyFile(apk, destination);
       const bytes = await readFile(destination);
       await writeFile(`${destination}.json`, JSON.stringify({ applicationId: metadata.applicationId, versionCode: item.versionCode, versionName: item.versionName,

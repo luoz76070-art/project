@@ -1,5 +1,13 @@
 # 更新说明
 
+## 0.1.9-native-preview · 2026-11-14（MobiCodex code11）
+
+- 语音可恢复与重转、整理稿关键信息校验、热词参考、转写记录；四通道统一状态与每轮结果。
+- 新增事项页与“交给 Agent”，进度自动回写，完成/退回 30 天后清理附图。
+- 界面按 A1 设计令牌重做：消息、审批卡、设置页、顶栏、输入框、Agent 选择页、骨架屏与空状态、动效与触感。
+- A1 图标与启动页，可见文字去 Kelivo；修复新手机配对误判未授权。
+- 需要新版电脑网关（本机已切换）；GitHub Release APK 为 CI 签名，已安装用户请用 App 内更新。详见[版本说明](releases/android/kelivo-preview/0.1.9/README.md)。
+
 ## 1.3.18-update-source-preview · 2026-11-12（APK 39，更新通道修复预览）
 
 - 修复共享 GitHub 仓库使用全局 `releases/latest` 导致 MobiCodex App 内更新读取其他项目或旧版本的问题。

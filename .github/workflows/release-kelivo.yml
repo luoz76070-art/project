@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Existing tag to validate and publish, for example mobicodex-kelivo-v0.1.8-native-preview"
+        description: "Existing tag to validate and publish, for example mobicodex-kelivo-v0.1.9-native-preview"
         required: true
-        default: "mobicodex-kelivo-v0.1.8-native-preview"
+        default: "mobicodex-kelivo-v0.1.9-native-preview"
         type: string
       source_ref:
         description: "Branch or commit containing the workflow fix and release files"
@@ -273,7 +273,7 @@ jobs:
           set -euo pipefail
           notes_file="$RUNNER_TEMP/mobicodex-kelivo-release-notes.md"
           {
-            echo "# MobiCodex Kelivo ${VERSION_NAME}"
+            echo "# MobiCodex ${VERSION_NAME}"
             echo
             echo "Kelivo AI chat and MobiCodex computer workspace integration preview."
             echo
@@ -294,10 +294,10 @@ jobs:
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
             gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-              --title "MobiCodex Kelivo ${VERSION_NAME}" --notes-file "$notes_file" --prerelease
+              --title "MobiCodex ${VERSION_NAME}" --notes-file "$notes_file" --prerelease
           else
             gh release create "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
-              --verify-tag --title "MobiCodex Kelivo ${VERSION_NAME}" \
+              --verify-tag --title "MobiCodex ${VERSION_NAME}" \
               --notes-file "$notes_file" --prerelease
           fi
 
