@@ -14,6 +14,14 @@ GitHub Release 里的 APK 由 GitHub Actions 构建，使用构建机临时生�
 
 已安装 MobiCodex 的手机请用「设置 → 应用更新 → 检查更新」。更新通道提供的是同一次构建，用原预览证书（SHA256 `3ffb81f3524a590f469b80476951a22fbc6e441a470b9270079a8c1d452c4a38`）重新签名，包名不变，覆盖升级，数据保留。
 
+## 发布结果
+
+- GitHub Release（[Run 13](https://github.com/luoz76070-art/MobiCodex/actions/runs/43574485056)）：APK 62,663,961 字节，SHA256 `5209578b7d05ff55…`（完整值见 Release 的 `SHA256SUMS`），GitHub Actions 临时证书签名。构建验收的 Capacitor 反射元数据检查通过；字节码中 `Plugin.getPermissionStates` 恢复为正常调用（0.1.9 为 `throw null`）。
+- App 内更新与[下载页](https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/index.html)：同一次构建用原预览证书重签，62,742,324 字节，SHA256 `6756099b294530a60236f0c6397955ebc2e92fec362b27041af59efd68a24c84`。更新清单 latest 为 code12，previous 保留 code11。
+- 对应源码 25,135,236 字节，SHA256 `e6be61212aac7bba…`（完整值见 `source/latest.json`）。
+- 发布前在 API 36 模拟器上覆盖安装重签 APK（0.1.9 → 0.1.10，数据保留）：电脑页点「开始录音」弹出系统麦克风权限框，允许后开始录音，结束后转写与整理正常，全程无崩溃；用户消息气泡为淡色。模拟器使用本地合成网关，不代表真机语音服务验收。
+- 公网核对：APK 与源码完整回下载逐字节一致，APK 支持 Range（206）与 CORS，App 自带的清单解析读出 code12；旧 Android、preview、热更新通道未改动。
+
 ## 本版内容（相对 0.1.9）
 
 - **语音闪退修复**：0.1.9 点「开始录音」会让 App 崩溃，系统随即把主界面拉起来，看起来像跳到了设置。原因是发布版 R8 优化掉了 Capacitor 读取插件注解的字段，权限检查变成空指针。现保留 Capacitor 运行时；构建验收新增检查，APK 里缺这些反射元数据时直接失败。Kelivo 设置里的「语音识别」服务于 AI 页，与电脑页语音互不相关。
@@ -27,6 +35,6 @@ GitHub Release 里的 APK 由 GitHub Actions 构建，使用构建机临时生�
 
 ## 验证
 
-发布提交上：类型检查、lint、构建、插件构建通过；后端 538 项、手机网页 424 项、语音 140 项通过。语音闪退在 API 36 模拟器上复现并从 APK 字节码确认根因；修复后的 APK 在发布前先在模拟器上验证录音权限流程不再崩溃。Dart 分析、Flutter 测试、Android lint/单元测试与构建由发布工作流执行。
+发布提交上：类型检查、lint、构建、插件构建通过；后端 538 项、手机网页 424 项、语音 140 项通过。语音闪退在 API 36 模拟器上复现并从 APK 字节码确认根因；修复后的 APK 已在发布前于模拟器上验证（见上方发布结果）。Dart 分析、Flutter 测试、Android lint/单元测试与构建由发布工作流执行。
 
 整合发行按随附 GNU AGPL v3 提供，Kelivo 固定 v1.3.4（4a7da9b6）及原 MIT/第三方声明随源码保留；许可证及内部兼容标识不做品牌替换。

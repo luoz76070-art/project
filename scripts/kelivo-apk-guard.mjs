@@ -3,6 +3,7 @@
 // permission check to `throw null`, so starting a voice recording crashed the
 // app. A kept bridge leaves these names in the dex string pool.
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,7 +24,7 @@ export function assertCapacitorReflectionKept(apk) {
   if (missing.length) throw new Error(`R8 stripped Capacitor reflection metadata (${missing.join(', ')}); voice permission checks would crash. Check integrations/kelivo/remote-android/consumer-rules.pro.`);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && fs.realpathSync(path.resolve(process.argv[1])) === fs.realpathSync(fileURLToPath(import.meta.url))) {
   try { assertCapacitorReflectionKept(process.argv[2]); console.log('[kelivo] Capacitor reflection metadata kept'); }
   catch (error) { console.error(`[kelivo] ${error.message}`); process.exitCode = 1; }
 }
