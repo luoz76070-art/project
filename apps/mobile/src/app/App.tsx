@@ -1,3 +1,5 @@
+import { SidebarScrim } from "../features/threads/SidebarScrim";
+import { DisclosureSummary } from "../shared/DisclosureSummary";
 import { migrateHandoff } from '../features/product/handoffMigration';
 import { HandoffMigrationNotice } from '../features/product/HandoffMigrationNotice';
 import { useDeviceRevoked } from "../features/connection/useDeviceRevoked";
@@ -141,7 +143,8 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
   const [showToken, setShowToken] = useState(false);
   const [copied, setCopied] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => !selected && !isNewThread);
+  const previousSplitMode = useRef(splitMode);
   const [settingsOpen, setSettingsOpen] = useState(() => isKelivoHost && takeProductSettingsLaunch());
   const [copyingMessageDiagnostics, setCopyingMessageDiagnostics] = useState(false);
   const [messageDiagnosticsStatus, setMessageDiagnosticsStatus] = useState("");
@@ -1344,7 +1347,8 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
 
   useEffect(() => {
     localStorage.setItem("splitMode", splitMode);
-    setSidebarOpen(false);
+    if (previousSplitMode.current !== splitMode) setSidebarOpen(false);
+    previousSplitMode.current = splitMode;
     window.setTimeout(() => {
       forceBottomRef.current = true;
       scrollMessagesToBottom(false);
@@ -1732,7 +1736,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
       </header>
 
       <section className="workspace-grid" ref={workspaceGridRef}>
-        <aside ref={sidebarRef} className={`thread-sidebar glass-surface ${sidebarOpen || (!selected && !isNewThread) ? "open" : ""}`}>
+        <aside ref={sidebarRef} className={`thread-sidebar glass-surface ${sidebarOpen ? "open" : ""}`}>
           <div className="sidebar-top">
             <div className="sidebar-title">
               <PanelLeft size={18} />
@@ -1962,7 +1966,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
         </section>
       </section>
 
-      <div className={`mobile-scrim ${sidebarOpen ? "show" : ""}`} onClick={() => setSidebarOpen(false)} />
+      <SidebarScrim open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className={`settings-scrim ${settingsOpen ? "show" : ""}`} onClick={() => setSettingsOpen(false)} />
 
       <aside className={`settings-sheet glass-surface ${settingsOpen ? "open" : ""}`} aria-label="设置">
@@ -2037,7 +2041,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
         </section>
 
         {settingsOpen && <section className="settings-section"><VoiceSettings endpoint={endpoint} token={token} /></section>}
-        <section className="settings-section"><details className="settings-disclosure"><summary>会话显示诊断</summary>
+        <section className="settings-section"><details className="settings-disclosure"><DisclosureSummary>会话显示诊断</DisclosureSummary>
           <p className="update-note">出现显示或连接问题时，可复制不超过 2 KB 的摘要。详细报告单独保存为文件，最多 64 KB。仅含版本、身份指纹、数量及连接状态，不含正文、附件路径或密钥。</p>
           <div className="settings-actions"><button className="action-button" disabled={!selected?.id || copyingMessageDiagnostics} onClick={() => void exportMessageDiagnostics("copy")}>
             {copyingMessageDiagnostics ? <Loader2 size={16} className="spin" /> : <Copy size={16} />}
@@ -2046,7 +2050,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
           <button className="action-button" disabled={!selected?.id || copyingMessageDiagnostics} onClick={() => void exportMessageDiagnostics("file")}><Download size={16} /><span>保存详细报告</span></button></div>
           {messageDiagnosticsStatus && <p className="update-note" role="status">{messageDiagnosticsStatus}</p>}
         </details></section>
-        {isKelivoHost ? <section className="settings-section"><h3>应用版本</h3><p>{appVersionLabel}</p><button className="action-button" onClick={() => window.dispatchEvent(new Event(productOpenUpdates))}><Download size={18} /><span>应用更新</span></button></section> : <section className="settings-section"><details className="settings-disclosure"><summary>版本与更新</summary>
+        {isKelivoHost ? <section className="settings-section"><h3>应用版本</h3><p>{appVersionLabel}</p><button className="action-button" onClick={() => window.dispatchEvent(new Event(productOpenUpdates))}><Download size={18} /><span>应用更新</span></button></section> : <section className="settings-section"><details className="settings-disclosure"><DisclosureSummary>版本与更新</DisclosureSummary>
           <div className="version-card">
             <span>手机版本</span>
             <strong>{appVersionLabel}</strong>

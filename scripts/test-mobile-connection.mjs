@@ -33,7 +33,7 @@ const { saveThreadRuntimeCache, loadThreadRuntimeCache, readThreadMessageCacheFo
 const { makeMessageDiagnostics } = await moduleFrom('features/chat/messageDiagnostics.ts');
 const { offlineAgent, agentDelivery, agentHistoryWindow, reconcileAgentDraft, verifyAgentSnapshot, loadAgentDrafts, saveAgentDrafts } = await moduleFrom('features/agents/runtime.ts');
 const { agentDraftParts, composeAgentDraft } = await moduleFrom('features/agents/drafts.ts');
-const { groupByProject, projectGroupKey, sessionInRange, retainCodexThread } = await moduleFrom('features/threads/model.ts');
+const { groupByProject, projectGroupKey, sessionInRange, retainCodexThread, pathTail, shortPath } = await moduleFrom('features/threads/model.ts');
 const { loadProjectGroups, saveProjectGroups } = await moduleFrom('features/threads/projectPreferences.ts');
 const { groupMessageProcesses } = await moduleFrom('features/chat/processGroups.ts');
 const { reconcileMessages } = await moduleFrom('features/chat/messageReconciliation.ts');
@@ -911,4 +911,14 @@ test('native HTTP 401 blocks polling and suppresses a successful in-flight respo
   await assert.rejects(late, { status: 401 });
   await assert.rejects(apiGet(`${endpoint}/api/connection`, token), { status: 401 });
   assert.equal(calls, 2); assert.equal(relayAuthorization(endpoint, token).isRevoked(), true);
+});
+
+
+test('U10 displayed thread paths use forward slashes for Windows and POSIX inputs', () => {
+  assert.equal(pathTail('/Users/test/workspace/codex-to-phone'), 'workspace/codex-to-phone');
+  assert.equal(pathTail(String.raw`C:\Users\test\workspace\codex-to-phone`), 'workspace/codex-to-phone');
+  assert.equal(shortPath(String.raw`C:\work\app`), 'C:/work/app');
+  const long = shortPath(String.raw`C:\Users\test\a-very-long-parent-directory\workspace\codex-to-phone`);
+  assert.ok(long.startsWith('...')); assert.ok(long.endsWith('workspace/codex-to-phone'));
+  assert.ok(!long.includes('\\')); assert.ok(long.length <= 44);
 });

@@ -48,7 +48,7 @@ Codex用户历史也保留sourceItemId与原metadata.turn_id；Desktop用户投�
 
 语音设置允许填写DeepSeek HTTPS Base URL和供应商模型ID，保存后清空Key框，地址变化不得隐式复用原Key；旧网关缺少地址字段时提示更新网关。百炼继续使用地域选择。
 
-APK28语音入口为composer/agent-input内发送旁的44px独立按钮；仅打开时portal挂载遮罩。latest-pill位于relative的composer-panel上方，按footer实际高度定位，不能使用固定bottom或覆盖其他输入控件。输入增高、通知、附件和待发列表都不能改变按钮各自的点击归属。
+APK28语音入口为composer/agent-input内发送旁的44px独立按钮；仅打开时portal挂载遮罩。U10将latest-pill放在composer-panel正常文档流中独立占位，右对齐并沿用U0卡片底色/阴影，不能绝对定位覆盖正文或其他输入控件。输入增高、通知、附件和待发列表都不能改变按钮各自的点击归属。
 
 Codex原生运行中“引导发送/排队发送”直接提交当前草稿，不再是方式选择器；箭头与快捷键默认queue。模式和guard在点击时捕获，不能因异步状态变化静默换动作。队列能力缺失时禁用排队及默认箭头，显式steer仍可用。native草稿/附件在HTTP提交前保留，只有匹配的权威接收或入队确认才按完整正文比较后清空；提交期间的新编辑必须保留。ACK/未知保持输入并锁定重复提交，不投影为已接收气泡。HTTP/SSE共用确认合并，迟到回执不能清除另一提交的标识，迟到HTTP错误不能推翻已入队/执行证据。瞬态desktopSendFeedback仅在当前工作区显示，不写缓存。queue-message仅表示网关保存，不插入已执行气泡；待发仅从control.queue渲染，可展开全文，waiting/paused可取消、sending/uncertain不可假撤回。已入队内容不会随新草稿的发送动作转换。队列能力与正文不写手机持久控制缓存；有待发的旧会话保留在近期列表。
 
@@ -76,3 +76,5 @@ Codex 与 AgentWorkspace 共用 ComputerComposer、uploadAttachments、MessageTi
 Agent 附件沿原 /api/uploads，元数据序列化到原有有界草稿字符串的完整「已上传附件」尾段（文件名 | 绝对路径）；解析只接受完整绝对路径列表，不剥离普通示例。连接/Agent/session 隔离，确认只清匹配草稿，发送期间新编辑保留，未知结果不重发。上传中、关键存储失败阻止产品导航/返回；卸载取消请求并回收预览 URL，不把 blob URL 写进持久化。SSE 不应覆盖本地上传或存储错误。
 
 MessageMediaProvider 目标为 threadId 或 agentId+sessionId 的互斥联合，所有通道共用鉴权取图、错误映射、重试、大图及原尺寸；目标/凭证改变中止旧请求并清旧图。未来适配器仍须保证已订阅原会话的权威绝对 directory，手机不能上传根目录。
+
+U10：消息中的本地Markdown文件链接显示为不可导航的文件名标签，完整目的路径放title；只HTTP(S)链接可作外链，代码块/行内代码保持原文。路径展示统一正斜杠，不改变原始路径或项目持久化身份。抽屉侧栏和遮罩同读sidebarOpen，无选中项仅用于初始化；关闭后不隐式重开，分屏切换仍关闭抽屉。遮罩浅深色复用--scrim。设置details保留原生展开/键盘操作，summary使用共享Lucide箭头并隐藏原生marker。

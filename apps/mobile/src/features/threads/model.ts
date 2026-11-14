@@ -24,6 +24,7 @@ export function mergeThreads(...groups: ThreadSummary[][]) {
 }
 
 export function shortPath(value: string) {
+  value = value.replace(/\\/gu, "/");
   if (value.length <= 44) return value;
   return `...${value.slice(-41)}`;
 }
@@ -82,7 +83,7 @@ export function pathTail(value: string | null | undefined) {
   const normalized = normalizePathText(value);
   if (!isUsefulThreadDetail(normalized) || normalized === "." || normalized === "~") return "";
   const parts = normalized.split(/[\\/]+/).filter(Boolean);
-  const tail = parts.slice(-2).join("\\");
+  const tail = parts.slice(-2).join("/");
   return isUsefulThreadDetail(tail) ? tail : "";
 }
 

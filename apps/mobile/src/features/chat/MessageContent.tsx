@@ -1,17 +1,32 @@
 import { Fragment, useMemo, type ReactNode } from "react";
 import { MessageImage } from "./MessageImage";
 
+function localFileName(destination: string) {
+  // A file reference is display-only: never navigate or fetch its destination.
+  if (!destination || /[\u0000-\u001f]/u.test(destination) || destination.startsWith("//")) return null;
+  const windowsPath = /^[a-z]:[\\/]/iu.test(destination);
+  if (/^[a-z][a-z\d+.-]*:/iu.test(destination) && !windowsPath && !/^file:/iu.test(destination)) return null;
+  if (!windowsPath && !/^(?:file:|[./~\\])|[/\\]|\.[a-z\d]+(?:[:#].*)?$/iu.test(destination)) return null;
+  let path = destination.replace(/^file:\/\//iu, "");
+  try { path = decodeURIComponent(path); } catch { /* Keep malformed escapes as visible text. */ }
+  return path.replace(/\\/gu, "/").replace(/(?:#L\d+(?:-L?\d+)?|:\d+(?::\d+)?)$/u, "").split("/").filter(Boolean).at(-1) || null;
+}
+
 function inline(text: string): ReactNode[] {
   // Bound inline matching work on unusually long or malformed Markdown lines.
   if (text.length > 8192) return [text];
   // Raw HTML is rendered as text.
-  return text.split(/(`[^`\n]+`|!\[[^\]\n]*\]\(\s*(?:<[^>\n]+>|(?:[^()\n]|\([^()\n]*\))+?)\s*\)|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^\s)]+\))/g).map((part, index) => {
+  return text.split(/(`[^`\n]+`|!\[[^\]\n]*\]\(\s*(?:<[^>\n]+>|(?:[^()\n]|\([^()\n]*\))+?)\s*\)|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\(\s*(?:<[^>\n]+>|(?:[^()\n]|\([^()\n]*\))+?)\s*\))/g).map((part, index) => {
     if (part.startsWith("`")) return <code key={index}>{part.slice(1, -1)}</code>;
     const image = /^!\[([^\]\n]*)\]\(\s*(.*?)\s*\)$/u.exec(part);
     if (image) return <MessageImage key={index} source={image[2]} alt={image[1]} />;
     if (part.startsWith("**")) return <strong key={index}>{part.slice(2, -2)}</strong>;
-    const link = /^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/.exec(part);
-    return link ? <a key={index} href={link[2]} target="_blank" rel="noreferrer">{link[1]}</a> : part;
+    const link = /^\[([^\]]+)\]\(\s*(.*?)\s*\)$/u.exec(part);
+    if (!link) return part;
+    const destination = link[2].replace(/^<|>$/gu, "");
+    if (/^https?:\/\//iu.test(destination)) return <a key={index} href={destination} target="_blank" rel="noreferrer">{link[1]}</a>;
+    const name = localFileName(destination);
+    return name ? <span key={index} className="local-file-tag" title={destination}>{name}</span> : part;
   });
 }
 
