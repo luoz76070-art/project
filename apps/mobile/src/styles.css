@@ -2098,6 +2098,21 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .message-content h3 { margin: var(--space-20) 0 var(--space-8); font-size: var(--font-size-17); line-height: 1.5; }
 .message-content ul, .message-content ol { padding-left: var(--space-24); margin: var(--space-12) 0; }
 .message-content li + li { margin-top: var(--space-8); }
+.message-content li > ul, .message-content li > ol { margin: var(--space-4) 0 0; }
+.message-content h4 { margin: var(--space-16) 0 var(--space-8); font-size: inherit; line-height: 1.5; }
+.message-content blockquote { margin: var(--space-12) 0; padding: var(--space-4) 0 var(--space-4) var(--space-12); border-left: 3px solid var(--hairline); color: var(--muted); }
+.message-content blockquote p { margin-bottom: var(--space-8); }
+.message-content hr { height: 0; margin: var(--space-20) 0; border: 0; border-top: 1px solid var(--hairline); }
+.message-content del { color: var(--muted); }
+/* Model tables keep their columns and scroll sideways instead of squeezing on a phone. */
+.message-content .table-scroll { max-width: 100%; margin: var(--space-12) 0; overflow-x: auto; border: 1px solid var(--hairline); border-radius: var(--radius-12); }
+.message-content table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: calc(var(--font-size-13) * var(--remote-chat-scale, 1)); line-height: 1.5; }
+.message-content th, .message-content td { min-width: 88px; max-width: 240px; padding: var(--space-8) var(--space-12); border-bottom: 1px solid var(--hairline); text-align: left; vertical-align: top; }
+.message-content th { background: var(--panel-soft); font-weight: 600; }
+.message-content th + th, .message-content td + td { border-left: 1px solid var(--hairline); }
+.message-content tbody tr:last-child td { border-bottom: 0; }
+.message-content .align-center { text-align: center; }
+.message-content .align-right { text-align: right; }
 .message-content code { font-family: var(--font-mono); font-size: calc(var(--font-size-13) * var(--remote-chat-scale, 1)); background: var(--accent-soft); border-radius: var(--radius-8); padding: var(--space-4) var(--space-4); }
 .message-content a { color: var(--accent); text-underline-offset: 3px; }
 .code-block { min-width: 0; margin: var(--space-16) 0; border: 1px solid var(--hairline); background: var(--bg-2); border-radius: var(--radius-12); overflow: hidden; }
@@ -2309,9 +2324,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .product-remote-shell .message-author strong { color: var(--message-author); font-weight: 400; }
 .product-remote-shell .message-author time { font-size: var(--font-size-12); line-height: 1.4; }
 .product-remote-shell .from-user .message-identity { display: none; }
-.product-remote-shell .user-message-text { padding: var(--space-12) var(--space-16); line-height: 1.45; }
+.product-remote-shell .user-message-text { padding: var(--space-12) var(--space-16); font-size: calc(var(--font-size-15) * var(--remote-chat-scale, 1)); line-height: 1.5; }
 .product-remote-shell .message-content { line-height: 1.6; }
 .product-remote-shell .message-content li::marker { color: var(--subtle); }
+.product-remote-shell .message-content ul, .product-remote-shell .message-content ol { padding-left: var(--space-20); }
+.product-remote-shell .message-content h3 { margin: var(--space-16) 0 var(--space-8); font-size: calc(var(--font-size-17) * var(--remote-chat-scale, 1)); }
 .product-remote-shell .process-toggle { min-height: 44px; padding: var(--space-8) var(--space-12); border: 1px solid var(--hairline); border-radius: var(--radius-16); background: var(--composer-surface); color: var(--muted); }
 .product-remote-shell .process-content { gap: var(--space-24); margin-top: var(--space-20); padding: 0; border-radius: 0; background: transparent; }
 .product-remote-shell .composer-panel { margin: var(--space-8) var(--space-12) var(--space-4); }
@@ -2397,6 +2414,10 @@ input, textarea { caret-color: var(--signal); }
 .from-assistant .message-avatar { position: absolute; left: 0; top: 0; width: 24px; height: 24px; background: transparent; }
 .from-user .message-identity { display: none; }
 .message-bubble.assistant-continuation { margin-top: calc(-1 * var(--space-8)); }
+/* Kelivo host: assistant prose uses the full width; the avatar sits inline with the name. */
+.product-remote-shell .message-bubble.from-assistant { padding-left: 0; }
+.product-remote-shell .message-bubble.from-assistant .message-identity { gap: var(--space-8); margin-bottom: var(--space-8); }
+.product-remote-shell .from-assistant .message-avatar { position: static; flex: 0 0 24px; }
 .message-meta { display: flex; align-items: center; gap: var(--space-8); color: var(--subtle); font-size: var(--font-size-12); }
 .message-meta .copy-icon { width: 44px; min-width: 44px; height: 44px; color: var(--muted); }
 .message-copy-feedback { color: var(--muted); font-size: var(--font-size-12); }

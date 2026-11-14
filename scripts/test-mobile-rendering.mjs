@@ -221,6 +221,39 @@ test('U10 file labels preserve HTTP links, literal code and unsupported schemes'
   assert.match(html, /\[bad\]\(javascript:alert\(1\)\)/);
 });
 
+test('U12 GFM tables render as scrollable tables with alignment, inline Markdown and bounded cells', () => {
+  const html = render(h(MessageContent, { text: '| 模块 | 状态 | 说明 |\n| :--- | :---: | ---: |\n| 网关 | **已上线** | `0.2.8` |\n| 桥接 | a \\| b |\n| 手机 | 待验收 | 安装 | 多余 |\n紧随段落' }));
+  assert.match(html, /^<div class="message-content"><div class="table-scroll"><table><thead><tr><th>模块<\/th><th class="align-center">状态<\/th><th class="align-right">说明<\/th><\/tr><\/thead>/);
+  assert.match(html, /<td class="align-center"><strong>已上线<\/strong><\/td><td class="align-right"><code>0.2.8<\/code><\/td>/);
+  assert.match(html, /<td>桥接<\/td><td class="align-center">a \| b<\/td><td class="align-right"><\/td>/);
+  assert.doesNotMatch(html, /多余|\| ---|:---:/);
+  assert.equal((html.match(/<tr>/g) ?? []).length, 4);
+  assert.match(html, /<\/table><\/div><p>紧随段落<\/p><\/div>$/);
+  // Pipes without a delimiter row, or with a mismatched one, stay prose.
+  for (const text of ['a | b\nc | d', '| a | b |\n| --- |', '| a |\n---']) assert.doesNotMatch(render(h(MessageContent, { text })), /<table/, text);
+});
+
+test('U12 nested and loose lists keep structure and numbering; rules, quotes, h4 and emphasis render', () => {
+  const lists = render(h(MessageContent, { text: '- 一\n  - 一甲\n    - 一甲子\n- 二\n  续行\n* 换符号另起\n\n1. 真机验收\n\n2. 补充测试\n   1. 渲染\n3. 收尾\n\n5) 从五开始\n6) 六' }));
+  assert.match(lists, /^<div class="message-content"><ul><li>一<ul><li>一甲<ul><li>一甲子<\/li><\/ul><\/li><\/ul><\/li><li>二<br\/>续行<\/li><\/ul><ul><li>换符号另起<\/li><\/ul><ol>/);
+  assert.match(lists, /<ol><li>真机验收<\/li><li>补充测试<ol><li>渲染<\/li><\/ol><\/li><li>收尾<\/li><\/ol><ol start="5"><li>从五开始<\/li><li>六<\/li><\/ol><\/div>$/);
+  const blocks = render(h(MessageContent, { text: '段落\n---\n#### 小节\n\n> 备注：*重点* 与 ~~旧~~\n> - 引用列表\n\n* * *\n\n2 * 3 * 4 和 ** 不是粗体 **' }));
+  assert.match(blocks, /<p>段落<\/p><hr\/><h4>小节<\/h4><blockquote><p>备注：<em>重点<\/em> 与 <del>旧<\/del><\/p><ul><li>引用列表<\/li><\/ul><\/blockquote><hr\/>/);
+  assert.match(blocks, /<p>2 \* 3 \* 4 和 \*\* 不是粗体 \*\*<\/p>/);
+  const fenced = render(h(MessageContent, { text: '1. 步骤\n   ```sh\n   pnpm test\n   ```\n2. 下一步' }));
+  assert.match(fenced, /<ol><li>步骤<\/li><\/ol><div class="code-block"><small>sh<\/small><pre><code>pnpm test<\/code><\/pre><\/div><ol start="2"><li>下一步<\/li><\/ol>/);
+});
+
+test('U12 Kelivo shell: user text matches assistant size, assistant prose is full width, tables scroll', async () => {
+  const css = await fs.readFile(path.join(root, 'apps/mobile/src/styles.css'), 'utf8');
+  assert.match(css, /\.product-remote-shell \.user-message-text \{[^}]*font-size: calc\(var\(--font-size-15\) \* var\(--remote-chat-scale, 1\)\)/);
+  assert.match(css, /\.product-remote-shell \.message-bubble\.from-assistant \{ padding-left: 0; \}/);
+  assert.match(css, /\.product-remote-shell \.from-assistant \.message-avatar \{ position: static;/);
+  assert.match(css, /\.message-content \.table-scroll \{[^}]*overflow-x: auto;/);
+  assert.match(css, /\.message-content table \{ width: max-content; min-width: 100%;/);
+  assert.match(css, /\.message-content th, \.message-content td \{ min-width: 88px; max-width: 240px;/);
+});
+
 test('U10 sidebar scrim has an accessible close action and follows the same open state as the sidebar', async () => {
   let closed = 0;
   const opened = SidebarScrim({ open: true, onClose: () => closed++ });

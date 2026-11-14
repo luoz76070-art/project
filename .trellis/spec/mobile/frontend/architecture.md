@@ -79,6 +79,8 @@ MessageMediaProvider 目标为 threadId 或 agentId+sessionId 的互斥联合，
 
 U10：消息中的本地Markdown文件链接显示为不可导航的文件名标签，完整目的路径放title；只HTTP(S)链接可作外链，代码块/行内代码保持原文。路径展示统一正斜杠，不改变原始路径或项目持久化身份。抽屉侧栏和遮罩同读sidebarOpen，无选中项仅用于初始化；关闭后不隐式重开，分屏切换仍关闭抽屉。遮罩浅深色复用--scrim。设置details保留原生展开/键盘操作，summary使用共享Lucide箭头并隐藏原生marker。
 
+U12：消息Markdown支持GFM表格（必须有含竖线的分隔行且列数一致；对齐用align-center/align-right类，不用内联style；`\|`为字面竖线；行内Markdown照常；超过24列截断；多余单元格丢弃、缺的补空）、引用（最多三层，更深按段落）、分隔线、####以下小标题（h4）、`*斜体*`与`~~删除线~~`（定界符须贴字，`2 * 3 * 4`保持原文）。列表按缩进嵌套（比父项多≥2列，最多四层），空行后接列表项仍是同一列表，有序列表用start保留起始编号，换符号或分隔符另起列表；列表内缩进代码块结束列表后单独显示。表格放.table-scroll横向滚动：table宽为max-content且不小于容器，单元格88–240px。Kelivo宿主里用户消息与助手正文同字号（15×remote-chat-scale），助手正文不留头像缩进，头像与名字同一行。
+
 U11：线程行由ThreadRow展示标题/时间，项目路径只留分组标题（同名项目仍有消歧路径）。全部筛选隐藏常规桌面来源，手机/CLI/Exec/未知保留小标签；desktop隐藏桌面，relay隐藏appServer，其他来源显式保留。all/desktop/relay过滤语义不变，不将CLI伪称手机。当前桌面的唯一标记保留。连接检测只留设置的手动连接区；更早会话保留原range行为和44px命中区域，使用文字链接外观。
 
 U1：MessageTimeline 只在展示层标记同 turnId 的非工具助手消息，工具过程卡片不打断该组，用户消息或换 turnId 时重新分组；缺 turnId 的消息仅按相邻助手正文分组。组首显示 Agent 图标/名字，正文和 data-message-id/role 仍逐条保留。用户正文用 --accent-soft（宿主 primaryContainer），助手无气泡。消息可聚焦；点击/聚焦才挂载时间与复制，焦点移入复制按钮不关闭。长按触摸/笔 550ms 复制，移动超过10px、取消、移出、放开、失焦或卸载取消计时；链接/按钮等交互子元素与已有选区不触发整条复制；从 pre、code、.code-block、table 及其子元素开始的长按不启动整条复制计时，这些区域的 contextmenu 不 preventDefault，保留原生文本选择。剪贴板结果必须 await，失败不能报成功，卸载后的结果不更新提示。系统提示使用图标细横幅；工具卡与代码块继续单独分隔。

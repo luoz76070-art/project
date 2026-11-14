@@ -235,6 +235,13 @@ const server = http.createServer(async (req, res) => {
           message('parity-next-note', 'assistant', '执行说明保持直接显示。', 'agent_message', 'commentary')];
         if (complete) snapshot.messages.push(message('parity-final', 'assistant', '检查完成。\n\n![合成验收图片](/synthetic/project/rendering-chart.png)\n\n```ts\nconst parity = true;\n```', 'agent_message', 'final_answer'));
       }
+      if (phase === 'markdown') {
+        // Synthetic final answer with the Markdown shapes DeepSeek uses most: headings, lists, tables.
+        const message = (id, role, text, kind, phase) => ({ id, role, text, kind, phase, turnId: 'markdown-turn', timestamp: '2026-11-14T00:00:00Z' });
+        snapshot.status = 'idle'; snapshot.control.canInterrupt = false; snapshot.historyCursor = null;
+        snapshot.messages = [message('markdown-user', 'user', '总结一下项目现状', 'user_message'),
+          message('markdown-final', 'assistant', '## 项目现状\n\n整体进展顺利，以下是*要点*。\n\n### 已完成\n\n- 手机端语音修复\n- DeepSeek 桥接升级\n  - 兼容新版宿主\n  - 回合对应\n- 事项进度自动回写\n\n---\n\n### 下一步\n\n1. 真机验收\n\n2. 补充测试\n   1. 渲染测试\n3. ~~旧方案~~ 已放弃\n\n| 模块 | 状态 | 说明 |\n| --- | :---: | --- |\n| 网关 | 已上线 | 新版本运行中 |\n| 桥接 | 已上线 | `0.2.8` |\n| 手机 | 待验收 | 等待安装 |\n\n| 渠道 | 版本 | 状态 | 负责人 | 备注 |\n|---|---|---|---|---|\n| Codex 桌面端 | 26.11 | 正常 | 自动 | 支持回合对应和自动转待验证，长备注在最大列宽内换行 |\n| DeepSeek | 0.2.2-rc.3 | 正常 | 自动 | 合成数据 |\n\n> 备注：以上为合成数据。\n> 第二行引用。\n\n结论：可以继续推进。', 'agent_message', 'final_answer')];
+      }
       if (agentId === 'deepseek' && phase === 'history') {
         states.get(name).deepseekHistory = true; snapshot.status = 'idle'; snapshot.control.canSteer = false; snapshot.control.canInterrupt = false;
         snapshot.messages = Array.from({ length: 40 }, (_, i) => ({ id: `history-${960 + i}`, role: i % 2 ? 'assistant' : 'user', text: `合成历史消息 ${960 + i}`, kind: i % 2 ? 'agent_message' : 'user_message', timestamp: new Date(1760000000000 + (960 + i) * 1000).toISOString() }));
