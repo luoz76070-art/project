@@ -1,4 +1,5 @@
 import { SystemNotice } from "../shared/SystemNotice";
+import { WorkItemsPage } from "../features/workItems/WorkItemsPage";
 import { ThreadRow } from "../features/threads/ThreadRow";
 import { SidebarScrim } from "../features/threads/SidebarScrim";
 import { DisclosureSummary } from "../shared/DisclosureSummary";
@@ -44,7 +45,7 @@ import { ApkUpdateProgress } from "../features/updates/ApkUpdateProgress";
 import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mimeTypeFromName, revokeAttachmentPreviews } from "../features/chat/attachments";
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
 import { clamp, applyTheme } from "../shared/preferences";
-import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, Plus, ArrowUp, ChevronDown, Download } from "lucide-react";
+import { ListTodo, Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, MessageSquare, Copy, Activity, CircleStop, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, ArrowUp, ChevronDown, Download } from "lucide-react";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { MessageBubble, MessageTimeline, ApprovalCard, AttachmentTray } from "../features/chat/components";
 import { MessageMediaProvider } from "../features/chat/MessageImage";
@@ -72,6 +73,7 @@ export function App() {
   const [handoffTarget, setHandoffTarget] = useState<HandoffTarget | null>(null);
   const targetOpened = useCallback(() => setHandoffTarget(null), []);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [itemsOpen, setItemsOpen] = useState(false), [openItemUid, setOpenItemUid] = useState<string | null>(null);
   const recoveredVoice = useVoiceRecovery(scope, normalizeEndpoint(connection.endpoint), connection.token);
   const [agentMode, setAgentMode] = useState(() => { try { return isKelivoHost && localStorage.getItem("productRemoteMode") === "agent"; } catch { return false; } });
   const [handoff, setHandoff] = useState<ProductHandoff | null>(null);
@@ -88,11 +90,11 @@ export function App() {
     try { localStorage.setItem("productRemoteMode", "codex"); } catch { /* The current settings page is still usable. */ }
   }, []);
   function openHandoffTarget(target: HandoffTarget) {
-    setCaptureOpen(false); setHandoffTarget(target); selectAgentMode(target.agentId !== 'codex');
+    setCaptureOpen(false); setItemsOpen(false); setHandoffTarget(target); selectAgentMode(target.agentId !== 'codex');
   }
-  return <ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff}><CapturePanel onOpenTarget={openHandoffTarget} open={captureOpen} onClose={() => setCaptureOpen(false)} key={`capture:${scope}:${connection.token}`} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} />{agentMode
-    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setCaptureOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => selectAgentMode(false)} /></React.Suspense>
-    : <Workspace handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setCaptureOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}
+  return <ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff}><WorkItemsPage open={itemsOpen} onClose={() => setItemsOpen(false)} onNew={() => { setOpenItemUid(null); setCaptureOpen(true); }} onOpenItem={uid => { setOpenItemUid(uid); setCaptureOpen(true); }} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} /><CapturePanel itemUid={openItemUid} onOpenTarget={openHandoffTarget} open={captureOpen} onClose={() => setCaptureOpen(false)} key={`capture:${scope}:${connection.token}`} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} />{agentMode
+    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => selectAgentMode(false)} /></React.Suspense>
+    : <Workspace handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}
     {recoveredVoice.notice && createPortal(<div className="voice-scrim"><section className="voice-sheet" role="dialog" aria-modal="true" aria-label="语音结果已取回">
         <header><strong>语音结果已取回</strong></header>
         <p>{recoveredVoice.notice.message}</p>
@@ -1730,7 +1732,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
           </div>
         </div>
         <div className="top-actions">
-          <button className="icon-button" onClick={onCapture} aria-label="新建事项" title="新建事项"><Plus size={18} /></button>
+          <button className="icon-button" onClick={onCapture} aria-label="事项" title="事项"><ListTodo size={18} /></button>
           <button className="icon-button" onClick={onOpenAgents} aria-label="切换 Agent"><Server size={18} /></button>
           <button className="icon-button" onClick={() => void loadThreads()} aria-label="刷新线程">
             <RefreshCcw size={18} className={loading ? "spin" : ""} />

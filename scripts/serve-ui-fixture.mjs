@@ -28,6 +28,16 @@ if (!Number.isSafeInteger(nativeVersionCode) || nativeVersionCode < 1) throw new
 let apkState = { supported: true, revision: 0, phase: 'idle', receivedBytes: 0, totalBytes: 8388608, versionCode: nativeVersionCode + 1, versionName: `${nativeVersionCode + 1}-ui-fixture`, nativeVersionCode, canInstall: false, error: '' };
 const apkCounters = { downloads: 0, installs: 0 };
 let apkManifestMode = 'available';
+const workItemFixture = (n, state, title, minutesAgo) => ({ uid: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`, revision: 1, kind: 'task', title, state,
+  createdAt: new Date(Date.parse('2026-11-14T02:00:00Z') - minutesAgo * 60000 - 3600000).toISOString(), updatedAt: new Date(Date.parse('2026-11-14T02:00:00Z') - minutesAgo * 60000).toISOString() });
+const workItemFixtures = [
+  workItemFixture(1, 'to_verify', '登录页按钮在窄屏被截断（附截图）', 5), workItemFixture(2, 'to_verify', '把设置页“关于”里的名称改成 MobiCodex', 40),
+  workItemFixture(3, 'in_progress', '修复语音转写后草稿被覆盖的问题，并补充回归测试，确保切换会话后旧结果不会写进新草稿', 12),
+  workItemFixture(4, 'todo', '整理首页图标', 90), workItemFixture(5, 'todo', 'README 补充配对说明', 300),
+  workItemFixture(6, 'done', '更新应用图标为 A1 墨夜琥珀', 1440), workItemFixture(7, 'returned', '试验性的高对比主题', 2880)];
+const fullWorkItem = summary => ({ schemaVersion: 1, ...summary, detail: '合成事项说明。', createdByDeviceId: 'fixture', source: { kind: 'manual' }, assets: [], codeRefs: [], handoffs: [],
+  currentAttempt: { attemptId: summary.uid, channel: null, agentId: null, sessionId: null, cwd: null, clientMessageId: null, turnId: null, delivery: 'none', message: null, lastTurn: null },
+  lastTransition: summary.state === 'to_verify' ? { from: 'in_progress', to: 'to_verify', actor: 'system', at: summary.updatedAt, reason: '本轮已完成。' } : null });
 const states = new Map(['A', 'B'].map(name => [name, {
   userInputs: [], approvals: [], cursor: 100, generation: `fixture-${name}`, turnStatus: 'completed', activity: undefined, messages: [
     { id: `${name}-user`, role: 'user', text: `检查 ${name} 连接的实时消息和历史记录`, kind: 'user_message', timestamp: '2026-10-20T09:00:00Z' },
@@ -507,6 +517,11 @@ const server = http.createServer(async (req, res) => {
         for (const notify of notifications.values()) notify();
         if (state.agentResponseDelay) { setTimeout(() => json(res, { ok: true, delivery }), state.agentResponseDelay); return; }
         return json(res, { ok: true, delivery });
+      }
+      if (route === '/api/work-items' && req.method === 'GET') return json(res, { storeId: 'fixture-store', storeRevision: 1, items: url.searchParams.get('state') ? workItemFixtures.filter(item => item.state === url.searchParams.get('state')) : workItemFixtures, nextCursor: null });
+      if (/^\/api\/work-items\/[0-9a-f-]{36}$/.test(route) && req.method === 'GET') {
+        const summary = workItemFixtures.find(item => item.uid === route.split('/').pop());
+        return summary ? json(res, { storeId: 'fixture-store', storeRevision: 1, item: fullWorkItem(summary) }) : json(res, { error: 'work_item_not_found' }, 404);
       }
       if (route === '/api/status') return json(res, { ok: true, desktopControl: { ok: true, mode: state.control ? 'desktop-ipc-follower-control' : 'macos-ui-injector-control' }, live: { ok: true, mode: 'fixture' }, activeDesktopThread: thread(name) });
       if (route === '/api/diagnostics') {

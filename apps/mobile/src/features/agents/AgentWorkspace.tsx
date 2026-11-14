@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { registerVoiceAgentDrafts } from "../voice/draftRecovery";
 import type { VoiceRecoveryPort } from "../voice/useVoiceRecovery";
 import { VoiceInput } from "../voice/VoiceInput";
-import { Plus, ChevronLeft, Loader2, RefreshCcw } from "lucide-react";
+import { ListTodo, ChevronLeft, Loader2, RefreshCcw } from "lucide-react";
 import type { CodexMessage, PendingAttachment } from "../../app/types";
 import { maxMessagesPerThread } from "../../app/config";
 import { MessageBubble, MessageTimeline, AttachmentTray } from "../chat/components";
@@ -127,7 +127,7 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
     <header className="topbar glass-surface">
       <button className="icon-button" aria-label={selected ? "返回 Agent 会话列表" : agent ? "返回 Agent 列表" : "返回 Codex"} onClick={back}><ChevronLeft size={21} /></button>
       <div className="workspace-title"><div><h1>{selected?.title || agent?.label || "选择 Agent"}</h1><p>{selected ? `${agent?.label} · 原服务会话` : "同一连接，分别管理会话"}</p></div></div>
-      <button className="icon-button" aria-label="新建事项" title="新建事项" onClick={onCapture}><Plus size={18} /></button>
+      <button className="icon-button" aria-label="事项" title="事项" onClick={onCapture}><ListTodo size={18} /></button>
       {!selected && <button className="icon-button" aria-label="刷新 Agent 列表" disabled={loading} onClick={() => void (agent ? loadSessions(agent) : loadAgents())}><RefreshCcw size={18} className={loading ? "spin" : ""} /></button>}
     </header>
     {(deviceRevoked || error) && <SystemNotice error>{deviceRevoked ? deviceRevokedMessage : error}</SystemNotice>}

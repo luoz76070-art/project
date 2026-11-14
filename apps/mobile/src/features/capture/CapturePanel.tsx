@@ -12,8 +12,8 @@ import { captureApi, canvasPreview, captureTransaction, type CaptureList, type C
 import { useCaptureVoice } from './useCaptureVoice';
 import './capture.css';
 
-type Props = { onOpenTarget: (target: HandoffTarget) => void; endpoint: string; token: string; scope: string; open: boolean; onClose: () => void };
-export function CapturePanel({ endpoint, token, scope, open, onClose, onOpenTarget }: Props) {
+type Props = { itemUid?: string | null; onOpenTarget: (target: HandoffTarget) => void; endpoint: string; token: string; scope: string; open: boolean; onClose: () => void };
+export function CapturePanel({ itemUid = null, endpoint, token, scope, open, onClose, onOpenTarget }: Props) {
   const [online, setOnline] = useState(() => navigator.onLine);
   const [draftId, setDraftId] = useState(() => crypto.randomUUID());
   const currentDraft = useRef({ draftId, detail: '', writable: false });
@@ -92,6 +92,13 @@ export function CapturePanel({ endpoint, token, scope, open, onClose, onOpenTarg
     }
     setImages(next);
   }
+  // The items page opens a saved card by uid, or asks for a fresh draft; an unsaved new draft is never cleared.
+  useEffect(() => {
+    if (!open) return;
+    if (itemUid && item?.uid !== itemUid) void run(async () => show((await api.get(itemUid)).item));
+    else if (!itemUid && item && !tx.current && !pending.current) reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, itemUid]);
   const controlsDisabled = busy || !connected;
   return <>
     {open && createPortal(<div className="handoff-scrim"><section ref={card} tabIndex={-1} className="handoff-card capture-card" role="dialog" aria-modal="true" aria-labelledby="capture-title" onKeyDown={event => {
