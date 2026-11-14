@@ -1,3 +1,4 @@
+import { SystemNotice } from "../shared/SystemNotice";
 import { ThreadRow } from "../features/threads/ThreadRow";
 import { SidebarScrim } from "../features/threads/SidebarScrim";
 import { DisclosureSummary } from "../shared/DisclosureSummary";
@@ -1862,10 +1863,11 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
               </div>
             )}
             <MessageMediaProvider key={activeThreadKey} endpoint={endpoint} token={token} threadId={activeThreadKey}>
-            <MessageTimeline messages={visibleMessages} running={isLiveTurnActive} renderMessage={(message, expandToolDetails) => (
+            <MessageTimeline messages={visibleMessages} running={isLiveTurnActive} renderMessage={(message, expandToolDetails, assistantContinuation) => (
               <React.Fragment>
                 <MessageBubble
                   message={message}
+                  assistantContinuation={assistantContinuation}
                   expandToolDetails={expandToolDetails}
                   smooth={smoothLatestAssistant && message.id === latestAssistantMessageId}
                   smoothPending={smoothPending && message.id === latestAssistantMessageId}
@@ -1874,7 +1876,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
                     if (activeRuntime.sending || activeRuntime.turnStatus === "starting" || activeRuntime.turnStatus === "inProgress") return;
                     patchRuntime(activeThreadKey, { smoothMessageId: null });
                   }}
-                  onCopy={() => copyText(message.text, message.id)}
+                  onCopy={() => writeClipboard(message.text)}
                 />
                 {showInlineTurnIndicator && inlineTurnIndicator?.messageId === message.id && (
                   <SessionStatus status={turnActivity} anchorRole={message.role} />
@@ -1891,10 +1893,10 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
           </div>
 
           <footer className="composer-panel">
-            {cacheSaveResult.status !== "saved" && <div className="connection-notice cache-save-notice" role={cacheSaveResult.status === "input-failed" ? "alert" : "status"}>
+            {cacheSaveResult.status !== "saved" && <SystemNotice className="cache-save-notice" error={cacheSaveResult.status === "input-failed"}>
               <span>{threadCacheSaveNotice(cacheSaveResult)}</span>
               {cacheSaveResult.status === "input-failed" && <button type="button" className="tool-button" onClick={persistWorkspaceCache}>重试保存</button>}
-            </div>}
+            </SystemNotice>}
           {hasNewMessages && (
             <button className="latest-pill" onClick={jumpToLatest}>
               <Activity size={15} />
@@ -1903,9 +1905,9 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
           )}
 
             {!handoff && <HandoffMigrationNotice migrate={migrateLegacyHandoff} />}
-            {activeRuntime.desktopSubmission && <div className="connection-notice" role="status">提交结果待确认，草稿已保留；请勿重复发送。</div>}
-            {activeRuntime.desktopInterrupt && <div className="connection-notice" role="status">打断结果待确认，正在同步会话。</div>}
-            {(deviceRevoked || streamState === "recovering" || streamState === "unauthorized" || connectionState === "error") && <div className="connection-notice" role="status"><span className="status-dot error" />{deviceRevoked || streamState === "unauthorized" ? deviceRevokedMessage : streamState === "recovering" ? "正在恢复连接，消息与草稿已保留" : "连接暂时不可用，正在检查"}</div>}
+            {activeRuntime.desktopSubmission && <SystemNotice>提交结果待确认，草稿已保留；请勿重复发送。</SystemNotice>}
+            {activeRuntime.desktopInterrupt && <SystemNotice>打断结果待确认，正在同步会话。</SystemNotice>}
+            {(deviceRevoked || streamState === "recovering" || streamState === "unauthorized" || connectionState === "error") && <SystemNotice error={deviceRevoked || streamState === "unauthorized" || connectionState === "error"}>{deviceRevoked || streamState === "unauthorized" ? deviceRevokedMessage : streamState === "recovering" ? "正在恢复连接，消息与草稿已保留" : "连接暂时不可用，正在检查"}</SystemNotice>}
             {pendingApprovals.length > 0 && (
               <div className="approval-stack">
                 {pendingApprovals.map((approval) => (
@@ -1934,7 +1936,7 @@ function Workspace({ voiceRecovery, connection, scope, onApply, onOpenAgents, ha
               </div>)}
               </div>
             </details>}
-            {isLiveTurnActive && nativeDesktop && !canQueue && <p className="connection-notice">排队需要更新网关；可使用引导发送。</p>}
+            {isLiveTurnActive && nativeDesktop && !canQueue && <SystemNotice>排队需要更新网关；可使用引导发送。</SystemNotice>}
             <input ref={uploadInputRef} type="file" multiple className="hidden-file-input" onChange={event => void uploadFiles(event.target.files)} />
             <ComputerComposer draft={draft} onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }}
               onSend={delivery => void sendMessage(delivery)} onStop={() => void interruptActiveTurn()} onUpload={() => uploadInputRef.current?.click()}

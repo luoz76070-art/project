@@ -6,11 +6,12 @@ import { smoothTextFrameMs } from "../../app/config";
 import { type PendingAttachment, type CodexMessage, type LiveApproval, type LiveApprovalDecision } from "../../app/types";
 import { formatFileSize, isImageAttachment, parseMessageAttachments } from "./attachments";
 import { X, ImageIcon, Paperclip, Copy, AlertCircle, Terminal, CheckCircle2, CircleStop, ChevronRight, UserRound, Bot, Info, Loader2 } from "lucide-react";
+import { useMessageInteraction } from "./useMessageInteraction";
 import { MessageContent } from "./MessageContent";
 import { formatMessageTime, formatTime } from "../../shared/format";
 
 export function SmoothText({ text, active, pending, onDone }: { text: string; active: boolean; pending: boolean; onDone?: () => void }) {
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reducedMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const [displayed, setDisplayed] = useState(active && !reducedMotion ? "" : text);
   useEffect(() => {
     if (!active || reducedMotion || !text.startsWith(displayed)) { setDisplayed(text); return; }
@@ -80,39 +81,42 @@ export function MessageBubble({
   onCopy,
   assistantLabel = "Codex",
   expandToolDetails = false,
+  assistantContinuation = false,
 }: {
   message: CodexMessage;
   smooth: boolean;
   smoothPending: boolean;
   onSmoothDone: () => void;
-  onCopy: () => void;
+  onCopy: () => void | boolean | Promise<void | boolean>;
+  assistantContinuation?: boolean;
   assistantLabel?: string;
   expandToolDetails?: boolean;
 }) {
-  if (isToolMessage(message)) return <ToolMessageBubble message={message} onCopy={onCopy} expanded={expandToolDetails} />;
+  const interaction = useMessageInteraction(message.id, onCopy);
+  if (isToolMessage(message)) return <ToolMessageBubble message={message} onCopy={() => void interaction.copy()} copyFeedback={interaction.feedback} expanded={expandToolDetails} />;
   const parsed = parseMessageAttachments(message);
 
   return (
-    <article className={`message-bubble ${roleClass(message.role)}`} data-message-id={message.id} data-message-role={message.role}>
-      <header className="message-identity">
-        <span className="message-avatar" aria-hidden="true">{message.role === "user" ? <UserRound size={18} /> : message.role === "assistant" ? <Bot size={18} /> : <Info size={18} />}</span>
-        <span className="message-author">
-          <strong>{message.role === "assistant" ? assistantLabel : roleLabel(message.role)}</strong>
-          <time dateTime={message.timestamp ?? undefined}>{formatMessageTime(message.timestamp)}</time>
-        </span>
-      </header>
+    <article className={`message-bubble ${roleClass(message.role)}${assistantContinuation ? " assistant-continuation" : ""}`} data-message-id={message.id} data-message-role={message.role}
+      tabIndex={0} aria-label={`${message.role === "assistant" ? assistantLabel : roleLabel(message.role)}消息，聚焦查看时间和复制`} {...interaction.handlers}>
+      {!assistantContinuation && <header className="message-identity">
+        <span className="message-avatar" aria-hidden="true">{message.role === "user" ? <UserRound size={16} /> : message.role === "assistant" ? <Bot size={16} /> : <Info size={16} />}</span>
+        <span className="message-author"><strong>{message.role === "assistant" ? assistantLabel : roleLabel(message.role)}</strong></span>
+      </header>}
       {parsed.text && (message.role === "assistant"
         ? <SmoothText text={parsed.text} active={smooth} pending={smoothPending} onDone={onSmoothDone} />
-        : <p className="user-message-text">{parsed.text}</p>)}
+        : <p className={message.role === "user" ? "user-message-text" : "system-message-text"}>{parsed.text}</p>)}
       <MessageAttachments attachments={parsed.attachments} />
-      <footer className="message-actions">
-        <button className="copy-icon" onClick={onCopy} aria-label={`复制${message.role === "assistant" ? assistantLabel : roleLabel(message.role)}消息`}><Copy size={20} /></button>
-      </footer>
+      {interaction.revealed && <div className="message-meta">
+        <time dateTime={message.timestamp ?? undefined}>{formatMessageTime(message.timestamp)}</time>
+        <button type="button" className="copy-icon" onClick={() => void interaction.copy()} aria-label={`复制${message.role === "assistant" ? assistantLabel : roleLabel(message.role)}消息`}><Copy size={16} /></button>
+      </div>}
+      <span className="message-copy-feedback" role="status" aria-live="polite">{interaction.feedback}</span>
     </article>
   );
 }
 
-type RenderMessage = (message: CodexMessage, expandToolDetails?: boolean) => ReactNode;
+type RenderMessage = (message: CodexMessage, expandToolDetails?: boolean, assistantContinuation?: boolean) => ReactNode;
 
 export function MessageTimeline({ messages, renderMessage, running = false }: { messages: CodexMessage[]; renderMessage: RenderMessage; running?: boolean }) {
   const keyCounts = new Map<string, number>();
@@ -120,10 +124,17 @@ export function MessageTimeline({ messages, renderMessage, running = false }: { 
     const key = messageDisplayKey(message);
     keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
   }
+  // Group only adjacent assistant prose in the same turn; keep each message's identity.
+  const continuations = new Set<CodexMessage>();
+  messages.forEach((message, index) => {
+    const previous = messages[index - 1];
+    if (message.role === "assistant" && !isToolMessage(message) && previous?.role === "assistant" && !isToolMessage(previous) && message.turnId === previous.turnId) continuations.add(message);
+  });
+  const renderGroupedMessage: RenderMessage = (message, expanded) => renderMessage(message, expanded, continuations.has(message));
   const groups = groupMessageProcesses(messages);
   return groups.map((group, index) => group.kind === "message"
-    ? <Fragment key={`message:${(keyCounts.get(messageDisplayKey(group.message)) ?? 0) > 1 ? group.message.id : messageDisplayKey(group.message)}`}>{renderMessage(group.message)}</Fragment>
-    : <MessageProcess key={`process:${group.id}`} messages={group.messages} completed={group.completed} running={running && index === groups.length - 1} renderMessage={renderMessage} />);
+    ? <Fragment key={`message:${(keyCounts.get(messageDisplayKey(group.message)) ?? 0) > 1 ? group.message.id : messageDisplayKey(group.message)}`}>{renderGroupedMessage(group.message)}</Fragment>
+    : <MessageProcess key={`process:${group.id}`} messages={group.messages} completed={group.completed} running={running && index === groups.length - 1} renderMessage={renderGroupedMessage} />);
 }
 
 function MessageProcess({ messages, completed, running, renderMessage }: { messages: CodexMessage[]; completed: boolean; running: boolean; renderMessage: RenderMessage }) {
@@ -162,7 +173,7 @@ function ToolProcess({ messages, completed, running, renderMessage }: { messages
   </section>;
 }
 
-export function ToolMessageBubble({ message, onCopy, expanded = false }: { message: CodexMessage; onCopy: () => void; expanded?: boolean }) {
+export function ToolMessageBubble({ message, onCopy, copyFeedback = "", expanded = false }: { message: CodexMessage; onCopy: () => void; copyFeedback?: string; expanded?: boolean }) {
   const summary = summarizeToolMessage(message);
   const rawText = toolRawText(message);
   const hasRawText = rawText.trim().length > 0;
@@ -187,6 +198,7 @@ export function ToolMessageBubble({ message, onCopy, expanded = false }: { messa
           <span>复制原始输出</span>
         </button>
       )}
+      <span className="message-copy-feedback" role="status" aria-live="polite">{copyFeedback}</span>
     </details>
   );
 }

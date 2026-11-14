@@ -1,3 +1,4 @@
+import { messageInteractionDriver } from './helpers/message-interaction-driver.mjs';
 import { channels, evidence, input as statusInput, statusInputs } from './fixtures/session-status.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,10 +13,10 @@ import { turnResult } from '../plugins/mobile-deepseek/turnResult.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-rendering-'));
 const output = path.join(temp, 'render.cjs');
-await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { ThreadRow } from './apps/mobile/src/features/threads/ThreadRow'; export { SessionRangeControl } from './apps/mobile/src/features/threads/SessionRangeControl'; export { DisclosureSummary } from './apps/mobile/src/shared/DisclosureSummary'; export { SidebarScrim } from './apps/mobile/src/features/threads/SidebarScrim'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources'; export { HandoffCard } from './apps/mobile/src/features/product/HandoffCard'; export { HandoffMigrationNotice } from './apps/mobile/src/features/product/HandoffMigrationNotice';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
+await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { ThreadRow } from './apps/mobile/src/features/threads/ThreadRow'; export { SessionRangeControl } from './apps/mobile/src/features/threads/SessionRangeControl'; export { DisclosureSummary } from './apps/mobile/src/shared/DisclosureSummary'; export { SidebarScrim } from './apps/mobile/src/features/threads/SidebarScrim'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, MessageBubble, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources'; export { HandoffCard } from './apps/mobile/src/features/product/HandoffCard'; export { HandoffMigrationNotice } from './apps/mobile/src/features/product/HandoffMigrationNotice';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
 const originalStorage = globalThis.localStorage;
 globalThis.localStorage = { getItem: () => null };
-const { default: { h, render, ThreadRow, SessionRangeControl, DisclosureSummary, SidebarScrim, MessageContent, MessageTimeline, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence, HandoffCard, HandoffMigrationNotice } } = await import(pathToFileURL(output).href);
+const { default: { h, render, ThreadRow, SessionRangeControl, DisclosureSummary, SidebarScrim, MessageContent, MessageTimeline, MessageBubble, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence, HandoffCard, HandoffMigrationNotice } } = await import(pathToFileURL(output).href);
 globalThis.localStorage = originalStorage;
 test.after(() => fs.rm(temp, { recursive: true, force: true }));
 const tool = index => ({ id: `t${index}`, role: 'tool', kind: 'commandExecution', text: `Command: rg query-${index}`, turnId: 'turn-a', timestamp: '2026-11-07T00:00:00Z' });
@@ -304,4 +305,69 @@ test('U11 sidebar keeps two actions and source values, while testing connections
   assert.match(connection, /测试连接/);
   assert.equal((app.match(/onClick=\{\(\) => void testConnection\(\)\}/g) ?? []).length, 1);
   assert.doesNotMatch(app, /threadListDetail|className="thread-path"/);
+});
+
+const bubble = (message, expanded, assistantContinuation) => h(MessageBubble, { message, expandToolDetails: expanded, assistantContinuation,
+  smooth: false, smoothPending: false, onSmoothDone() {}, onCopy() {} });
+test('U1 consecutive assistant messages share identity while preserving every message and turn boundary', () => {
+  const messages = [note(1), note(2), { ...note(3), phase: 'final_answer' }];
+  const html = render(h(MessageTimeline, { messages, renderMessage: bubble }));
+  assert.equal((html.match(/class="message-avatar"/g) ?? []).length, 1);
+  assert.equal((html.match(/<strong>Codex<\/strong>/g) ?? []).length, 1);
+  assert.equal((html.match(/data-message-role="assistant"/g) ?? []).length, 3);
+  assert.equal((html.match(/assistant-continuation/g) ?? []).length, 2);
+  assert.doesNotMatch(html, /message-actions|message-meta|aria-label="复制|<time/);
+  assert.match(html, /tabindex="0"/);
+  for (const separator of [tool(1), { id: 'user', role: 'user', text: 'new request' }, { ...note(3), turnId: 'other' }]) {
+    const separated = render(h(MessageTimeline, { messages: [note(1), separator, note(2)], renderMessage: bubble }));
+    assert.equal((separated.match(/<strong>Codex<\/strong>/g) ?? []).length, separator.role === 'assistant' ? 3 : 2);
+  }
+});
+test('U1 system messages use a small icon banner, not a user bubble', () => {
+  const html = render(bubble({ id: 'system', role: 'system', text: '连接恢复中' }));
+  assert.match(html, /from-system/); assert.match(html, /lucide-info/); assert.match(html, /system-message-text/);
+  assert.doesNotMatch(html, /user-message-text|message-actions/);
+});
+test('U1 tap/focus reveals metadata, focus inside keeps the copy button accessible', () => {
+  const driver = messageInteractionDriver(() => {});
+  assert.equal(driver.render().revealed, false);
+  driver.event('onClick'); assert.equal(driver.render().revealed, true);
+  driver.event('onBlur'); assert.equal(driver.render().revealed, false);
+  driver.event('onFocus'); driver.event('onBlur', { relatedTarget: 'inside' });
+  assert.equal(driver.render().revealed, true);
+  driver.event('onBlur'); driver.event('onClick', { target: driver.interactive() });
+  assert.equal(driver.render().revealed, false);
+  driver.unmount();
+});
+test('U1 stationary long press copies once with feedback; failures are never reported as success', async () => {
+  for (const fail of [false, true]) {
+    let calls = 0, finish;
+    const driver = messageInteractionDriver(() => { calls++; return new Promise((resolve, reject) => { finish = fail ? () => reject(new Error('denied')) : resolve; }); });
+    driver.event('onPointerDown'); assert.equal(driver.pending(), 1); driver.hold();
+    driver.event('onPointerUp'); driver.event('onClick');
+    assert.equal(driver.render().revealed, true);
+    void driver.render().copy(); assert.equal(calls, 1);
+    finish(); await Promise.resolve(); await Promise.resolve();
+    assert.equal(driver.render().feedback, fail ? '复制失败，请重试' : '已复制');
+    driver.unmount();
+  }
+});
+test('U1 scroll, cancellation, release, mouse, interactive children, selection and unmount never copy', () => {
+  for (const action of ['move', 'cancel', 'release', 'leave', 'mouse', 'child', 'selection', 'unmount']) {
+    let calls = 0; const driver = messageInteractionDriver(() => { calls++; });
+    driver.event('onPointerDown', action === 'mouse' ? { pointerType: 'mouse' } : action === 'child' ? { target: driver.interactive() } : {});
+    if (action === 'move') driver.event('onPointerMove', { clientX: 11 });
+    if (action === 'cancel') driver.event('onPointerCancel');
+    if (action === 'release') driver.event('onPointerUp');
+    if (action === 'leave') driver.event('onPointerLeave');
+    if (action === 'selection') driver.select('selected text');
+    if (action === 'unmount') driver.unmount();
+    driver.hold(); assert.equal(calls, 0, action); driver.unmount();
+  }
+});
+test('U1 late clipboard completion after unmount does not publish feedback', async () => {
+  let finish; const driver = messageInteractionDriver(() => new Promise(resolve => { finish = resolve; }));
+  driver.event('onPointerDown'); driver.hold(); driver.unmount(); finish();
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(driver.render().feedback, '');
 });
